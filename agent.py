@@ -1,53 +1,42 @@
-from dotenv import load_dotenv
+from __future__ import annotations
 
-from livekit import agents, rtc
-from livekit.agents import AgentServer, AgentSession, Agent, room_io
-from livekit.plugins import google, noise_cancellation, silero
+import sys
 
-from prompts import AGENT_INSTRUCTION, SESSION_INSTRUCTION
-from tools import get_weather, search_web, send_email
+from livekit import agents
+from livekit.agents import AgentServer
 
-load_dotenv()
-
-class Assistant(Agent):
-    def __init__(self) -> None:
-        super().__init__(
-            instructions=AGENT_INSTRUCTION,
-            llm=google.realtime.RealtimeModel(
-                voice="Charon",
-                temperature=0.8,
-            ),
-            tools=[
-                get_weather,
-                search_web,
-                send_email,
-            ],
-        )
-
+from backends import build_runtime
+from settings import SettingsError, get_cli_command, load_settings, should_validate_runtime_command
 
 server = AgentServer()
 
 
-@server.rtc_session(agent_name="my-agent")
-async def my_agent(ctx: agents.JobContext):
-    session = AgentSession(
-        vad=silero.VAD.load(),
-    )
+@server.rtc_session(agent_name="jarvis")
+async def jarvis_agent(ctx: agents.JobContext):
+    settings = load_settings()
+    runtime = build_runtime(settings)
 
-    await session.start(
+    await runtime.session.start(
         room=ctx.room,
-        agent=Assistant(),
-        room_options=room_io.RoomOptions(
-            audio_input=room_io.AudioInputOptions(
-                noise_cancellation=noise_cancellation.BVC(),
-            ),
-        ),
+        agent=runtime.agent,
+        room_options=runtime.room_options,
     )
 
-    await session.generate_reply(
-        instructions=SESSION_INSTRUCTION,
-    )
+
+def _validate_startup() -> None:
+    argv = sys.argv[1:]
+    if not should_validate_runtime_command(argv):
+        return
+
+    command = get_cli_command(argv)
+    settings = load_settings()
+    settings.validate_for_command(command)
 
 
 if __name__ == "__main__":
+    try:
+        _validate_startup()
+    except SettingsError as exc:
+        raise SystemExit(str(exc)) from exc
+
     agents.cli.run_app(server)
