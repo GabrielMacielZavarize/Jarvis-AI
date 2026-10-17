@@ -16,7 +16,8 @@ export type CardKind =
   | 'timer'
   | 'note'
   | 'email'
-  | 'media';
+  | 'media'
+  | 'screen';
 
 export interface WeatherDay {
   date: string;
@@ -114,6 +115,14 @@ export interface MediaData {
   thumbnail?: string;
 }
 
+export interface ScreenData {
+  url: string;
+  label: string;
+  takenAt: number;
+}
+
+export type HudPanelAction = 'list' | 'close' | 'close_all' | 'expand' | 'collapse';
+
 export interface CardDataMap {
   weather: WeatherData;
   search: SearchData;
@@ -124,6 +133,7 @@ export interface CardDataMap {
   note: NoteData;
   email: EmailData;
   media: MediaData;
+  screen: ScreenData;
 }
 
 export type HudCard = {

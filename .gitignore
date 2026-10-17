@@ -8,3 +8,5 @@ build/
 .venv/
 web/node_modules/
 web/dist/
+# Atalhos pessoais de sites salvos pelo Jarvis
+atalhos.json

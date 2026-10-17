@@ -37,7 +37,7 @@ TOOL_NAMES = [
     "run_diagnostics",
     "set_timer",
     "show_on_hud",
-    "close_hud_panels",
+    "manage_hud_panels",
 ]
 PC_TOOL_NAMES = [
     "open_website",
@@ -51,6 +51,9 @@ PC_TOOL_NAMES = [
     "open_folder",
     "lock_computer",
     "take_screenshot",
+    "manage_window",
+    "look_at_screen",
+    "save_shortcut",
 ]
 EMAIL_TOOL_NAMES = ["draft_email", "confirm_email_send", "cancel_pending_email"]
 

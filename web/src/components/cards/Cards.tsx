@@ -5,6 +5,7 @@ import type {
   DiagnosticsData,
   EmailData,
   MediaData,
+  ScreenData,
   NewsData,
   NoteData,
   SearchData,
@@ -15,7 +16,7 @@ import type {
 import { HoloGlobe } from './HoloGlobe';
 import { WeatherGlyph } from './WeatherGlyph';
 
-export function WeatherBody({ data }: { data: WeatherData }) {
+export function WeatherBody({ data, expanded = false }: { data: WeatherData; expanded?: boolean }) {
   const { current } = data;
   return (
     <>
@@ -39,11 +40,11 @@ export function WeatherBody({ data }: { data: WeatherData }) {
             <span>Vento {Math.round(current.wind)} km/h</span>
           </div>
         </div>
-        <HoloGlobe latitude={data.latitude} longitude={data.longitude} />
+        <HoloGlobe latitude={data.latitude} longitude={data.longitude} size={expanded ? 220 : 128} />
       </div>
       {data.daily.length > 0 && (
         <div className="wx__days">
-          {data.daily.slice(0, 5).map((day, index) => (
+          {data.daily.slice(0, 7).map((day, index) => (
             <div key={day.date} className="wx__day" title={day.label}>
               <span>{index === 0 ? 'HOJE' : weekdayShort(day.date)}</span>
               <WeatherGlyph code={day.code} small />
@@ -330,6 +331,19 @@ export function MediaBody({ data }: { data: MediaData }) {
       </a>
       {data.channel && <div className="media__channel">{data.channel}</div>}
     </div>
+  );
+}
+
+export function ScreenBody({ data }: { data: ScreenData }) {
+  return (
+    <figure className="screen">
+      <a href={data.url} target="_blank" rel="noreferrer noopener" title="Abrir o print em tamanho real">
+        <img src={data.url} alt={`Print: ${data.label}`} />
+      </a>
+      <figcaption className="card__sub">
+        {data.label} · {new Date(data.takenAt).toLocaleTimeString('pt-BR')}
+      </figcaption>
+    </figure>
   );
 }
 

@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from google.genai import types as genai_types
 from livekit.agents import Agent, AgentSession, room_io
+from livekit.agents.utils import images
 from livekit.plugins import google, noise_cancellation, openai, silero
 
-from prompts import AGENT_INSTRUCTION, build_initial_reply_instruction
+from prompts import build_agent_instructions, build_initial_reply_instruction
 from settings import Settings
 from tools import PENDING_EMAIL_KEY, build_tools
 
@@ -35,9 +37,27 @@ class JarvisRuntime:
     room_options: room_io.RoomOptions
 
 
+# Prints de tela precisam de resolução para o texto ficar legível.
+SCREEN_IMAGE_OPTIONS = images.EncodeOptions(
+    format="JPEG",
+    quality=85,
+    resize_options=images.ResizeOptions(width=2048, height=2048, strategy="scale_aspect_fit"),
+)
+TRANSCRIPTION_VOCABULARY = ["Jarvis", "Claude", "Criciúma", "SATC", "PhpStorm", "Edge", "WhatsApp", "YouTube"]
+
+
+def _monitor_layout() -> str | None:
+    try:
+        import win_desktop
+
+        return win_desktop.describe_monitors() or None
+    except Exception:
+        return None
+
+
 class JarvisAgent(Agent):
-    def __init__(self) -> None:
-        super().__init__(instructions=AGENT_INSTRUCTION)
+    def __init__(self, instructions: str | None = None) -> None:
+        super().__init__(instructions=instructions or build_agent_instructions())
 
     async def on_enter(self) -> None:
         self.session.generate_reply(instructions=build_initial_reply_instruction())
@@ -53,6 +73,19 @@ def build_backend_components(settings: Settings) -> BackendComponents:
                 model=settings.google_model,
                 voice=settings.google_voice,
                 temperature=0.8,
+                # Espera o resultado da ferramenta antes de falar: uma resposta por ação,
+                # sem "vou fazer..." seguido de um "feito" atrasado.
+                tool_behavior=genai_types.Behavior.BLOCKING,
+                image_encode_options=SCREEN_IMAGE_OPTIONS,
+                media_resolution=genai_types.MediaResolution.MEDIA_RESOLUTION_HIGH,
+                input_audio_transcription=(
+                    genai_types.AudioTranscriptionConfig(
+                        language_codes=["pt-BR"],
+                        custom_vocabulary=TRANSCRIPTION_VOCABULARY,
+                    )
+                    if settings.transcription_hints
+                    else None
+                ),
             )
         )
         return BackendComponents(backend=settings.backend, llm=llm)
@@ -122,7 +155,12 @@ def build_runtime(settings: Settings, *, load_vad: bool = True) -> JarvisRuntime
         session_kwargs["tts"] = backend.tts
 
     session = AgentSession(**session_kwargs)
-    agent = JarvisAgent()
+    agent = JarvisAgent(
+        build_agent_instructions(
+            home_city=settings.home_city,
+            monitors=_monitor_layout() if settings.pc_control_enabled else None,
+        )
+    )
     room_options = room_io.RoomOptions(
         audio_input=room_io.AudioInputOptions(
             noise_cancellation=noise_cancellation.BVC(),

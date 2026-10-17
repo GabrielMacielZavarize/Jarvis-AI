@@ -6,9 +6,12 @@ import { attachTrack } from '../lib/audio';
 import { TOOL_LABELS } from '../lib/catalog';
 import { orderLines } from '../lib/transcript';
 import { useHud } from '../lib/hudStore';
-import type { ChatLine, HudEvent, JarvisMode } from '../lib/types';
+import type { CardKind, ChatLine, HudEvent, HudPanelAction, JarvisMode } from '../lib/types';
 
 export const HUD_TOPIC = 'jarvis.hud';
+const HUD_RPC_METHOD = 'jarvis.hud';
+const SCREEN_TOPIC = 'jarvis.screen';
+let lastScreenUrl: string | null = null;
 
 const decoder = new TextDecoder();
 const MIC_STORAGE_KEY = 'jarvis.microphone';
@@ -166,8 +169,30 @@ export function useLiveJarvis(): LiveJarvis {
       }
     };
     room.on(RoomEvent.DataReceived, onData);
+
+    // The agent asks the HUD to list/close/expand panels and gets back what actually happened.
+    room.registerRpcMethod(HUD_RPC_METHOD, async (data) => {
+      const request = JSON.parse(data.payload || '{}') as { action?: HudPanelAction; kinds?: CardKind[] };
+      const result = useHud.getState().runPanelCommand(request.action ?? 'list', request.kinds ?? []);
+      if (result.changed.length > 0) useHud.getState().addLog('info', `HUD: ${request.action} ${result.changed.join(', ')}`);
+      return JSON.stringify(result);
+    });
+
+    // Screenshots Jarvis looked at, so the user sees exactly what was analysed.
+    room.registerByteStreamHandler(SCREEN_TOPIC, async (reader) => {
+      const chunks = await reader.readAll();
+      const blob = new Blob(chunks as BlobPart[], { type: reader.info.mimeType || 'image/jpeg' });
+      if (lastScreenUrl) URL.revokeObjectURL(lastScreenUrl);
+      lastScreenUrl = URL.createObjectURL(blob);
+      const label = reader.info.attributes?.label ?? 'tela';
+      useHud.getState().pushCard('screen', { url: lastScreenUrl, label, takenAt: Date.now() });
+      useHud.getState().addLog('info', `Print analisado · ${label}`);
+    });
+
     return () => {
       room.off(RoomEvent.DataReceived, onData);
+      room.unregisterRpcMethod(HUD_RPC_METHOD);
+      room.unregisterByteStreamHandler(SCREEN_TOPIC);
     };
   }, [room]);
 

@@ -9,13 +9,13 @@ from unittest.mock import AsyncMock, patch
 
 from livekit import rtc
 
-from hud import HUD_TOPIC, publish_hud_event, watch_user_voice
+from hud import HUD_TOPIC, hud_request, publish_hud_event, watch_user_voice
 from prompts import build_initial_reply_instruction, greeting_for
 from tools import (
     _TIMER_TASKS,
     _collect_diagnostics,
     _format_utc_offset,
-    close_hud_panels,
+    manage_hud_panels,
     get_current_time,
     get_weather,
     run_diagnostics,
@@ -258,26 +258,49 @@ class ShowOnHudTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HudPanelToolTests(unittest.IsolatedAsyncioTestCase):
-    async def test_close_specific_panels(self) -> None:
-        ctx, publish = fake_job_context()
-        with patch("hud.get_job_context", return_value=ctx):
-            result = await close_hud_panels(FakeRunContext(), panels=["weather", "search", "bogus"])
+    async def test_close_reports_what_the_hud_actually_closed(self) -> None:
+        reply = {"open": ["note"], "changed": ["weather", "search"]}
+        with patch("tools.hud_request", AsyncMock(return_value=reply)) as request:
+            result = await manage_hud_panels(FakeRunContext(), action="close", panels=["weather", "search", "bogus"])
 
-        event = published_events(publish)[0]
-        self.assertEqual((event["type"], event["action"], event["kinds"]), ("hud", "close", ["weather", "search"]))
-        self.assertEqual(result, "Painéis fechados: clima, pesquisa.")
+        request.assert_awaited_once_with("close", ["weather", "search"])
+        self.assertEqual(result, "Fechei: clima, pesquisa. Continuam abertos: notas.")
 
-    async def test_close_all_panels(self) -> None:
-        ctx, publish = fake_job_context()
-        with patch("hud.get_job_context", return_value=ctx):
-            result = await close_hud_panels(FakeRunContext(), close_all=True)
+    async def test_close_missing_panel_is_honest(self) -> None:
+        reply = {"open": ["search"], "changed": []}
+        with patch("tools.hud_request", AsyncMock(return_value=reply)):
+            result = await manage_hud_panels(FakeRunContext(), action="close", panels=["weather"])
 
-        self.assertEqual(published_events(publish)[0]["action"], "clear")
-        self.assertIn("Todos os painéis", result)
+        self.assertEqual(result, "Não havia painel de clima aberto. Abertos agora: pesquisa.")
+
+    async def test_expand_and_list(self) -> None:
+        with patch("tools.hud_request", AsyncMock(return_value={"open": ["weather"], "changed": ["weather"]})):
+            expanded = await manage_hud_panels(FakeRunContext(), action="expand", panels=["weather"])
+            listed = await manage_hud_panels(FakeRunContext(), action="list")
+
+        self.assertIn("ampliado", expanded)
+        self.assertEqual(listed, "Painéis abertos no HUD: clima.")
 
     async def test_does_not_claim_success_without_hud(self) -> None:
-        result = await close_hud_panels(FakeRunContext(), panels=["weather"])
-        self.assertEqual(result, "O HUD não está conectado.")
+        result = await manage_hud_panels(FakeRunContext(), action="close", panels=["weather"])
+        self.assertIn("não está conectado", result)
+
+    async def test_hud_request_uses_rpc_to_the_viewer(self) -> None:
+        perform = AsyncMock(return_value=json.dumps({"open": [], "changed": ["weather"]}))
+        viewer = SimpleNamespace(identity="operador-1")
+        agent = SimpleNamespace(identity="agent-AJ_1")
+        room = SimpleNamespace(
+            local_participant=SimpleNamespace(perform_rpc=perform),
+            remote_participants={"a": agent, "b": viewer},
+        )
+        with patch("hud.get_job_context", return_value=SimpleNamespace(room=room)):
+            reply = await hud_request("close", ["weather"])
+
+        self.assertEqual(reply["changed"], ["weather"])
+        kwargs = perform.await_args.kwargs
+        self.assertEqual(kwargs["destination_identity"], "operador-1")
+        self.assertEqual(kwargs["method"], "jarvis.hud")
+        self.assertEqual(json.loads(kwargs["payload"]), {"action": "close", "kinds": ["weather"]})
 
 
 class PromptTests(unittest.TestCase):

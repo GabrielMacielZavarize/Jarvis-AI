@@ -74,9 +74,76 @@ async def net_activity(hosts: list[str], kind: str = "request") -> bool:
     return await publish_hud_event("net", hosts=unique[:8], kind=kind)
 
 
-async def hud_command(action: str, kinds: list[str] | None = None) -> bool:
-    """Ask the HUD to close panels (`kinds`) or clear them all."""
-    return await publish_hud_event("hud", action=action, kinds=kinds or [])
+HUD_RPC_METHOD = "jarvis.hud"
+SCREEN_TOPIC = "jarvis.screen"
+
+
+def _hud_participant() -> tuple[Any, str] | None:
+    """(local participant, identity of the person viewing the HUD)."""
+    try:
+        job_ctx = get_job_context(required=False)
+        if job_ctx is None:
+            return None
+        room = job_ctx.room
+        viewers = [p.identity for p in room.remote_participants.values() if not p.identity.startswith("agent-")]
+        if not viewers:
+            return None
+        return room.local_participant, viewers[0]
+    except Exception:
+        return None
+
+
+async def hud_request(action: str, kinds: list[str] | None = None) -> dict[str, Any] | None:
+    """Ask the HUD to list/close/expand panels and return what it actually did.
+
+    Returns None when no HUD is connected (console mode, tests, closed tab).
+    """
+    target = _hud_participant()
+    if target is None:
+        return None
+    participant, identity = target
+    try:
+        response = await participant.perform_rpc(
+            destination_identity=identity,
+            method=HUD_RPC_METHOD,
+            payload=json.dumps({"action": action, "kinds": kinds or []}),
+            response_timeout=4.0,
+        )
+        return json.loads(response)
+    except Exception:
+        logger.debug("HUD não respondeu ao comando '%s'.", action, exc_info=True)
+        return None
+
+
+async def send_screenshot(image: Any, label: str) -> bool:
+    """Stream a downscaled JPEG of a screenshot to the HUD so the user sees what Jarvis saw."""
+    target = _hud_participant()
+    if target is None:
+        return False
+    participant, identity = target
+    try:
+        import io
+
+        preview = image.convert("RGB")
+        preview.thumbnail((1600, 1600))
+        buffer = io.BytesIO()
+        preview.save(buffer, format="JPEG", quality=78)
+        data = buffer.getvalue()
+        writer = await participant.stream_bytes(
+            f"print-{int(time.time())}.jpg",
+            total_size=len(data),
+            mime_type="image/jpeg",
+            topic=SCREEN_TOPIC,
+            attributes={"label": label},
+            destination_identities=[identity],
+        )
+        for start in range(0, len(data), 64 * 1024):
+            await writer.write(data[start : start + 64 * 1024])
+        await writer.aclose()
+        return True
+    except Exception:
+        logger.debug("Falha ao enviar o print para o HUD.", exc_info=True)
+        return False
 
 
 _PENDING: set[asyncio.Task[bool]] = set()

@@ -12,7 +12,7 @@ BASE_TOOLS = [
     "run_diagnostics",
     "set_timer",
     "show_on_hud",
-    "close_hud_panels",
+    "manage_hud_panels",
 ]
 
 

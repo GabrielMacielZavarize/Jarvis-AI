@@ -5,8 +5,16 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pc_control
+import tempfile
+from pathlib import Path
+
+import win_desktop
 from pc_control import (
     PCControlError,
+    find_window,
+    resolve_site,
+    save_shortcut_entry,
+    window_action,
     best_match,
     browser_tab_action,
     close_app_processes,
@@ -103,8 +111,8 @@ class CloseAppTests(unittest.TestCase):
 class BrowserTabTests(unittest.TestCase):
     @patch.object(pc_control, "IS_WINDOWS", True)
     @patch("pc_control._active_title", return_value="J.A.R.V.I.S. - Google Chrome")
-    @patch("pc_control._focus", return_value=True)
-    @patch("pc_control._browser_windows", return_value=[object()])
+    @patch("pc_control.win_desktop.bring_to_front", return_value=True)
+    @patch("pc_control._browser_windows", return_value=[win_desktop.Window(hwnd=1, title="x", process="msedge.exe", pid=1)])
     def test_never_closes_the_hud_tab(self, _windows, _focus, _title) -> None:
         with patch("pyautogui.hotkey") as hotkey, self.assertRaises(PCControlError):
             browser_tab_action("close")
@@ -135,3 +143,89 @@ class MediaLookupTests(unittest.TestCase):
         self.assertEqual(streaming_url("disney", "Loki"), ("Disney+", "https://www.disneyplus.com", False))
         with self.assertRaises(PCControlError):
             streaming_url("pirataflix", "x")
+
+
+class SiteResolutionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        patcher = patch.object(pc_control, "SHORTCUTS_FILE", Path(folder.name) / "atalhos.json")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_known_services_and_misheard_claude(self) -> None:
+        self.assertEqual(resolve_site("Google Maps"), ("Google Maps", "https://www.google.com/maps"))
+        self.assertEqual(resolve_site("Cláudio")[1], "https://claude.ai")
+        self.assertEqual(resolve_site("cloud")[1], "https://claude.ai")
+
+    def test_urls_and_domains_pass_through(self) -> None:
+        self.assertEqual(resolve_site("tudogostoso.com.br"), ("tudogostoso.com.br", "https://tudogostoso.com.br"))
+
+    def test_unknown_names_ask_for_a_search_instead_of_guessing(self) -> None:
+        with self.assertRaises(PCControlError) as ctx:
+            resolve_site("portal satc")
+        self.assertIn("search_web", str(ctx.exception))
+
+    def test_saved_shortcuts_are_used_by_name(self) -> None:
+        save_shortcut_entry("Portal SATC", "https://portal.exemplo.edu.br/login")
+        self.assertEqual(resolve_site("portal satc"), ("Portal SATC", "https://portal.exemplo.edu.br/login"))
+
+    def test_shortcuts_reject_non_web_urls(self) -> None:
+        with self.assertRaises(PCControlError):
+            save_shortcut_entry("perigo", "file:///C:/Windows")
+
+
+WINDOWS = [
+    win_desktop.Window(hwnd=1, title="J.A.R.V.I.S. e mais 2 páginas - Pessoal - Microsoft\u200b Edge", process="msedge.exe", pid=10),
+    win_desktop.Window(hwnd=2, title="Configurações", process="applicationframehost.exe", pid=11),
+    win_desktop.Window(hwnd=3, title="Jarvis-AI – tools.py", process="phpstorm64.exe", pid=12),
+    win_desktop.Window(hwnd=4, title="Prompt de Comando", process="windowsterminal.exe", pid=13),
+]
+
+
+@patch("pc_control.win_desktop.windows", return_value=WINDOWS)
+class WindowTests(unittest.TestCase):
+    def test_finds_windows_by_title_and_never_the_hud(self, _windows) -> None:
+        self.assertEqual(find_window("configurações").hwnd, 2)
+        self.assertEqual(find_window("tools.py").hwnd, 3)
+        with self.assertRaises(PCControlError):
+            find_window("J.A.R.V.I.S.")
+
+    @patch.object(pc_control, "IS_WINDOWS", True)
+    @patch("pc_control.win_desktop.move_to_monitor")
+    @patch("pc_control.win_desktop.monitors")
+    def test_moves_window_to_numbered_monitor(self, mock_monitors, mock_move, _windows) -> None:
+        screen3 = win_desktop.Monitor(3, -1440, 124, 0, 2684, (-1440, 124, 0, 2636), False)
+        mock_monitors.return_value = [screen3]
+
+        self.assertIn("tela 3", window_action("configurações", "move", 3))
+        mock_move.assert_called_once_with(2, screen3)
+        with self.assertRaises(PCControlError):
+            window_action("configurações", "move", 7)
+
+    @patch.object(pc_control, "IS_WINDOWS", True)
+    @patch("pc_control._jarvis_ancestor_names", return_value={"windowsterminal.exe"})
+    @patch("pc_control.win_desktop.close_window")
+    def test_close_window_protects_jarvis_host(self, mock_close, _ancestors, _windows) -> None:
+        with self.assertRaises(PCControlError):
+            window_action("prompt de comando", "close", None)
+        mock_close.assert_not_called()
+
+        window_action("configurações", "close", None)
+        mock_close.assert_called_once_with(2)
+
+
+class EdgeTabTests(unittest.TestCase):
+    @patch.object(pc_control, "IS_WINDOWS", True)
+    @patch("pc_control.win_desktop.bring_to_front", return_value=True)
+    @patch("pc_control.win_desktop.windows")
+    def test_edge_windows_are_found_by_process(self, mock_windows, _front) -> None:
+        mock_windows.return_value = [
+            win_desktop.Window(hwnd=9, title="Google Maps e mais 3 páginas - Pessoal — Microsoft\u200b Edge", process="msedge.exe", pid=1),
+        ]
+        titles = iter(["Google Maps e mais 3 páginas - Pessoal — Microsoft Edge"])
+        with patch("pc_control._active_title", side_effect=lambda: next(titles)), patch("pyautogui.hotkey") as hotkey:
+            result = browser_tab_action("close", "google maps")
+
+        hotkey.assert_called_once_with("ctrl", "w")
+        self.assertIn("Fechei", result)

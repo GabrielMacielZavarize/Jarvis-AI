@@ -110,6 +110,7 @@ class Settings:
     email_tool_enabled: bool = False
     pc_control_enabled: bool = False
     home_city: str | None = None
+    transcription_hints: bool = False
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -162,6 +163,11 @@ class Settings:
                 default=False,
             ),
             home_city=_clean_optional(env_map.get("JARVIS_HOME_CITY")),
+            transcription_hints=_parse_bool(
+                env_map.get("JARVIS_TRANSCRIPTION_HINTS"),
+                "JARVIS_TRANSCRIPTION_HINTS",
+                default=False,
+            ),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),

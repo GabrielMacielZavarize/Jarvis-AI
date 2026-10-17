@@ -11,7 +11,7 @@ import smtplib
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -20,7 +20,7 @@ import requests
 from ddgs import DDGS
 from livekit.agents import RunContext, function_tool
 
-from hud import hud_command, net_activity, show_card, tool_status
+from hud import hud_request, net_activity, show_card, tool_status
 from settings import Settings
 
 logger = logging.getLogger("jarvis-tools")
@@ -218,7 +218,7 @@ def _fetch_weather(city: str) -> tuple[str, dict[str, Any]]:
                 "weather_code,temperature_2m_max,temperature_2m_min,"
                 "precipitation_probability_max"
             ),
-            "forecast_days": 5,
+            "forecast_days": 7,
             "timezone": "auto",
         },
         timeout=15,
@@ -261,7 +261,7 @@ async def get_weather(
     context: RunContext,
     city: str,
 ) -> str:
-    """Get the current weather and the 5-day forecast for a given city.
+    """Get the current weather and the 7-day forecast for a given city.
 
     Args:
         city: The name of the city to get weather for.
@@ -652,31 +652,48 @@ HUD_PANEL_KINDS = {
 }
 
 
+def _panel_names(kinds: list[str]) -> str:
+    return ", ".join(HUD_PANEL_KINDS.get(kind, kind) for kind in kinds) or "nenhum"
+
+
 @function_tool()
-async def close_hud_panels(
+async def manage_hud_panels(
     context: RunContext,
+    action: Literal["list", "close", "close_all", "expand", "collapse"],
     panels: list[str] | None = None,
-    close_all: bool = False,
 ) -> str:
-    """Close panels on the user's holographic HUD. Always use this when asked to close/clear panels.
+    """List, close, expand (enlarge) or collapse the panels on the user's holographic HUD.
+
+    When the user talks about an "aba"/"painel"/"janela" of weather, search, news, time,
+    diagnostics, timer, notes, email or media, they mean these HUD panels (not browser tabs).
 
     Args:
-        panels: Panel kinds to close: weather, search, news, time, diagnostics, timer, note, email, media.
-        close_all: Close every panel at once.
+        action: list (what is open), close, close_all, expand (enlarge one panel in the
+            center of the HUD) or collapse (return it to normal size).
+        panels: Panel kinds: weather, search, news, time, diagnostics, timer, note, email, media.
+            For expand, pass the single panel to enlarge.
     """
-    if close_all:
-        sent = await hud_command("clear")
-        return "Todos os painéis do HUD foram fechados." if sent else "O HUD não está conectado."
-
     kinds = [kind for kind in (panels or []) if kind in HUD_PANEL_KINDS]
-    if not kinds:
-        options = ", ".join(HUD_PANEL_KINDS)
-        return f"Diga quais painéis fechar. Opções: {options}."
-    sent = await hud_command("close", kinds)
-    if not sent:
-        return "O HUD não está conectado."
-    names = ", ".join(HUD_PANEL_KINDS[kind] for kind in kinds)
-    return f"Painéis fechados: {names}."
+    if action in {"close", "expand"} and not kinds:
+        return f"Diga qual painel. Opções: {', '.join(HUD_PANEL_KINDS)}."
+
+    response = await hud_request(action, kinds)
+    if response is None:
+        return "O HUD não está conectado, então não consegui mexer nos painéis."
+
+    open_now = _panel_names(response.get("open", []))
+    changed = response.get("changed", [])
+    if action == "list":
+        return f"Painéis abertos no HUD: {open_now}."
+    if action == "close_all":
+        return f"Fechei {len(changed)} painel(is). O HUD está limpo."
+    if action == "collapse":
+        return "Painel de volta ao tamanho normal."
+    if not changed:
+        return f"Não havia painel de {_panel_names(kinds)} aberto. Abertos agora: {open_now}."
+    if action == "expand":
+        return f"Painel de {_panel_names(changed)} ampliado no centro do HUD."
+    return f"Fechei: {_panel_names(changed)}. Continuam abertos: {open_now}."
 
 
 def build_email_tools(settings: Settings) -> list[Any]:
@@ -873,7 +890,7 @@ def build_tools(settings: Settings) -> list[Any]:
         run_diagnostics,
         set_timer,
         show_on_hud,
-        close_hud_panels,
+        manage_hud_panels,
     ]
     if settings.pc_control_enabled:
         from pc_control import build_pc_tools

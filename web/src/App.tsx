@@ -114,7 +114,11 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const typing = (event.target as HTMLElement)?.tagName === 'INPUT';
-      if (event.key === 'Escape') useHud.getState().clearCards();
+      if (event.key === 'Escape') {
+        const hud = useHud.getState();
+        if (hud.expandedId) hud.setExpanded(null);
+        else hud.clearCards();
+      }
       if (typing) return;
       if (event.code === 'Space' && !connected && canConnect) {
         event.preventDefault();

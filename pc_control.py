@@ -30,7 +30,8 @@ import psutil
 import requests
 from livekit.agents import RunContext, function_tool
 
-from hud import net_activity, show_card, tool_status
+import win_desktop
+from hud import net_activity, send_screenshot, show_card, tool_status
 
 logger = logging.getLogger("jarvis-pc")
 
@@ -83,6 +84,12 @@ APP_NAME_ALIASES = {
     "chrome": "google chrome",
     "edge": "microsoft edge",
     "loja": "microsoft store",
+    "claudio": "claude",
+    "cloud": "claude",
+    "clode": "claude",
+    "cloude": "claude",
+    "php storm": "phpstorm",
+    "configuracao": "configuracoes",
 }
 
 PROCESS_ALIASES = {
@@ -116,15 +123,6 @@ PROCESS_ALIASES = {
 }
 
 BROWSER_PROCESSES = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe"}
-BROWSER_TITLE_MARKERS = (
-    " - google chrome",
-    " - microsoft edge",
-    " - mozilla firefox",
-    " — mozilla firefox",
-    " - brave",
-    " - opera",
-    " - vivaldi",
-)
 
 # Processos do sistema que fechar derrubaria o Windows, a segurança ou o próprio Jarvis.
 PROTECTED_PROCESSES = {
@@ -187,6 +185,43 @@ STREAMING_ALIASES = {
     "hbo max": "max",
     "globo play": "globoplay",
 }
+
+# Serviços que muita gente usa pelo navegador: abrem direto, sem precisar de app.
+WEB_SERVICES = {
+    "google maps": "https://www.google.com/maps",
+    "maps": "https://www.google.com/maps",
+    "gmail": "https://mail.google.com",
+    "google drive": "https://drive.google.com",
+    "drive": "https://drive.google.com",
+    "google agenda": "https://calendar.google.com",
+    "google calendar": "https://calendar.google.com",
+    "google docs": "https://docs.google.com",
+    "google planilhas": "https://sheets.google.com",
+    "google tradutor": "https://translate.google.com",
+    "google fotos": "https://photos.google.com",
+    "google": "https://www.google.com",
+    "youtube": "https://www.youtube.com",
+    "youtube music": "https://music.youtube.com",
+    "claude": "https://claude.ai",
+    "chatgpt": "https://chatgpt.com",
+    "gemini": "https://gemini.google.com",
+    "perplexity": "https://www.perplexity.ai",
+    "github": "https://github.com",
+    "linkedin": "https://www.linkedin.com",
+    "instagram": "https://www.instagram.com",
+    "facebook": "https://www.facebook.com",
+    "x": "https://x.com",
+    "twitter": "https://x.com",
+    "whatsapp web": "https://web.whatsapp.com",
+    "outlook web": "https://outlook.live.com",
+    "notion": "https://www.notion.so",
+    "canva": "https://www.canva.com",
+    "figma": "https://www.figma.com",
+    "wikipedia": "https://pt.wikipedia.org",
+    "mercado livre": "https://www.mercadolivre.com.br",
+}
+
+SHORTCUTS_FILE = Path(__file__).resolve().parent / "atalhos.json"
 
 KNOWN_FOLDERS = {
     # nome normalizado: (GUID do Known Folder do Windows, pasta padrão relativa ao home)
@@ -257,6 +292,47 @@ def normalize_url(target: str) -> str:
     if not host or " " in parsed.netloc or ("." not in host and host != "localhost"):
         raise PCControlError("Isso não parece um endereço de site válido.")
     return candidate
+
+
+def load_shortcuts() -> dict[str, str]:
+    """Personal shortcuts (name → URL) saved by voice or edited in atalhos.json."""
+    try:
+        data = json.loads(SHORTCUTS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {str(k): str(v) for k, v in data.items() if isinstance(v, str)} if isinstance(data, dict) else {}
+
+
+def save_shortcut_entry(name: str, url: str) -> tuple[str, str]:
+    label = name.strip()
+    if not label or len(label) > 60:
+        raise PCControlError("Diga um nome curto para o atalho.")
+    target = normalize_url(url)
+    shortcuts = load_shortcuts()
+    shortcuts[label] = target
+    SHORTCUTS_FILE.write_text(json.dumps(shortcuts, ensure_ascii=False, indent=2), encoding="utf-8")
+    return label, target
+
+
+def resolve_site(target: str) -> tuple[str, str]:
+    """Turn a URL, a domain, a personal shortcut or a known service name into (label, url)."""
+    text = target.strip()
+    looks_like_url = "://" in text or ("." in text and " " not in text)
+    if looks_like_url:
+        url = normalize_url(text)
+        return host_of(url), url
+
+    shortcuts = load_shortcuts()
+    match = best_match(text, list(shortcuts))
+    if match:
+        return match, normalize_url(shortcuts[match])
+    key = APP_NAME_ALIASES.get(normalize(text), normalize(text))
+    match = best_match(key, list(WEB_SERVICES))
+    if match:
+        return match.title(), WEB_SERVICES[match]
+    raise PCControlError(
+        f"Não sei o endereço de '{target}'. Pesquise com search_web e abra a URL oficial encontrada."
+    )
 
 
 def host_of(url: str) -> str:
@@ -331,7 +407,12 @@ def launch_app(name: str) -> str:
     names = [app["name"] for app in apps]
     match = best_match(APP_NAME_ALIASES.get(normalize(name), name), names) or best_match(name, names)
     if match is None:
-        raise PCControlError(f"Não encontrei nenhum app chamado '{name}' no Menu Iniciar.")
+        try:
+            label, url = resolve_site(name)
+        except PCControlError:
+            raise PCControlError(f"Não encontrei nenhum app ou site conhecido chamado '{name}'.") from None
+        webbrowser.open(url, 2)
+        return f"{label} (site, no navegador)"
     app_id = next(app["app_id"] for app in apps if app["name"] == match)
     os.startfile(f"shell:AppsFolder\\{app_id}")  # type: ignore[attr-defined]  # noqa: S606
     return match
@@ -365,21 +446,7 @@ def find_processes(name: str) -> list[str]:
 
 def hud_browser_processes() -> set[str]:
     """Browser executables whose active tab is the Jarvis HUD."""
-    if not IS_WINDOWS:
-        return set()
-    import ctypes
-
-    import pygetwindow
-
-    owners: set[str] = set()
-    for window in pygetwindow.getWindowsWithTitle(HUD_TITLE):
-        pid = ctypes.c_ulong()
-        ctypes.windll.user32.GetWindowThreadProcessId(window._hWnd, ctypes.byref(pid))
-        try:
-            owners.add(psutil.Process(pid.value).name().lower())
-        except psutil.Error:
-            continue
-    return owners
+    return {window.process for window in win_desktop.windows() if HUD_TITLE in window.title}
 
 
 def close_app_processes(name: str) -> list[str]:
@@ -425,46 +492,16 @@ def close_app_processes(name: str) -> list[str]:
 
 
 def _clean_title(title: str) -> str:
-    return title.replace("​", "").strip()
+    return title.replace("\u200b", "").strip()
 
 
-def _is_browser_title(title: str) -> bool:
-    lowered = _clean_title(title).lower()
-    return any(marker in lowered for marker in BROWSER_TITLE_MARKERS)
-
-
-def _browser_windows() -> list[Any]:
-    import pygetwindow
-
-    # EnumWindows devolve as janelas em ordem Z: a primeira é a usada mais recentemente.
-    return [w for w in pygetwindow.getAllWindows() if w.title and _is_browser_title(w.title) and w.visible]
-
-
-def _focus(window: Any) -> bool:
-    import pyautogui
-    import pygetwindow
-
-    for attempt in range(2):
-        try:
-            if window.isMinimized:
-                window.restore()
-            window.activate()
-        except Exception:
-            # O Windows só deixa trocar o foco depois de uma tecla "real".
-            if attempt == 0:
-                pyautogui.press("alt")
-        time.sleep(0.25)
-        active = pygetwindow.getActiveWindow()
-        if active is not None and active._hWnd == window._hWnd:
-            return True
-    return False
+def _browser_windows() -> list[win_desktop.Window]:
+    # Ordem Z: a primeira janela é a usada mais recentemente.
+    return [window for window in win_desktop.windows() if window.process in BROWSER_PROCESSES]
 
 
 def _active_title() -> str:
-    import pygetwindow
-
-    active = pygetwindow.getActiveWindow()
-    return _clean_title(active.title) if active is not None else ""
+    return _clean_title(win_desktop.foreground_title())
 
 
 def browser_tab_action(action: str, name: str | None = None) -> str:
@@ -478,7 +515,7 @@ def browser_tab_action(action: str, name: str | None = None) -> str:
     if action in {"close", "switch"} and name:
         target = normalize(name)
         for window in windows:
-            if not _focus(window):
+            if not win_desktop.bring_to_front(window.hwnd):
                 continue
             first = _active_title()
             title = first
@@ -489,15 +526,15 @@ def browser_tab_action(action: str, name: str | None = None) -> str:
                         return f"Fechei a aba '{title}'."
                     return f"Aba '{title}' em primeiro plano."
                 pyautogui.hotkey("ctrl", "tab")
-                time.sleep(0.2)
+                time.sleep(0.25)
                 title = _active_title()
                 if title == first:
                     break
         raise PCControlError(f"Não encontrei nenhuma aba com '{name}' no título.")
 
     window = windows[0]
-    if not _focus(window):
-        raise PCControlError("O Windows não deixou focar a janela do navegador.")
+    if not win_desktop.bring_to_front(window.hwnd):
+        raise PCControlError("O Windows não deixou focar a janela do navegador. Clique nela uma vez e peça de novo.")
 
     if action == "close":
         title = _active_title()
@@ -517,6 +554,91 @@ def browser_tab_action(action: str, name: str | None = None) -> str:
     pyautogui.hotkey(*hotkeys[action])
     time.sleep(0.25)
     return f"Feito. Aba atual: '{_active_title()}'."
+
+
+# ───────────────────────── windows & monitors ─────────────────────────
+
+
+def find_window(target: str) -> win_desktop.Window:
+    """Most recently used window whose title or app matches `target`."""
+    windows = [window for window in win_desktop.windows() if HUD_TITLE not in window.title]
+    query = normalize(APP_NAME_ALIASES.get(normalize(target), target))
+    by_title = [window for window in windows if query and query in normalize(window.title)]
+    if by_title:
+        return by_title[0]
+    processes = set(PROCESS_ALIASES.get(query, [])) or set(find_processes(target))
+    by_process = [window for window in windows if window.process in processes]
+    if by_process:
+        return by_process[0]
+    titles = [window.title for window in windows]
+    close = best_match(query, titles)
+    if close:
+        return next(window for window in windows if window.title == close)
+    raise PCControlError(f"Não encontrei nenhuma janela aberta de '{target}'.")
+
+
+def pick_monitor(number: int | None) -> win_desktop.Monitor:
+    screens = win_desktop.monitors()
+    if not screens:
+        raise PCControlError("Não consegui ler os monitores.")
+    if number is None:
+        return next((m for m in screens if m.primary), screens[0])
+    for monitor in screens:
+        if monitor.number == number:
+            return monitor
+    numbers = ", ".join(str(m.number) for m in screens)
+    raise PCControlError(f"Não existe tela {number}. Telas disponíveis: {numbers}.")
+
+
+def window_action(target: str, action: str, monitor: int | None) -> str:
+    _require_windows("Controlar janelas")
+    window = find_window(target)
+    protected = PROTECTED_PROCESSES | _jarvis_ancestor_names()
+
+    if action == "move":
+        screen = pick_monitor(monitor)
+        win_desktop.move_to_monitor(window.hwnd, screen)
+        return f"'{window.title}' agora está na tela {screen.number}."
+    if action == "maximize":
+        if monitor is not None:
+            win_desktop.move_to_monitor(window.hwnd, pick_monitor(monitor), maximize=True)
+        else:
+            win_desktop.show_window(window.hwnd, win_desktop.SW_MAXIMIZE)
+            win_desktop.bring_to_front(window.hwnd)
+        return f"'{window.title}' maximizada."
+    if action == "minimize":
+        win_desktop.show_window(window.hwnd, win_desktop.SW_MINIMIZE)
+        return f"'{window.title}' minimizada."
+    if action in {"restore", "focus"}:
+        win_desktop.show_window(window.hwnd, win_desktop.SW_RESTORE)
+        if not win_desktop.bring_to_front(window.hwnd):
+            raise PCControlError("O Windows não deixou trazer essa janela para frente.")
+        return f"'{window.title}' em primeiro plano."
+    if action in {"snap_left", "snap_right"}:
+        import pyautogui
+
+        if not win_desktop.bring_to_front(window.hwnd):
+            raise PCControlError("O Windows não deixou focar essa janela.")
+        pyautogui.hotkey("win", "left" if action == "snap_left" else "right")
+        return f"'{window.title}' encaixada à {'esquerda' if action == 'snap_left' else 'direita'}."
+    if action == "close":
+        if window.process in protected:
+            raise PCControlError("Essa janela pertence ao sistema ou ao próprio Jarvis.")
+        win_desktop.close_window(window.hwnd)
+        return f"Pedi para fechar a janela '{window.title}'."
+    raise PCControlError(f"Ação de janela desconhecida: {action}.")
+
+
+def capture_screen(monitor: int | None, window: str | None = None) -> tuple[Any, str]:
+    _require_windows("Ler a tela")
+    if window:
+        target = find_window(window)
+        win_desktop.bring_to_front(target.hwnd)
+        time.sleep(0.35)  # deixa a janela terminar de redesenhar antes do print
+        return win_desktop.grab_region(win_desktop.window_rect(target.hwnd)), f"janela '{target.title}'"
+    screen = pick_monitor(monitor) if monitor is not None else None
+    image = win_desktop.grab_monitor(screen)
+    return image, f"tela {screen.number}" if screen else "todas as telas"
 
 
 def press_media_key(action: str) -> None:
@@ -670,16 +792,95 @@ async def open_website(context: RunContext, url: str) -> str:
     """Open a website in the user's default browser (new tab).
 
     Args:
-        url: Full URL or domain, e.g. "https://www.tudogostoso.com.br/receita/123" or "github.com".
+        url: A full URL, a domain ("github.com"), a well-known service name ("Google Maps",
+            "Gmail", "Claude", "ChatGPT") or one of the user's saved shortcuts.
+            Never invent URLs: if unsure, search_web first and pass the official result URL.
     """
     try:
-        target = normalize_url(url)
+        label, target = resolve_site(url)
         await net_activity([host_of(target)], "request")
-        await _run("open_website", host_of(target), webbrowser.open, target, 2)
+        await _run("open_website", label, webbrowser.open, target, 2)
         logger.info("Site aberto: %s", target)
-        return f"Abri {host_of(target)} no navegador."
+        return f"Abri {label} no navegador."
     except PCControlError as exc:
         return str(exc)
+
+
+@function_tool()
+async def save_shortcut(context: RunContext, name: str, url: str) -> str:
+    """Save a personal website shortcut so it can be opened by name later.
+
+    Args:
+        name: How the user calls it, e.g. "portal SATC".
+        url: The exact http(s) URL.
+    """
+    try:
+        label, target = await asyncio.to_thread(save_shortcut_entry, name, url)
+    except PCControlError as exc:
+        return str(exc)
+    logger.info("Atalho salvo: %s -> %s", label, target)
+    return f"Atalho '{label}' salvo para {host_of(target)}."
+
+
+@function_tool()
+async def manage_window(
+    context: RunContext,
+    target: str,
+    action: Literal["move", "maximize", "minimize", "restore", "focus", "snap_left", "snap_right", "close"],
+    monitor: int | None = None,
+) -> str:
+    """Move, maximize, minimize, focus, snap or close an application window, across monitors.
+
+    Args:
+        target: App name or text from the window title, e.g. "Configurações", "Edge", "WhatsApp".
+        action: move (to another monitor), maximize, minimize, restore, focus, snap_left,
+            snap_right or close (polite close of that single window).
+        monitor: Monitor number as Windows numbers them (tela 1, 2, 3) for move/maximize.
+    """
+    try:
+        result = await _run("manage_window", target, window_action, target, action, monitor)
+        logger.info("Janela: %s %s %s", action, target, monitor or "")
+        return result
+    except PCControlError as exc:
+        return str(exc)
+
+
+@function_tool()
+async def look_at_screen(context: RunContext, monitor: int | None = None, window: str | None = None) -> str:
+    """Look at what is on the user's screen. Only when the user explicitly asks to see/read the screen.
+
+    Takes a screenshot, shows it on the HUD and sends it to you as an image so you can
+    read and describe it. Prefer `window` when the user names an app (sharper image).
+
+    Args:
+        monitor: Monitor number (tela 1, 2, 3). Omit both arguments to capture every monitor.
+        window: App or window title to capture alone, e.g. "PhpStorm", "Edge", "WhatsApp".
+    """
+    detail = window or (f"tela {monitor}" if monitor else "todas as telas")
+    try:
+        image, label = await _run("look_at_screen", detail, capture_screen, monitor, window)
+    except PCControlError as exc:
+        return str(exc)
+
+    sent_to_model = False
+    try:
+        from livekit import rtc
+
+        frame_image = image.convert("RGBA")
+        frame = rtc.VideoFrame(frame_image.width, frame_image.height, rtc.VideoBufferType.RGBA, frame_image.tobytes())
+        context.session.current_agent.realtime_llm_session.push_video(frame)
+        sent_to_model = True
+    except Exception:
+        logger.warning("Não foi possível enviar a captura ao modelo.", exc_info=True)
+
+    await send_screenshot(image, label)
+    logger.info("Captura (%s) enviada para análise.", label)
+    if not sent_to_model:
+        return "Tirei o print e mostrei no HUD, mas este modelo não recebe imagens; não consigo lê-lo."
+    return (
+        f"Print ({label}) capturado, exibido no HUD e enviado a você como imagem. "
+        "Descreva o que vê respondendo ao pedido do usuário. Nunca leia senhas, chaves ou tokens em voz alta."
+    )
 
 
 @function_tool()
@@ -874,4 +1075,7 @@ def build_pc_tools() -> list[Any]:
         open_folder,
         lock_computer,
         take_screenshot,
+        manage_window,
+        look_at_screen,
+        save_shortcut,
     ]

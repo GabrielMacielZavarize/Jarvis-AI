@@ -1,6 +1,17 @@
 import { create } from 'zustand';
 import { DEFAULT_HOME, locateHost } from './geo';
-import type { CardDataMap, CardKind, GeoPoint, HudCard, JarvisMode, LinkKind, LogEntry, LogLevel, NetLink } from './types';
+import type {
+  CardDataMap,
+  CardKind,
+  GeoPoint,
+  HudCard,
+  HudPanelAction,
+  JarvisMode,
+  LinkKind,
+  LogEntry,
+  LogLevel,
+  NetLink,
+} from './types';
 
 const MAX_CARDS = 4;
 const MAX_LOG = 40;
@@ -29,6 +40,8 @@ interface HudState {
   home: GeoPoint;
   links: NetLink[];
   cards: (HudCard & { key: string })[];
+  /** Card shown enlarged in the middle of the HUD. */
+  expandedId: string | null;
   log: LogEntry[];
   setMode: (mode: JarvisMode) => void;
   setActiveTool: (name: string | null) => void;
@@ -43,11 +56,14 @@ interface HudState {
   pushCard: <K extends CardKind>(kind: K, data: CardDataMap[K]) => void;
   dismissCard: (id: string) => void;
   clearCards: () => void;
+  setExpanded: (id: string | null) => void;
+  /** Executes a panel command from the agent and reports what really happened. */
+  runPanelCommand: (action: HudPanelAction, kinds: CardKind[]) => { open: CardKind[]; changed: CardKind[] };
   addLog: (level: LogLevel, text: string) => void;
   clearLog: () => void;
 }
 
-export const useHud = create<HudState>((set) => ({
+export const useHud = create<HudState>((set, get) => ({
   mode: 'standby',
   activeTool: null,
   demo: false,
@@ -56,6 +72,7 @@ export const useHud = create<HudState>((set) => ({
   home: DEFAULT_HOME,
   links: [],
   cards: [],
+  expandedId: null,
   log: [],
   setMode: (mode) => set((s) => (s.mode === mode ? s : { mode })),
   setActiveTool: (activeTool) => set({ activeTool }),
@@ -90,7 +107,7 @@ export const useHud = create<HudState>((set) => ({
       const alive = s.links.filter((link) => now - link.createdAt < link.ttl + 1500);
       return alive.length === s.links.length ? s : { links: alive };
     }),
-  closeCards: (kinds) => set((s) => ({ cards: s.cards.filter((card) => !kinds.includes(card.kind)) })),
+  closeCards: (kinds) => set((s) => ({ cards: s.cards.filter((card) => !kinds.includes(card.kind)), expandedId: null })),
   pushCard: (kind, data) =>
     set((s) => {
       const key = cardKey(kind, data);
@@ -105,8 +122,35 @@ export const useHud = create<HudState>((set) => ({
       const others = s.cards.filter((c) => c.key !== key);
       return { cards: [card, ...others].slice(0, MAX_CARDS) };
     }),
-  dismissCard: (id) => set((s) => ({ cards: s.cards.filter((c) => c.id !== id) })),
-  clearCards: () => set({ cards: [] }),
+  dismissCard: (id) =>
+    set((s) => ({ cards: s.cards.filter((c) => c.id !== id), expandedId: s.expandedId === id ? null : s.expandedId })),
+  clearCards: () => set({ cards: [], expandedId: null }),
+  setExpanded: (expandedId) => set({ expandedId }),
+  runPanelCommand: (action, kinds) => {
+    const { cards } = get();
+    const present = [...new Set(cards.map((card) => card.kind))];
+    let changed: CardKind[] = [];
+    if (action === 'close') {
+      changed = present.filter((kind) => kinds.includes(kind));
+      set((s) => ({
+        cards: s.cards.filter((card) => !kinds.includes(card.kind)),
+        expandedId: s.cards.some((card) => card.id === s.expandedId && kinds.includes(card.kind)) ? null : s.expandedId,
+      }));
+    } else if (action === 'close_all') {
+      changed = present;
+      set({ cards: [], expandedId: null });
+    } else if (action === 'expand') {
+      const target = cards.find((card) => kinds.includes(card.kind));
+      if (target) {
+        changed = [target.kind];
+        set({ expandedId: target.id });
+      }
+    } else if (action === 'collapse') {
+      set({ expandedId: null });
+    }
+    const open = [...new Set(get().cards.map((card) => card.kind))];
+    return { open, changed };
+  },
   addLog: (level, text) =>
     set((s) => ({
       log: [{ id: nextId('log'), ts: Date.now(), level, text }, ...s.log].slice(0, MAX_LOG),

@@ -84,7 +84,7 @@
 }
 .wx__days {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
   gap: 6px;
   margin-top: 14px;
 }
@@ -363,6 +363,46 @@
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--text-faint);
+}
+
+/* Screen capture */
+.screen {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.screen img {
+  display: block;
+  width: 100%;
+  max-height: 46vh;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  background: #000;
+}
+.card--expanded .screen img {
+  max-height: 72vh;
+}
+
+/* Expanded panel */
+.expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 50%, rgb(1 8 14 / 0.55), rgb(1 4 9 / 0.85));
+  backdrop-filter: blur(3px);
+}
+.card--expanded {
+  width: min(880px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  font-size: 1.12em;
+  box-shadow: 0 0 60px rgb(var(--c-primary-rgb) / 0.18), inset 0 0 40px rgb(var(--c-primary-rgb) / 0.08);
+}
+.card--expanded .wx__temp {
+  font-size: 64px;
 }
 
 /* Timer */

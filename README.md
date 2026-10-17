@@ -52,14 +52,18 @@ flowchart LR
 | SYS-05 | `run_diagnostics` — CPU, RAM, disco, bateria, uptime | "Rode um diagnóstico do sistema." |
 | TMR-06 | `set_timer` — contagem regressiva com aviso falado | "Timer de 10 minutos pro café." |
 | HUD-07 | `show_on_hud` — painel com listas, passos, resumos | "Mostre os passos no painel." |
-| HUD-07 | `close_hud_panels` — fecha painéis do HUD | "Feche o clima e a pesquisa." |
+| HUD-07 | `manage_hud_panels` — lista, fecha e amplia painéis do HUD | "Feche o clima." · "Amplia a previsão." |
 | MED-08 | `play_youtube` / `open_streaming` / `media_control` | "Toque lo-fi no YouTube." · "Pausa." |
 | PC-09 | `open_app` / `close_app` / `open_folder` / `lock_computer` / `take_screenshot` | "Abra o Spotify." · "Bloqueie a tela." |
-| WEB-10 | `open_website` / `browser_tab` | "Abra essa receita." · "Feche a aba do YouTube." |
+| WEB-10 | `open_website` / `browser_tab` / `save_shortcut` | "Abre o Google Maps." · "Feche a aba do YouTube." · "Salva esse site como portal SATC." |
 | AUD-11 | `set_volume` | "Volume em 30%." |
+| JAN-13 | `manage_window` — mover entre monitores, maximizar, minimizar, encaixar, fechar janela | "Joga as Configurações na tela 3." |
+| VIS-14 | `look_at_screen` — print de um monitor ou janela, mostrado no HUD e analisado | "O que tem aberto no PhpStorm?" |
 | COM-12 | `draft_email` / `confirm_email_send` / `cancel_pending_email` | "Escreva um email para…" |
 
-Os protocolos MED, PC, WEB e AUD só existem com `JARVIS_ENABLE_PC_CONTROL=true`.
+Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`.
+
+Serviços conhecidos (Google Maps, Gmail, Drive, Claude, ChatGPT, GitHub…) abrem direto pelo nome. Para sites seus, peça "salva esse site como …" ou edite `atalhos.json` (`{"portal SATC": "https://…"}`); esse arquivo fica fora do git.
 
 ## Pré-requisitos
 
@@ -164,7 +168,7 @@ JARVIS_ENABLE_PC_CONTROL=true
 JARVIS_HOME_CITY=Criciúma
 ```
 
-`JARVIS_HOME_CITY` define de onde saem as conexões no globo. Sem ela, o HUD usa uma cidade aproximada pelo fuso horário do navegador. Os destinos dos arcos são aproximados (sede ou região de datacenter conhecida, ou o país do domínio): é uma visualização, não um traceroute.
+`JARVIS_HOME_CITY` define de onde saem as conexões no globo e é a cidade padrão quando você pede clima ou horário sem dizer onde. Sem ela, o HUD usa uma cidade aproximada pelo fuso horário do navegador. Os destinos dos arcos são aproximados (sede ou região de datacenter conhecida, ou o país do domínio): é uma visualização, não um traceroute.
 
 Confira tudo com:
 
@@ -245,6 +249,10 @@ O Jarvis lê páginas, pesquisas e notícias, e um texto malicioso pode tentar d
 - O prompt instrui a ignorar ordens vindas de conteúdo da internet; ações só acontecem a pedido seu.
 - Toda ação aparece no registro do HUD e no terminal.
 
+### Leitura de tela
+
+`look_at_screen` só roda quando você pede. O print aparece no HUD e é **enviado ao Gemini (Google)** para análise, incluindo tudo o que estiver visível naquela tela ou janela. Feche arquivos sensíveis (como o `.env`) antes de pedir. O Jarvis é instruído a nunca ler senhas, chaves ou tokens em voz alta.
+
 ### Rede e credenciais
 
 - O servidor do HUD escuta apenas em `127.0.0.1` por padrão: o endpoint de token não tem autenticação, então não o exponha na rede sem colocar uma camada de acesso na frente.
@@ -281,7 +289,8 @@ agent.py              Worker LiveKit (entrypoint do agente)
 backends.py           Gemini / OpenAI Realtime / pipeline compatível
 tools.py              Ferramentas do Jarvis
 hud.py                Ponte ferramentas → HUD (data channel "jarvis.hud")
-pc_control.py         Ações seguras no computador (apps, sites, abas, mídia, volume)
+pc_control.py         Ações seguras no computador (apps, sites, abas, janelas, mídia, volume, tela)
+win_desktop.py        Monitores, janelas e captura de tela via Win32
 prompts.py            Persona e saudação por horário
 server.py             FastAPI: serve web/dist e emite tokens LiveKit
 jarvis.py             Inicializador: HUD + agente em um comando
