@@ -9,7 +9,7 @@ class SettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.backend, "gemini-realtime")
         self.assertEqual(settings.google_voice, "Charon")
-        self.assertEqual(settings.google_model, "gemini-2.5-flash-native-audio-preview-12-2025")
+        self.assertEqual(settings.google_model, "gemini-3.8-live")
 
     def test_invalid_backend_raises(self) -> None:
         with self.assertRaises(SettingsError):
@@ -34,10 +34,38 @@ class SettingsTests(unittest.TestCase):
 
         self.assertIn(
             "GOOGLE_MODEL precisa ser um modelo compatível com Gemini Live API. "
-            "Use algo como 'gemini-2.5-flash-native-audio-preview-12-2025' ou um modelo com "
-            "'-live-' / '-native-audio-' no nome.",
+            "Use 'gemini-3.8-live' ou outro modelo com 'live' ou '-native-audio' no nome.",
             settings.backend_validation_errors(),
         )
+
+    def test_gemini_realtime_accepts_live_models(self) -> None:
+        for model in (
+            "gemini-3.8-live",
+            "gemini-3.8-live-extended-thinking",
+            "gemini-3.1-flash-live-preview",
+            "gemini-live-2.5-flash-native-audio",
+            "gemini-2.5-flash-native-audio-preview-12-2025",
+        ):
+            with self.subTest(model=model):
+                settings = load_settings({"GOOGLE_API_KEY": "test-key", "GOOGLE_MODEL": model})
+                self.assertEqual(settings.backend_validation_errors(), [])
+
+    def test_example_placeholders_count_as_missing(self) -> None:
+        settings = load_settings(
+            {
+                "GOOGLE_API_KEY": "your-google-api-key",
+                "LIVEKIT_URL": "wss://your-project.livekit.cloud",
+                "LIVEKIT_API_KEY": "your-livekit-api-key",
+                "LIVEKIT_API_SECRET": "your-livekit-api-secret",
+            }
+        )
+
+        self.assertIsNone(settings.google_api_key)
+        self.assertIn(
+            "GOOGLE_API_KEY é obrigatório quando JARVIS_BACKEND=gemini-realtime.",
+            settings.backend_validation_errors(),
+        )
+        self.assertEqual(len(settings.livekit_validation_errors()), 3)
 
     def test_email_tool_requires_gmail_credentials(self) -> None:
         settings = load_settings(

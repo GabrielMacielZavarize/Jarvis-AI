@@ -103,14 +103,28 @@ LIVEKIT_API_KEY=sua-api-key
 LIVEKIT_API_SECRET=seu-api-secret
 ```
 
-### Opção 1: Gemini Live (padrão)
+### Opção 1: Gemini Live (padrão, gratuito)
+
+O modelo padrão é o **`gemini-3.8-live`**, o modelo Live estável recomendado pelo Google para agentes de voz e disponível no plano gratuito da Gemini API.
+
+Para gerar a chave gratuita:
+
+1. Acesse o [Google AI Studio](https://aistudio.google.com/apikey) com sua conta Google.
+2. Clique em **Create API key** e escolha (ou crie) um projeto. Não é preciso cadastrar cartão.
+3. Copie a chave e cole em `GOOGLE_API_KEY` no `.env`.
 
 ```env
 JARVIS_BACKEND=gemini-realtime
 GOOGLE_API_KEY=sua-chave-google
-GOOGLE_MODEL=gemini-2.5-flash-native-audio-preview-12-2025
+GOOGLE_MODEL=gemini-3.8-live
 GOOGLE_VOICE=Charon
 ```
+
+Observações do plano gratuito:
+
+- No plano gratuito o Google pode usar o conteúdo das conversas para melhorar os produtos dele.
+- Os limites de uso aparecem em **AI Studio → Rate limits**. As sessões só de áudio duram até 15 minutos; o plugin do LiveKit retoma a sessão automaticamente.
+- Outros modelos Live aceitos: `gemini-3.8-live-extended-thinking` (raciocina mais, responde mais devagar) e `gemini-2.5-flash-native-audio-preview-12-2025` (geração anterior).
 
 ### Opção 2: OpenAI Realtime
 
@@ -266,7 +280,7 @@ O navegador só libera o microfone em `localhost`/`127.0.0.1` ou HTTPS. Verifiqu
 
 ### `models/... is not found for API version v1beta`
 
-`GOOGLE_MODEL` aponta para um modelo que não é Live. No backend `gemini-realtime`, use um modelo com `-live-` ou `-native-audio-` no nome.
+`GOOGLE_MODEL` aponta para um modelo que não é Live. No backend `gemini-realtime`, use `gemini-3.8-live` (ou outro modelo com `live` / `-native-audio` no nome).
 
 ### O provider compatível com OpenAI falhou
 

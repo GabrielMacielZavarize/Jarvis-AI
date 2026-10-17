@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Mapping
 
@@ -13,7 +14,12 @@ SUPPORTED_BACKENDS = (
     "openai-realtime",
     "openai-compatible-pipeline",
 )
-GOOGLE_LIVE_MODEL_MARKERS = ("-live-", "-native-audio-")
+DEFAULT_GOOGLE_MODEL = "gemini-3.8-live"
+# "gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-live-2.5-flash-native-audio",
+# "gemini-2.5-flash-native-audio-preview-12-2025"...
+GOOGLE_LIVE_MODEL_PATTERN = re.compile(r"(^|-)live(-|$)|-native-audio")
+# Valores de exemplo do .env.example que ainda não foram trocados por credenciais reais.
+PLACEHOLDER_PREFIXES = ("your-", "sua-", "seu-", "wss://your-project", "wss://seu-projeto")
 
 RUNTIME_COMMANDS = {"console", "dev", "start", "connect"}
 LIVEKIT_COMMANDS = {"dev", "start", "connect"}
@@ -31,6 +37,8 @@ def _clean_optional(value: str | None) -> str | None:
         return None
 
     cleaned = value.strip()
+    if cleaned.lower().startswith(PLACEHOLDER_PREFIXES):
+        return None
     return cleaned or None
 
 
@@ -68,7 +76,7 @@ def _parse_csv(raw_value: str | None) -> tuple[str, ...]:
 def _is_google_live_model(model_name: str | None) -> bool:
     if not model_name:
         return True
-    return any(marker in model_name for marker in GOOGLE_LIVE_MODEL_MARKERS)
+    return GOOGLE_LIVE_MODEL_PATTERN.search(model_name) is not None
 
 
 def get_cli_command(argv: list[str]) -> str | None:
@@ -89,7 +97,7 @@ def should_validate_runtime_command(argv: list[str]) -> bool:
 class Settings:
     backend: str = "gemini-realtime"
     google_api_key: str | None = None
-    google_model: str = "gemini-2.5-flash-native-audio-preview-12-2025"
+    google_model: str = DEFAULT_GOOGLE_MODEL
     google_voice: str = "Charon"
     openai_api_key: str | None = None
     openai_base_url: str | None = None
@@ -123,7 +131,7 @@ class Settings:
             google_api_key=_clean_optional(env_map.get("GOOGLE_API_KEY")),
             google_model=(
                 _clean_optional(env_map.get("GOOGLE_MODEL"))
-                or "gemini-2.5-flash-native-audio-preview-12-2025"
+                or DEFAULT_GOOGLE_MODEL
             ),
             google_voice=_clean_optional(env_map.get("GOOGLE_VOICE")) or "Charon",
             openai_api_key=_clean_optional(env_map.get("OPENAI_API_KEY")),
@@ -171,8 +179,8 @@ class Settings:
         if self.backend == "gemini-realtime" and not _is_google_live_model(self.google_model):
             errors.append(
                 "GOOGLE_MODEL precisa ser um modelo compatível com Gemini Live API. "
-                "Use algo como 'gemini-2.5-flash-native-audio-preview-12-2025' ou um modelo com "
-                "'-live-' / '-native-audio-' no nome."
+                f"Use '{DEFAULT_GOOGLE_MODEL}' ou outro modelo com 'live' ou "
+                "'-native-audio' no nome."
             )
 
         if self.backend in {"openai-realtime", "openai-compatible-pipeline"}:
