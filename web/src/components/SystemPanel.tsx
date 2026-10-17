@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useClock } from '../hooks/useClock';
 import type { StatusResult } from '../hooks/useServerStatus';
-import { levels } from '../lib/audio';
+import { levels, SIGNAL_FLOOR } from '../lib/audio';
 import { BACKEND_LABELS, MODE_LABELS } from '../lib/catalog';
 import { useHud } from '../lib/hudStore';
 import type { JarvisMode } from '../lib/types';
@@ -44,7 +44,7 @@ function useSilentMicrophone(active: boolean) {
     const tick = (now: number) => {
       peak = Math.max(peak, levels.user);
       if (now - windowStart > 6000) {
-        setSilent(peak < 0.004);
+        setSilent(peak < SIGNAL_FLOOR);
         peak = 0;
         windowStart = now;
       }

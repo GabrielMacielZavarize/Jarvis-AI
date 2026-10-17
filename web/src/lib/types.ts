@@ -145,6 +145,43 @@ export interface ScreenData {
 
 export type HudPanelAction = 'list' | 'close' | 'close_all' | 'expand' | 'collapse';
 
+/** What the agent can ask the HUD over the `jarvis.hud` RPC. */
+export type HudRequest =
+  | { action: HudPanelAction; targets: string[] }
+  | { action: 'mic' }
+  | { action: 'end_session' };
+
+/** A panel as the user sees it: the agent gets the same title that is shown on screen. */
+export interface PanelInfo {
+  id: string;
+  kind: CardKind;
+  title: string;
+  detail: string;
+  expanded: boolean;
+}
+
+export interface PanelCommandResult {
+  /** Panels still open, newest first. */
+  open: PanelInfo[];
+  /** Panels the command really closed/expanded/collapsed. */
+  changed: PanelInfo[];
+  /** Requested panels that matched nothing on screen. */
+  unmatched: string[];
+}
+
+/** Microphone the browser captures from, reported to the agent ("qual microfone está conectado?"). */
+export interface MicReport {
+  label: string | null;
+  device_id: string;
+  is_default: boolean;
+  enabled: boolean;
+  /** Seconds since the browser last received sound from it (null: never in this session). */
+  signal_s: number | null;
+  /** Seconds since the agent last detected the user's voice (null: never). */
+  heard_s: number | null;
+  available: string[];
+}
+
 export interface CardDataMap {
   weather: WeatherData;
   search: SearchData;

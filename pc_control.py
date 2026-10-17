@@ -967,13 +967,21 @@ async def browser_tab(
     action: Literal["new", "close", "next", "previous", "reopen", "switch"],
     name: str | None = None,
 ) -> str:
-    """Control tabs of the open web browser.
+    """Control tabs of the open web browser (Edge, Chrome...), only for websites.
+
+    The panels of the Jarvis HUD ("abas"/"abinhas" on the screen, on the left, Reprodução,
+    Leitura de tela, Timer...) are NOT browser tabs: use manage_hud_panels for them.
 
     Args:
         action: new (open a new tab), close, next, previous, reopen (last closed tab) or switch.
         name: Text from the tab title for close/switch, e.g. "YouTube" or "Tudo Gostoso".
-            Without a name, close acts on the active tab (never the Jarvis HUD).
+            Required for close.
     """
+    if action == "close" and not (name or "").strip():
+        return (
+            "NADA foi fechado: para fechar uma aba do navegador diga o site (ex.: 'YouTube'). "
+            "Se o usuário falou de uma aba/painel do HUD, use manage_hud_panels."
+        )
     try:
         result = await _run("browser_tab", name or action, browser_tab_action, action, name)
         logger.info("Aba do navegador: %s %s", action, name or "")
@@ -988,6 +996,8 @@ async def media_control(
     action: Literal["play_pause", "next", "previous", "stop"],
 ) -> str:
     """Control whatever media is playing (YouTube, Spotify, Netflix…) with the media keys.
+
+    Never use it to close anything: closing the HUD's Reprodução panel is manage_hud_panels.
 
     Args:
         action: play_pause, next, previous or stop.

@@ -216,6 +216,20 @@ class WindowTests(unittest.TestCase):
 
 
 class EdgeTabTests(unittest.TestCase):
+    async def _close_without_name(self) -> str:
+        return await pc_control.browser_tab(SimpleNamespace(), action="close")
+
+    def test_close_without_site_never_touches_the_browser(self) -> None:
+        # "Feche a aba" sem site costuma ser um painel do HUD, não a aba ativa do Edge.
+        import asyncio
+
+        with patch("pc_control.browser_tab_action") as action:
+            result = asyncio.run(self._close_without_name())
+
+        action.assert_not_called()
+        self.assertTrue(result.startswith("NADA foi fechado"))
+        self.assertIn("manage_hud_panels", result)
+
     @patch.object(pc_control, "IS_WINDOWS", True)
     @patch("pc_control.win_desktop.bring_to_front", return_value=True)
     @patch("pc_control.win_desktop.windows")

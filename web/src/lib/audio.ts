@@ -29,8 +29,15 @@ export const levels = {
   userBands: new Float32Array(BANDS),
 };
 
+/** Below this level the microphone is delivering silence (dead, muted or wrong device). */
+export const SIGNAL_FLOOR = 0.004;
+
 const sources: Partial<Record<Channel, Source>> = {};
 let synthetic: ((time: number) => SyntheticLevels) | null = null;
+let userSignalAt: number | null = null;
+
+/** Last time (Date.now()) the browser received sound from the user's microphone. */
+export const lastUserSignalAt = () => userSignalAt;
 
 export function attachTrack(channel: Channel, track: AudioTrack | undefined) {
   const current = sources[channel];
@@ -118,6 +125,7 @@ export function sampleAudio(time: number) {
   const user = sources.user;
   const agentLevel = agent ? readBands(agent, levels.agentBands) : (decay(levels.agentBands), 0);
   const userLevel = user ? readBands(user, levels.userBands) : (decay(levels.userBands), 0);
+  if (userLevel > SIGNAL_FLOOR) userSignalAt = Date.now();
   levels.agent += (agentLevel - levels.agent) * 0.3;
   levels.user += (userLevel - levels.user) * 0.3;
 }

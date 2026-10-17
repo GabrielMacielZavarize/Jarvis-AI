@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { DEFAULT_HOME, locateHost } from './geo';
+import { describePanel, matchPanels } from './panels';
 import type {
   CardDataMap,
   CardKind,
@@ -11,6 +12,7 @@ import type {
   LogEntry,
   LogLevel,
   NetLink,
+  PanelCommandResult,
 } from './types';
 
 const MAX_CARDS = 4;
@@ -21,6 +23,24 @@ const LINK_TTL: Record<LinkKind, number> = { request: 5200, source: 6500, model:
 
 let counter = 0;
 const nextId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`;
+
+type StoredCard = HudCard & { key: string };
+
+/** Cards that must not scroll away: an email waiting for "confirmar <código>" and running timers. */
+function isPinned(card: HudCard, now: number): boolean {
+  if (card.kind === 'email') return card.data.status === 'draft';
+  if (card.kind === 'timer') return card.data.status === 'running' && (card.data.ends_at == null || card.data.ends_at > now);
+  return false;
+}
+
+/** Keeps at most MAX_CARDS (newest first), dropping the oldest unpinned cards before pinned ones. */
+export function trimCards<T extends HudCard>(cards: T[], now = Date.now()): T[] {
+  const kept = [...cards];
+  for (let index = kept.length - 1; index > 0 && kept.length > MAX_CARDS; index--) {
+    if (!isPinned(kept[index], now)) kept.splice(index, 1);
+  }
+  return kept.slice(0, MAX_CARDS);
+}
 
 /** Cards with the same key replace each other instead of stacking. */
 function cardKey(kind: CardKind, data: CardDataMap[CardKind]): string {
@@ -39,7 +59,7 @@ interface HudState {
   voiceStarts: number[];
   home: GeoPoint;
   links: NetLink[];
-  cards: (HudCard & { key: string })[];
+  cards: StoredCard[];
   /** Card shown enlarged in the middle of the HUD. */
   expandedId: string | null;
   log: LogEntry[];
@@ -57,8 +77,11 @@ interface HudState {
   dismissCard: (id: string) => void;
   clearCards: () => void;
   setExpanded: (id: string | null) => void;
-  /** Executes a panel command from the agent and reports what really happened. */
-  runPanelCommand: (action: HudPanelAction, kinds: CardKind[]) => { open: CardKind[]; changed: CardKind[] };
+  /**
+   * Executes a panel command from the agent and reports what really happened.
+   * Targets are kinds ("screen"), "last" or words of the title shown on the panel.
+   */
+  runPanelCommand: (action: HudPanelAction, targets: string[]) => PanelCommandResult;
   addLog: (level: LogLevel, text: string) => void;
   clearLog: () => void;
 }
@@ -118,38 +141,46 @@ export const useHud = create<HudState>((set, get) => ({
         kind,
         data,
         createdAt: Date.now(),
-      } as HudCard & { key: string };
+      } as StoredCard;
       const others = s.cards.filter((c) => c.key !== key);
-      return { cards: [card, ...others].slice(0, MAX_CARDS) };
+      const cards = trimCards([card, ...others]);
+      return { cards, expandedId: cards.some((c) => c.id === s.expandedId) ? s.expandedId : null };
     }),
   dismissCard: (id) =>
     set((s) => ({ cards: s.cards.filter((c) => c.id !== id), expandedId: s.expandedId === id ? null : s.expandedId })),
   clearCards: () => set({ cards: [], expandedId: null }),
   setExpanded: (expandedId) => set({ expandedId }),
-  runPanelCommand: (action, kinds) => {
-    const { cards } = get();
-    const present = [...new Set(cards.map((card) => card.kind))];
-    let changed: CardKind[] = [];
+  runPanelCommand: (action, targets) => {
+    const { cards, expandedId } = get();
+    const now = Date.now();
+    let changed: HudCard[] = [];
+    let unmatched: string[] = [];
+    if (action === 'close' || action === 'expand') {
+      const found = matchPanels(cards, targets, now);
+      unmatched = found.unmatched;
+      changed = action === 'expand' ? found.matched.slice(0, 1) : found.matched;
+    }
     if (action === 'close') {
-      changed = present.filter((kind) => kinds.includes(kind));
+      const ids = new Set(changed.map((card) => card.id));
       set((s) => ({
-        cards: s.cards.filter((card) => !kinds.includes(card.kind)),
-        expandedId: s.cards.some((card) => card.id === s.expandedId && kinds.includes(card.kind)) ? null : s.expandedId,
+        cards: s.cards.filter((card) => !ids.has(card.id)),
+        expandedId: s.expandedId && ids.has(s.expandedId) ? null : s.expandedId,
       }));
     } else if (action === 'close_all') {
-      changed = present;
+      changed = cards;
       set({ cards: [], expandedId: null });
     } else if (action === 'expand') {
-      const target = cards.find((card) => kinds.includes(card.kind));
-      if (target) {
-        changed = [target.kind];
-        set({ expandedId: target.id });
-      }
+      if (changed.length > 0) set({ expandedId: changed[0].id });
     } else if (action === 'collapse') {
+      changed = cards.filter((card) => card.id === expandedId);
       set({ expandedId: null });
     }
-    const open = [...new Set(get().cards.map((card) => card.kind))];
-    return { open, changed };
+    const state = get();
+    return {
+      open: state.cards.map((card) => describePanel(card, state.expandedId, now)),
+      changed: changed.map((card) => describePanel(card, state.expandedId, now)),
+      unmatched,
+    };
   },
   addLog: (level, text) =>
     set((s) => ({

@@ -1,12 +1,21 @@
 import { useAgent, useLocalParticipant, useSessionContext, useSessionMessages } from '@livekit/components-react';
 import type { ReceivedMessage } from '@livekit/components-core';
-import { ConnectionState, type LocalAudioTrack, type RemoteAudioTrack, RoomEvent } from 'livekit-client';
+import {
+  ConnectionState,
+  type LocalAudioTrack,
+  type RemoteAudioTrack,
+  type Room,
+  RoomEvent,
+  Track,
+} from 'livekit-client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { attachTrack } from '../lib/audio';
+import { attachTrack, lastUserSignalAt } from '../lib/audio';
 import { TOOL_LABELS } from '../lib/catalog';
-import { orderLines } from '../lib/transcript';
 import { useHud } from '../lib/hudStore';
-import type { CardKind, ChatLine, HudEvent, HudPanelAction, JarvisMode } from '../lib/types';
+import { describeMicrophone } from '../lib/microphone';
+import { parseHudRequest } from '../lib/panels';
+import { orderLines } from '../lib/transcript';
+import type { ChatLine, HudEvent, JarvisMode, MicReport } from '../lib/types';
 
 export const HUD_TOPIC = 'jarvis.hud';
 const HUD_RPC_METHOD = 'jarvis.hud';
@@ -15,6 +24,8 @@ let lastScreenUrl: string | null = null;
 
 const decoder = new TextDecoder();
 const MIC_STORAGE_KEY = 'jarvis.microphone';
+// Lets the RPC reply reach the agent before the room goes away.
+const END_LINK_DELAY_MS = 250;
 
 function loadSavedMic(): string | null {
   try {
@@ -65,6 +76,26 @@ function useAudioInputs(refreshKey: unknown) {
     };
   }, [refreshKey]);
   return devices;
+}
+
+/** The microphone this browser is really capturing from, for "qual microfone está conectado?". */
+async function microphoneReport(room: Room): Promise<MicReport> {
+  const track = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack;
+  let devices: MediaDeviceInfo[] = [];
+  try {
+    devices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === 'audioinput');
+  } catch {
+    // Without device access the track label is still reported.
+  }
+  return describeMicrophone({
+    trackLabel: track?.label,
+    deviceId: room.getActiveDevice('audioinput') || loadSavedMic() || 'default',
+    devices,
+    enabled: room.localParticipant.isMicrophoneEnabled,
+    signalAt: lastUserSignalAt(),
+    heardAt: useHud.getState().userHeardAt,
+    now: Date.now(),
+  });
 }
 
 function handleHudEvent(event: HudEvent) {
@@ -157,6 +188,8 @@ export function useLiveJarvis(): LiveJarvis {
   const room = session.room;
   const connectionState = session.connectionState;
   const [savedMic, setSavedMic] = useState(loadSavedMic);
+  // The RPC handler is registered once per room; it always calls the latest stop().
+  const stopRef = useRef<() => Promise<void>>(async () => {});
 
   // HUD events published by the Python tools over the data channel.
   useEffect(() => {
@@ -170,11 +203,21 @@ export function useLiveJarvis(): LiveJarvis {
     };
     room.on(RoomEvent.DataReceived, onData);
 
-    // The agent asks the HUD to list/close/expand panels and gets back what actually happened.
+    // The agent asks the HUD to list/close/expand panels, which microphone is in use, or to end
+    // the link ("tchau, Jarvis"), and gets back what actually happened.
     room.registerRpcMethod(HUD_RPC_METHOD, async (data) => {
-      const request = JSON.parse(data.payload || '{}') as { action?: HudPanelAction; kinds?: CardKind[] };
-      const result = useHud.getState().runPanelCommand(request.action ?? 'list', request.kinds ?? []);
-      if (result.changed.length > 0) useHud.getState().addLog('info', `HUD: ${request.action} ${result.changed.join(', ')}`);
+      const request = parseHudRequest(data.payload);
+      const hud = useHud.getState();
+      if (request.action === 'mic') return JSON.stringify({ mic: await microphoneReport(room) });
+      if (request.action === 'end_session') {
+        hud.addLog('info', 'Jarvis encerrou o link a seu pedido');
+        window.setTimeout(() => void stopRef.current(), END_LINK_DELAY_MS);
+        return JSON.stringify({ ended: true });
+      }
+      const result = hud.runPanelCommand(request.action, request.targets);
+      if (result.changed.length > 0) {
+        hud.addLog('info', `HUD: ${request.action} ${result.changed.map((panel) => panel.title).join(', ')}`);
+      }
       return JSON.stringify(result);
     });
 
@@ -273,6 +316,9 @@ export function useLiveJarvis(): LiveJarvis {
     useHud.getState().setActiveTool(null);
     useHud.getState().addLog('info', 'Sessão encerrada');
   }, [session]);
+  useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
 
   const toggleMic = useCallback(async () => {
     try {

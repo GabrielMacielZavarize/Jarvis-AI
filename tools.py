@@ -37,6 +37,7 @@ from settings import Settings
 logger = logging.getLogger("jarvis-tools")
 
 PENDING_EMAIL_KEY = "pending_email"
+TIMERS_KEY = "timers"
 EMAIL_PATTERN = re.compile(r"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$", re.IGNORECASE)
 # Palavras que o usuário fala ao ditar um endereço de email.
 SPOKEN_EMAIL_SYMBOLS = {
@@ -116,6 +117,7 @@ WEATHER_CODES = {
 
 # Mantém referência aos timers ativos para que não sejam coletados pelo GC.
 _TIMER_TASKS: set[asyncio.Task[None]] = set()
+_SESSION_TASKS: set[asyncio.Task[None]] = set()
 
 
 class CityNotFoundError(LookupError):
@@ -620,8 +622,34 @@ async def run_diagnostics(
         return "Não foi possível concluir o diagnóstico do sistema."
 
 
+def _session_timers(context: RunContext) -> dict[str, dict[str, Any]]:
+    state = _get_session_state(context)
+    timers = state.get(TIMERS_KEY)
+    if not isinstance(timers, dict):
+        timers = {}
+        state[TIMERS_KEY] = timers
+    return timers
+
+
+def _human_duration(seconds: float) -> str:
+    total = max(0, int(round(seconds)))
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    parts = []
+    if hours:
+        parts.append(f"{hours} h")
+    if minutes:
+        parts.append(f"{minutes} min")
+    if secs and not hours:
+        parts.append(f"{secs} s")
+    return " e ".join(parts) or "0 s"
+
+
 async def _finish_timer(context: RunContext, timer_id: str, label: str, seconds: float) -> None:
     await asyncio.sleep(seconds)
+    timer = _session_timers(context).get(timer_id)
+    if timer is not None:
+        timer["status"] = "done"
     await show_card("timer", {"id": timer_id, "label": label, "status": "done"})
     try:
         context.session.generate_reply(
@@ -651,7 +679,14 @@ async def set_timer(
     clean_label = _truncate(label.strip() or "Timer", limit=40)
     seconds = round(minutes * 60, 1)
     timer_id = secrets.token_hex(4)
-    ends_at_ms = int((time.time() + seconds) * 1000)
+    ends_at = time.time() + seconds
+    ends_at_ms = int(ends_at * 1000)
+    _session_timers(context)[timer_id] = {
+        "label": clean_label,
+        "ends_at": ends_at,
+        "duration_s": seconds,
+        "status": "running",
+    }
 
     task = asyncio.create_task(_finish_timer(context, timer_id, clean_label, seconds))
     _TIMER_TASKS.add(task)
@@ -674,6 +709,34 @@ async def set_timer(
     else:
         human = f"{round(minutes, 1):g} minutos"
     return f"Timer '{clean_label}' iniciado para {human}."
+
+
+@function_tool()
+async def get_timers(context: RunContext) -> str:
+    """Tell how much time is left on each timer of this conversation (label and remaining time).
+
+    Use it whenever the user asks about a timer ("quanto tempo falta?", "o timer já acabou?")
+    instead of guessing.
+    """
+    timers = _session_timers(context)
+    if not timers:
+        return "Nenhum timer foi criado nesta conversa."
+
+    now = time.time()
+    running = []
+    finished = []
+    for timer in sorted(timers.values(), key=lambda item: item["ends_at"]):
+        remaining = timer["ends_at"] - now
+        if timer["status"] == "running" and remaining > 0:
+            ends = dt.datetime.fromtimestamp(timer["ends_at"]).strftime("%H:%M")
+            running.append(f"'{timer['label']}': faltam {_human_duration(remaining)} (termina às {ends})")
+        else:
+            finished.append(f"'{timer['label']}' terminou há {_human_duration(-remaining)}")
+
+    parts = ["Timers ativos: " + "; ".join(running) + "." if running else "Nenhum timer ativo agora."]
+    if finished:
+        parts.append("Já terminaram: " + "; ".join(finished[-3:]) + ".")
+    return " ".join(parts)
 
 
 @function_tool()
@@ -704,22 +767,44 @@ def _hostname(url: str) -> str:
     return (urlparse(url).hostname or "").removeprefix("www.")
 
 
+# Título exibido em cada tipo de painel do HUD (web/src/lib/panels.ts → PANEL_META).
 HUD_PANEL_KINDS = {
-    "weather": "clima",
-    "search": "pesquisa",
-    "news": "notícias",
-    "time": "horário",
-    "diagnostics": "diagnóstico",
-    "timer": "timers",
-    "note": "notas",
-    "email": "email",
-    "media": "mídia",
-    "install": "instalação",
+    "weather": "Meteorologia",
+    "search": "Pesquisa",
+    "news": "Notícias",
+    "time": "Cronometria",
+    "diagnostics": "Diagnóstico",
+    "timer": "Timer",
+    "note": "Nota",
+    "email": "Email",
+    "media": "Reprodução",
+    "screen": "Leitura de tela",
+    "install": "Instalação de app",
 }
+LAST_PANEL = "last"
+MAX_PANEL_TARGETS = 6
+_PANEL_VERBS = {"close": "fechado", "close_all": "fechado", "expand": "ampliado", "collapse": "reduzido"}
 
 
-def _panel_names(kinds: list[str]) -> str:
-    return ", ".join(HUD_PANEL_KINDS.get(kind, kind) for kind in kinds) or "nenhum"
+def _panel_label(panel: Any) -> str:
+    """'Leitura de tela (tela 2) [screen]' from the HUD reply; older HUD builds sent bare kinds."""
+    if isinstance(panel, str):
+        return f"{HUD_PANEL_KINDS.get(panel, panel)} [{panel}]"
+    if not isinstance(panel, dict):
+        return str(panel)
+    kind = str(panel.get("kind") or "")
+    title = str(panel.get("title") or HUD_PANEL_KINDS.get(kind, kind))
+    extras = [str(panel["detail"])] if panel.get("detail") else []
+    if panel.get("expanded"):
+        extras.append("ampliado")
+    label = f"{title} ({', '.join(extras)})" if extras else title
+    return f"{label} [{kind}]" if kind else label
+
+
+def _panel_list(panels: Any) -> str:
+    if not isinstance(panels, list) or not panels:
+        return "nenhum"
+    return "; ".join(_panel_label(panel) for panel in panels)
 
 
 @function_tool()
@@ -728,39 +813,233 @@ async def manage_hud_panels(
     action: Literal["list", "close", "close_all", "expand", "collapse"],
     panels: list[str] | None = None,
 ) -> str:
-    """List, close, expand (enlarge) or collapse the panels on the user's holographic HUD.
+    """List, close, expand (enlarge) or collapse the panels of the user's holographic HUD.
 
-    When the user talks about an "aba"/"painel"/"janela" of weather, search, news, time,
-    diagnostics, timer, notes, email, media or app install, they mean these HUD panels
-    (not browser tabs).
+    The user calls these panels "abas", "abinhas", "painéis", "janelas" or "telas"; they sit
+    in the left column of the HUD. They are NOT browser tabs, and closing one never means
+    pausing media.
 
     Args:
-        action: list (what is open), close, close_all, expand (enlarge one panel in the
-            center of the HUD) or collapse (return it to normal size).
-        panels: Panel kinds: weather, search, news, time, diagnostics, timer, note, email, media,
-            install. For expand, pass the single panel to enlarge.
+        action: list (what is open, newest first, with the title shown on each panel), close,
+            close_all, expand (enlarge one panel in the center of the HUD) or collapse.
+        panels: Which panels. Each item is a kind (weather, search, news, time, diagnostics,
+            timer, note, email, media, screen, install), words of the title/subject shown on the panel
+            ("Leitura de tela", "Reprodução", "lista de compras estrogonofe") or "last" for the
+            most recent panel. Without panels, close and expand act on the most recent panel.
     """
-    kinds = [kind for kind in (panels or []) if kind in HUD_PANEL_KINDS]
-    if action in {"close", "expand"} and not kinds:
-        return f"Diga qual painel. Opções: {', '.join(HUD_PANEL_KINDS)}."
+    targets = [str(item).strip()[:80] for item in (panels or []) if str(item).strip()][:MAX_PANEL_TARGETS]
+    if action in {"close", "expand"} and not targets:
+        targets = [LAST_PANEL]
 
-    response = await hud_request(action, kinds)
+    # "kinds" mantém compatível um HUD compilado antes dos títulos (python jarvis.py --rebuild).
+    response = await hud_request(
+        action, {"targets": targets, "kinds": [target for target in targets if target in HUD_PANEL_KINDS]}
+    )
     if response is None:
-        return "O HUD não está conectado, então não consegui mexer nos painéis."
+        if action == "list":
+            return "Não sei quais painéis estão abertos: o HUD não está conectado."
+        return f"NADA foi {_PANEL_VERBS[action]}: o HUD não está conectado. Não diga que conseguiu."
 
-    open_now = _panel_names(response.get("open", []))
-    changed = response.get("changed", [])
+    open_panels = response.get("open") or []
+    open_now = _panel_list(open_panels)
+    changed = response.get("changed") or []
     if action == "list":
-        return f"Painéis abertos no HUD: {open_now}."
-    if action == "close_all":
-        return f"Fechei {len(changed)} painel(is). O HUD está limpo."
-    if action == "collapse":
-        return "Painel de volta ao tamanho normal."
+        if not open_panels:
+            return "Nenhum painel aberto no HUD."
+        return f"Painéis abertos no HUD, do mais recente ao mais antigo: {open_now}."
+
     if not changed:
-        return f"Não havia painel de {_panel_names(kinds)} aberto. Abertos agora: {open_now}."
+        verb = _PANEL_VERBS[action]
+        if action == "collapse":
+            reason = "nenhum painel estava ampliado"
+        elif not open_panels:
+            reason = "não há nenhum painel aberto no HUD"
+        else:
+            wanted = ", ".join(f"'{target}'" for target in targets)
+            reason = f"nenhum painel aberto corresponde a {wanted}"
+        return f"NADA foi {verb}: {reason}. Painéis abertos agora: {open_now}. Não diga ao usuário que foi {verb}."
+
+    if action == "close_all":
+        return f"Fechados {len(changed)} painel(is): {_panel_list(changed)}. O HUD está limpo."
+    if action == "collapse":
+        return f"Voltou ao tamanho normal: {_panel_list(changed)}."
     if action == "expand":
-        return f"Painel de {_panel_names(changed)} ampliado no centro do HUD."
-    return f"Fechei: {_panel_names(changed)}. Continuam abertos: {open_now}."
+        return f"Ampliado no centro do HUD: {_panel_list(changed)}."
+
+    result = f"Fechado no HUD: {_panel_list(changed)}. Continuam abertos: {open_now}."
+    unmatched = [str(item) for item in response.get("unmatched") or []]
+    if unmatched:
+        result += f" Não encontrei painel para: {', '.join(unmatched)}."
+    return result
+
+
+# ───────────────────────── microphone ─────────────────────────
+
+
+def _windows_default_audio() -> dict[str, str]:
+    """Names of the Windows default input/output devices (pycaw); {} when unavailable."""
+    if os.name != "nt":
+        return {}
+    try:
+        import warnings
+
+        import comtypes
+        from pycaw.pycaw import AudioUtilities
+    except ImportError:
+        return {}
+
+    devices: dict[str, str] = {}
+    comtypes.CoInitialize()
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            for role, getter in (("entrada", AudioUtilities.GetMicrophone), ("saída", AudioUtilities.GetSpeakers)):
+                try:
+                    device = getter()
+                    if not hasattr(device, "FriendlyName"):
+                        device = AudioUtilities.CreateDevice(device)
+                    if device is not None and device.FriendlyName:
+                        devices[role] = str(device.FriendlyName)
+                except Exception:
+                    logger.debug("Não foi possível ler o dispositivo de %s padrão.", role, exc_info=True)
+    finally:
+        comtypes.CoUninitialize()
+    return devices
+
+
+def _seconds_ago(seconds: Any) -> str | None:
+    if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+        return None
+    return "agora há pouco" if seconds < 2 else f"há {_human_duration(seconds)}"
+
+
+def _describe_microphone(mic: dict[str, Any]) -> str:
+    label = str(mic.get("label") or "").strip()
+    text = "Microfone selecionado no HUD: " + (f"'{label}'" if label else "sem nome (o navegador não informou)")
+    if mic.get("is_default"):
+        text += ", o padrão do sistema"
+    text += "."
+    if not mic.get("enabled"):
+        text += " Ele está MUDO no HUD (botão de microfone desligado)."
+    else:
+        signal = _seconds_ago(mic.get("signal_s"))
+        heard = _seconds_ago(mic.get("heard_s"))
+        text += f" O navegador recebeu som dele {signal}." if signal else " O navegador ainda não recebeu som dele."
+        if heard:
+            text += f" Eu ouvi sua voz pela última vez {heard}."
+    others = [str(name) for name in mic.get("available") or [] if name and str(name) != label]
+    if others:
+        text += f" Outros microfones disponíveis: {', '.join(others[:5])}."
+    return text
+
+
+@function_tool()
+async def check_microphone(context: RunContext) -> str:
+    """Tell which microphone the user is talking through and whether it is picking up sound.
+
+    Reads the microphone selected in the HUD's "Sistema" panel (the one this conversation
+    uses), whether it is muted and when sound last came from it, plus the Windows default
+    input and output devices (names only).
+    """
+    await tool_status("check_microphone", "running")
+    reply = await hud_request("mic")
+    try:
+        windows = await asyncio.to_thread(_windows_default_audio)
+    except Exception:
+        logger.debug("Falha ao consultar os dispositivos de áudio do Windows.", exc_info=True)
+        windows = {}
+
+    mic = reply.get("mic") if reply else None
+    if reply is None:
+        parts = ["Não consegui consultar o HUD, então não sei qual microfone está selecionado nele."]
+    elif not isinstance(mic, dict):
+        parts = ["O HUD não informou o microfone (talvez esteja desatualizado: python jarvis.py --rebuild)."]
+    else:
+        parts = [_describe_microphone(mic)]
+    if windows:
+        defaults = ", ".join(f"{role} '{name}'" for role, name in windows.items())
+        parts.append(f"Padrões do Windows: {defaults}.")
+
+    await tool_status("check_microphone", "done" if mic or windows else "error")
+    return " ".join(parts)
+
+
+# ───────────────────────── end of session ─────────────────────────
+
+FAREWELL_START_TIMEOUT_S = 6.0
+FAREWELL_PLAYOUT_TIMEOUT_S = 30.0
+# O fim da despedida ainda está chegando ao navegador quando o agente termina de falar.
+FAREWELL_AUDIO_TAIL_S = 0.8
+
+
+def _spawn(coro: Any) -> asyncio.Task[None]:
+    task = asyncio.create_task(coro)
+    _SESSION_TASKS.add(task)
+    task.add_done_callback(_SESSION_TASKS.discard)
+    return task
+
+
+def _tool_reply_is_new_speech(session: Any) -> bool:
+    """Realtime models (Gemini Live) answer a tool result in a new speech; pipelines reuse the tool's."""
+    try:
+        return bool(session.current_agent.realtime_llm_session.capabilities.auto_tool_reply_generation)
+    except Exception:
+        return False
+
+
+async def _wait_for_farewell(session: Any) -> None:
+    """Wait for the agent's next speech (the goodbye) to finish playing."""
+    created: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+
+    def _on_speech_created(event: Any) -> None:
+        if not created.done():
+            created.set_result(event.speech_handle)
+
+    session.on("speech_created", _on_speech_created)
+    try:
+        handle = await asyncio.wait_for(created, FAREWELL_START_TIMEOUT_S)
+        await asyncio.wait_for(handle.wait_for_playout(), FAREWELL_PLAYOUT_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        logger.warning("A despedida não terminou a tempo; encerrando a sessão assim mesmo.")
+    finally:
+        session.off("speech_created", _on_speech_created)
+
+
+async def _hang_up(session: Any, wait_for_farewell: bool) -> None:
+    """Close the link like the HUD's "Encerrar link" button, once Jarvis said goodbye."""
+    if wait_for_farewell:
+        await _wait_for_farewell(session)
+    await asyncio.sleep(FAREWELL_AUDIO_TAIL_S)
+    await tool_status("end_session", "done")
+    reply = await hud_request("end_session")
+    if reply and reply.get("ended"):
+        logger.info("O HUD encerrou o link a pedido do usuário.")
+        return
+    logger.info("O HUD não encerrou o link; encerrando a sessão pelo agente.")
+    session.shutdown()
+
+
+@function_tool()
+async def end_session(context: RunContext) -> str:
+    """End this conversation: say goodbye and close the link with the HUD ("Encerrar link").
+
+    Call it when the user says goodbye or tells Jarvis to switch itself off: "tchau, Jarvis",
+    "até mais", "desligar", "pode desligar", "desliga, Jarvis", "encerrar", "encerra a sessão".
+    It does NOT shut down, restart or lock the computer.
+    """
+    await tool_status("end_session", "running")
+    session = context.session
+    handle = getattr(context, "speech_handle", None)
+    if handle is None:
+        _spawn(_hang_up(session, wait_for_farewell=True))
+    else:
+        wait_for_farewell = _tool_reply_is_new_speech(session)
+        handle.add_done_callback(lambda _: _spawn(_hang_up(session, wait_for_farewell)))
+    logger.info("Encerramento da sessão pedido pelo usuário.")
+    return (
+        "O link com o HUD será encerrado assim que você terminar de falar. Despeça-se agora em UMA "
+        "frase curta (ex.: 'Até logo, senhor.'), sem perguntas. O computador continua ligado."
+    )
 
 
 def build_email_tools(settings: Settings) -> list[Any]:
@@ -1029,8 +1308,11 @@ def build_tools(settings: Settings) -> list[Any]:
         get_current_time,
         run_diagnostics,
         set_timer,
+        get_timers,
         show_on_hud,
         manage_hud_panels,
+        check_microphone,
+        end_session,
     ]
     if settings.pc_control_enabled:
         from pc_control import build_pc_tools
