@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import difflib
 import logging
 import os
 import platform
@@ -20,6 +21,16 @@ import requests
 from ddgs import DDGS
 from livekit.agents import RunContext, function_tool
 
+from confirmation import (
+    confirmation_phrase,
+    last_user_message,
+    new_code,
+    normalize_code,
+    session_state,
+    spoken_digits,
+    strip_accents,
+    wait_for_user_confirmation,
+)
 from hud import hud_request, net_activity, show_card, tool_status
 from settings import Settings
 
@@ -27,6 +38,34 @@ logger = logging.getLogger("jarvis-tools")
 
 PENDING_EMAIL_KEY = "pending_email"
 EMAIL_PATTERN = re.compile(r"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$", re.IGNORECASE)
+# Palavras que o usuário fala ao ditar um endereço de email.
+SPOKEN_EMAIL_SYMBOLS = {
+    "@": "@",
+    "arroba": "@",
+    ".": ".",
+    "ponto": ".",
+    "dot": ".",
+    "underline": "_",
+    "underscore": "_",
+    "sublinhado": "_",
+    "hifen": "-",
+    "traco": "-",
+    "tracinho": "-",
+    "menos": "-",
+}
+# "arroba gmail" sem "ponto com" -> domínio completo do provedor.
+EMAIL_PROVIDER_DOMAINS = {
+    "gmail": "gmail.com",
+    "hotmail": "hotmail.com",
+    "outlook": "outlook.com",
+    "live": "live.com",
+    "yahoo": "yahoo.com",
+    "icloud": "icloud.com",
+    "uol": "uol.com.br",
+    "bol": "bol.com.br",
+    "terra": "terra.com.br",
+}
+SPELLED_EMAIL_SYMBOLS = {"@": " arroba ", ".": " ponto ", "_": " underline ", "-": " hífen "}
 MAX_TIMER_MINUTES = 24 * 60
 WEEKDAYS_PT = (
     "segunda-feira",
@@ -89,35 +128,61 @@ def _truncate(value: str, limit: int = 180) -> str:
     return f"{value[: limit - 3].rstrip()}..."
 
 
+def assemble_email_address(spoken: str) -> str | None:
+    """Build an address from dictation: "gabriel m zavarise arroba gmail ponto com".
+
+    Typed addresses pass through. Periods glued to words before the @ ("M.") are the
+    transcriber's abbreviation marks, so only the spoken "ponto" becomes a dot there.
+    """
+    text = re.sub(r"\s+", " ", strip_accents(spoken).lower()).strip()
+    compact = text.strip(" .,;:!?")
+    if EMAIL_PATTERN.match(compact):
+        return compact
+
+    pieces: list[str] = []
+    in_domain = False
+    for raw in text.split(" "):
+        word = raw.strip(",;:!?\"'()<>")
+        if word in SPOKEN_EMAIL_SYMBOLS:
+            symbol = SPOKEN_EMAIL_SYMBOLS[word]
+            in_domain = in_domain or symbol == "@"
+            pieces.append(symbol)
+            continue
+        if "@" in word:
+            in_domain = True
+        elif not in_domain:
+            word = word.strip(".")
+        pieces.append(re.sub(r"[^a-z0-9._%+@-]", "", word))
+
+    address = "".join(pieces).strip(".")
+    local, _, domain = address.partition("@")
+    if domain in EMAIL_PROVIDER_DOMAINS:
+        address = f"{local}@{EMAIL_PROVIDER_DOMAINS[domain]}"
+    return address if EMAIL_PATTERN.match(address) else None
+
+
+def spell_email_address(address: str) -> str:
+    """"joao.silva@gmail.com" -> "joao ponto silva arroba gmail ponto com" (para ler em voz alta)."""
+    spelled = "".join(SPELLED_EMAIL_SYMBOLS.get(ch, ch) for ch in address)
+    return re.sub(r"\s+", " ", spelled).strip()
+
+
 def _validate_email_address(email: str, field_name: str) -> str:
     normalized = email.strip().lower()
     if not normalized:
         raise ValueError(f"{field_name} não pode ser vazio.")
+    normalized = assemble_email_address(normalized) or normalized
     if not EMAIL_PATTERN.match(normalized):
         raise ValueError(f"{field_name} precisa ser um email válido.")
     return normalized
 
 
 def _get_session_state(context: RunContext) -> dict[str, Any]:
-    userdata = context.userdata
-    if userdata is None:
-        userdata = {}
-        context.session.userdata = userdata
-    return userdata
+    return session_state(context)
 
 
 def _get_last_user_message(context: RunContext) -> str | None:
-    history = getattr(context.session, "history", None)
-    if history is None or not hasattr(history, "messages"):
-        return None
-
-    for message in reversed(history.messages()):
-        role = str(getattr(message, "role", "")).lower()
-        if role == "user" or role.endswith(".user"):
-            text_content = getattr(message, "text_content", None)
-            if isinstance(text_content, str):
-                return text_content.strip()
-    return None
+    return last_user_message(context)
 
 
 def _format_weather(location_name: str, current: dict[str, Any]) -> str:
@@ -649,6 +714,7 @@ HUD_PANEL_KINDS = {
     "note": "notas",
     "email": "email",
     "media": "mídia",
+    "install": "instalação",
 }
 
 
@@ -665,13 +731,14 @@ async def manage_hud_panels(
     """List, close, expand (enlarge) or collapse the panels on the user's holographic HUD.
 
     When the user talks about an "aba"/"painel"/"janela" of weather, search, news, time,
-    diagnostics, timer, notes, email or media, they mean these HUD panels (not browser tabs).
+    diagnostics, timer, notes, email, media or app install, they mean these HUD panels
+    (not browser tabs).
 
     Args:
         action: list (what is open), close, close_all, expand (enlarge one panel in the
             center of the HUD) or collapse (return it to normal size).
-        panels: Panel kinds: weather, search, news, time, diagnostics, timer, note, email, media.
-            For expand, pass the single panel to enlarge.
+        panels: Panel kinds: weather, search, news, time, diagnostics, timer, note, email, media,
+            install. For expand, pass the single panel to enlarge.
     """
     kinds = [kind for kind in (panels or []) if kind in HUD_PANEL_KINDS]
     if action in {"close", "expand"} and not kinds:
@@ -697,6 +764,11 @@ async def manage_hud_panels(
 
 
 def build_email_tools(settings: Settings) -> list[Any]:
+    def _closest_allowed(address: str) -> str | None:
+        """The authorized address the transcriber probably meant ("zavarise" -> "zavarize")."""
+        matches = difflib.get_close_matches(address, settings.effective_allowed_emails, n=1, cutoff=0.8)
+        return matches[0] if matches else None
+
     def _validate_recipient_policy(to_email: str, cc_email: str | None) -> None:
         allowed = set(settings.effective_allowed_emails)
         recipients = [to_email]
@@ -706,10 +778,60 @@ def build_email_tools(settings: Settings) -> list[Any]:
         blocked = [email for email in recipients if email not in allowed]
         if blocked:
             blocked_list = ", ".join(blocked)
+            hints = [
+                f" Você quis dizer {suggestion}? Confirme com o usuário antes de rascunhar de novo."
+                for suggestion in (_closest_allowed(email) for email in blocked)
+                if suggestion
+            ]
             raise PermissionError(
                 "Envio bloqueado: destinatário fora da política permitida "
-                f"({blocked_list})."
+                f"({blocked_list})." + "".join(hints)
             )
+
+    @function_tool()
+    async def check_email_address(
+        context: RunContext,
+        spoken_address: str,
+    ) -> str:
+        """Assemble an email address the user dictated and check it before drafting.
+
+        Call it whenever the address was spoken ("gabriel m silva arroba gmail ponto com").
+        Read the assembled address back to the user and only call draft_email after they
+        confirm it.
+
+        Args:
+            spoken_address: Exactly what the user said for the address.
+        """
+        address = assemble_email_address(spoken_address)
+        if not address:
+            return (
+                f"Não consegui montar um email válido a partir de '{_truncate(spoken_address, 80)}'. "
+                "Peça para o usuário soletrar o endereço dizendo 'arroba' e 'ponto'."
+            )
+
+        allowed = address in settings.effective_allowed_emails
+        suggestion = None if allowed else _closest_allowed(address)
+        await show_card(
+            "email",
+            {"status": "address", "to": address, "allowed": allowed, "suggestion": suggestion},
+        )
+        lines = [f"Endereço montado: {address}", f"Para ler em voz alta: {spell_email_address(address)}"]
+        if allowed:
+            lines.append(
+                "Está na lista de destinatários autorizados. Confirme o endereço com o usuário "
+                "e só então chame draft_email."
+            )
+        elif suggestion:
+            lines.append(
+                f"Não está na lista autorizada. O autorizado mais parecido é {suggestion} "
+                f"({spell_email_address(suggestion)}): pergunte se é esse e use o que o usuário confirmar."
+            )
+        else:
+            lines.append(
+                "Não está na lista de destinatários autorizados (JARVIS_ALLOWED_EMAILS): "
+                "um email para ele seria bloqueado."
+            )
+        return "\n".join(lines)
 
     def _send_pending_email(payload: dict[str, Any]) -> None:
         msg = MIMEMultipart()
@@ -737,7 +859,18 @@ def build_email_tools(settings: Settings) -> list[Any]:
         message: str,
         cc_email: str | None = None,
     ) -> str:
-        """Prepare an email draft and require explicit user confirmation before sending."""
+        """Prepare an email draft and require explicit user confirmation before sending.
+
+        After it, tell the user the confirmation code digit by digit, say it is also on
+        the HUD email panel, and explain that to send they must say "confirmar" + the code.
+
+        Args:
+            to_email: Recipient address (a dictated one is assembled; confirm it first with
+                check_email_address).
+            subject: Email subject.
+            message: Email body.
+            cc_email: Optional CC address.
+        """
         try:
             normalized_to = _validate_email_address(to_email, "to_email")
             normalized_cc = (
@@ -755,7 +888,7 @@ def build_email_tools(settings: Settings) -> list[Any]:
 
             _validate_recipient_policy(normalized_to, normalized_cc)
 
-            code = f"{secrets.randbelow(1_000_000):06d}"
+            code = new_code()
             state = _get_session_state(context)
             state[PENDING_EMAIL_KEY] = {
                 "code": code,
@@ -766,7 +899,7 @@ def build_email_tools(settings: Settings) -> list[Any]:
             }
 
             preview_lines = [
-                "Rascunho pronto.",
+                "Rascunho pronto (ainda NÃO enviado).",
                 f"Para: {normalized_to}",
             ]
             if normalized_cc:
@@ -775,8 +908,10 @@ def build_email_tools(settings: Settings) -> list[Any]:
                 [
                     f"Assunto: {trimmed_subject}",
                     f"Mensagem: {_truncate(trimmed_message, limit=240)}",
-                    f"Código de confirmação: {code}",
-                    f"Para enviar, o usuário precisa dizer exatamente: confirmar {code}",
+                    f"Código de confirmação: {code} (fale dígito por dígito: {spoken_digits(code)}).",
+                    "O código também aparece no painel de email do HUD.",
+                    f"Para enviar, o usuário precisa dizer: {confirmation_phrase('email', code)}. "
+                    "'Pode ir', 'manda' ou 'sim' não enviam: nesse caso repita o código e a frase.",
                 ]
             )
             await show_card(
@@ -807,25 +942,30 @@ def build_email_tools(settings: Settings) -> list[Any]:
         context: RunContext,
         code: str,
     ) -> str:
-        """Send the last drafted email only after explicit user confirmation."""
+        """Send the last drafted email only after explicit user confirmation.
+
+        Call it only when the user's latest words were "confirmar" followed by the code.
+
+        Args:
+            code: The 6-digit confirmation code the user said.
+        """
         state = _get_session_state(context)
         pending = state.get(PENDING_EMAIL_KEY)
         if not pending:
             return "Não há nenhum email pendente para envio."
 
         expected_code = pending.get("code")
-        normalized_code = code.strip()
-        if normalized_code != expected_code:
+        if normalize_code(code) != expected_code:
             logger.warning("Confirmação de email rejeitada por código inválido.")
             return "Código de confirmação inválido. O email não foi enviado."
 
-        last_user_message = _get_last_user_message(context)
-        expected_phrase = f"confirmar {expected_code}"
-        if last_user_message != expected_phrase:
-            logger.warning("Confirmação de email rejeitada por frase inválida.")
+        confirmed, _ = await wait_for_user_confirmation(context, "email", expected_code)
+        if not confirmed:
+            logger.warning("Confirmação de email rejeitada: a última fala não tinha a frase com o código.")
             return (
-                "Envio bloqueado: o último comando do usuário precisa ser exatamente "
-                f"'{expected_phrase}'."
+                "Envio bloqueado: a última fala do usuário não foi a confirmação com o código. "
+                f"Repita o código ({spoken_digits(expected_code)}) e peça para ele dizer: "
+                f"{confirmation_phrase('email', expected_code)}."
             )
 
         try:
@@ -878,7 +1018,7 @@ def build_email_tools(settings: Settings) -> list[Any]:
         logger.info("Rascunho de email cancelado.")
         return "Rascunho de email cancelado com sucesso."
 
-    return [draft_email, confirm_email_send, cancel_pending_email]
+    return [check_email_address, draft_email, confirm_email_send, cancel_pending_email]
 
 
 def build_tools(settings: Settings) -> list[Any]:
@@ -898,4 +1038,8 @@ def build_tools(settings: Settings) -> list[Any]:
         tools.extend(build_pc_tools())
     if settings.email_tool_enabled:
         tools.extend(build_email_tools(settings))
+    if settings.app_install_enabled:
+        from installer import build_install_tools
+
+        tools.extend(build_install_tools())
     return tools

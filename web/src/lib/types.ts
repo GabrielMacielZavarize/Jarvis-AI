@@ -17,7 +17,8 @@ export type CardKind =
   | 'note'
   | 'email'
   | 'media'
-  | 'screen';
+  | 'screen'
+  | 'install';
 
 export interface WeatherDay {
   date: string;
@@ -99,12 +100,33 @@ export interface NoteData {
 }
 
 export interface EmailData {
-  status: 'draft' | 'sent' | 'cancelled';
+  /** address = dictated address assembled by check_email_address, waiting for the user's OK. */
+  status: 'address' | 'draft' | 'sent' | 'cancelled';
   to: string;
   cc?: string | null;
   subject?: string;
   preview?: string;
   code?: string;
+  /** Only for status "address": whether it is in JARVIS_ALLOWED_EMAILS, and the closest one if not. */
+  allowed?: boolean;
+  suggestion?: string | null;
+}
+
+export interface InstallPackage {
+  name: string;
+  id: string;
+  version?: string | null;
+  source: 'winget' | 'msstore';
+  match?: string | null;
+}
+
+export interface InstallData {
+  status: 'results' | 'pending' | 'installing' | 'installed' | 'failed' | 'cancelled';
+  query?: string;
+  candidates?: InstallPackage[];
+  package?: InstallPackage;
+  code?: string;
+  message?: string;
 }
 
 export interface MediaData {
@@ -134,6 +156,7 @@ export interface CardDataMap {
   email: EmailData;
   media: MediaData;
   screen: ScreenData;
+  install: InstallData;
 }
 
 export type HudCard = {
@@ -196,6 +219,7 @@ export interface ServerStatus {
   email_enabled?: boolean;
   tools?: string[];
   pc_control?: boolean;
+  app_install?: boolean;
   home?: { name: string; latitude: number; longitude: number } | null;
   errors: string[];
 }

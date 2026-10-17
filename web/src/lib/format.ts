@@ -27,6 +27,12 @@ export function formatUptime(totalSeconds: number) {
   return `${minutes}min`;
 }
 
+/** "482913" → "482 913": easier to read aloud from the HUD. */
+export function groupCode(code: string) {
+  const digits = code.replace(/\D/g, '');
+  return digits.replace(/(\d{3})(?=\d)/g, '$1 ');
+}
+
 export function hostnameOf(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./, '');

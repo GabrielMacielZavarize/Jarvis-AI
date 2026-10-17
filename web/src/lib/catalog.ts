@@ -23,6 +23,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'manage_window', code: 'JAN-13', label: 'Janelas & monitores', hint: '“Joga as Configurações na tela 3.”' },
   { id: 'look_at_screen', code: 'VIS-14', label: 'Leitura de tela', hint: '“O que tem no PhpStorm?”' },
   { id: 'draft_email', code: 'COM-12', label: 'Email seguro', hint: '“Escreva um email para…”' },
+  { id: 'search_apps', code: 'APP-15', label: 'Instalar apps', hint: '“Instala o VLC pra mim.”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -33,9 +34,14 @@ export const TOOL_LABELS: Record<string, string> = {
   run_diagnostics: 'Diagnóstico do sistema',
   set_timer: 'Cronômetro',
   show_on_hud: 'Projeção no HUD',
+  check_email_address: 'Conferência de endereço',
   draft_email: 'Rascunho de email',
   confirm_email_send: 'Transmissão de email',
   cancel_pending_email: 'Cancelamento de email',
+  search_apps: 'Busca de aplicativos',
+  prepare_app_install: 'Preparando instalação',
+  confirm_app_install: 'Instalação de app',
+  cancel_app_install: 'Cancelamento de instalação',
   manage_hud_panels: 'Painéis do HUD',
   manage_window: 'Janelas',
   look_at_screen: 'Leitura de tela',

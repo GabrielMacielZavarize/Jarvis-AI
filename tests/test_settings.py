@@ -95,3 +95,11 @@ class SettingsTests(unittest.TestCase):
         )
 
         self.assertEqual(settings.effective_allowed_emails, ("jarvis@example.com",))
+
+    def test_app_install_is_opt_in(self) -> None:
+        self.assertFalse(load_settings({"GOOGLE_API_KEY": "test-key"}).app_install_enabled)
+        self.assertTrue(
+            load_settings({"GOOGLE_API_KEY": "test-key", "JARVIS_ENABLE_APP_INSTALL": "true"}).app_install_enabled
+        )
+        with self.assertRaises(SettingsError):
+            load_settings({"GOOGLE_API_KEY": "test-key", "JARVIS_ENABLE_APP_INSTALL": "talvez"})

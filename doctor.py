@@ -39,6 +39,12 @@ def main() -> int:
     if settings.email_tool_enabled:
         allowed = ", ".join(settings.effective_allowed_emails) or "nenhum"
         print(f"Destinatários permitidos: {allowed}")
+    print(
+        "Instalação de apps (winget): "
+        f"{'ativada' if settings.app_install_enabled else 'desativada'}"
+    )
+    if settings.app_install_enabled and not shutil.which("winget"):
+        print("Aviso: winget não encontrado; instale o 'App Installer' pela Microsoft Store.")
 
     _print_section("Backend")
     if problems:
