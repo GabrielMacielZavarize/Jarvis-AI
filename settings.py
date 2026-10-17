@@ -109,6 +109,7 @@ class Settings:
     openai_tts_voice: str = "ash"
     email_tool_enabled: bool = False
     pc_control_enabled: bool = False
+    app_install_enabled: bool = False
     home_city: str | None = None
     transcription_hints: bool = False
     allowed_emails: tuple[str, ...] = ()
@@ -160,6 +161,11 @@ class Settings:
             pc_control_enabled=_parse_bool(
                 env_map.get("JARVIS_ENABLE_PC_CONTROL"),
                 "JARVIS_ENABLE_PC_CONTROL",
+                default=False,
+            ),
+            app_install_enabled=_parse_bool(
+                env_map.get("JARVIS_ENABLE_APP_INSTALL"),
+                "JARVIS_ENABLE_APP_INSTALL",
                 default=False,
             ),
             home_city=_clean_optional(env_map.get("JARVIS_HOME_CITY")),

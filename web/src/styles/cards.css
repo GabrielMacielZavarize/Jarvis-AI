@@ -490,6 +490,15 @@
   letter-spacing: 0.2em;
   color: var(--c-accent);
 }
+.mail__code-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.mail__address {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
 .status-chip {
   display: inline-block;
   padding: 2px 8px;
@@ -507,4 +516,7 @@
 }
 .status-chip--off {
   color: var(--text-faint);
+}
+.status-chip--danger {
+  color: var(--c-danger);
 }

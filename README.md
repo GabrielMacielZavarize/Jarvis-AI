@@ -59,9 +59,10 @@ flowchart LR
 | AUD-11 | `set_volume` | "Volume em 30%." |
 | JAN-13 | `manage_window` — mover entre monitores, maximizar, minimizar, encaixar, fechar janela | "Joga as Configurações na tela 3." |
 | VIS-14 | `look_at_screen` — print de um monitor ou janela, mostrado no HUD e analisado | "O que tem aberto no PhpStorm?" |
-| COM-12 | `draft_email` / `confirm_email_send` / `cancel_pending_email` | "Escreva um email para…" |
+| COM-12 | `check_email_address` / `draft_email` / `confirm_email_send` / `cancel_pending_email` | "Escreva um email para gabriel arroba gmail ponto com…" |
+| APP-15 | `search_apps` / `prepare_app_install` / `confirm_app_install` / `cancel_app_install` — instala apps pelo winget, com código de confirmação | "Instala o VLC pra mim." |
 
-Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`.
+Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`.
 
 Serviços conhecidos (Google Maps, Gmail, Drive, Claude, ChatGPT, GitHub…) abrem direto pelo nome. Para sites seus, peça "salva esse site como …" ou edite `atalhos.json` (`{"portal SATC": "https://…"}`); esse arquivo fica fora do git.
 
@@ -170,6 +171,14 @@ JARVIS_HOME_CITY=Criciúma
 
 `JARVIS_HOME_CITY` define de onde saem as conexões no globo e é a cidade padrão quando você pede clima ou horário sem dizer onde. Sem ela, o HUD usa uma cidade aproximada pelo fuso horário do navegador. Os destinos dos arcos são aproximados (sede ou região de datacenter conhecida, ou o país do domínio): é uma visualização, não um traceroute.
 
+### Instalar aplicativos (winget)
+
+```env
+JARVIS_ENABLE_APP_INSTALL=true
+```
+
+Precisa do `winget` (vem com o Windows 11; senão, instale o "App Installer" pela Microsoft Store). Peça "instala o VLC pra mim": o Jarvis busca no winget e na Microsoft Store, mostra os candidatos no painel APP-15, prepara o pacote escolhido e fala um código de 6 dígitos. A instalação só começa quando você diz **"confirmar instalação"** e o código. Veja as regras em [Segurança](#instalação-de-aplicativos).
+
 Confira tudo com:
 
 ```bash
@@ -249,6 +258,27 @@ O Jarvis lê páginas, pesquisas e notícias, e um texto malicioso pode tentar d
 - O prompt instrui a ignorar ordens vindas de conteúdo da internet; ações só acontecem a pedido seu.
 - Toda ação aparece no registro do HUD e no terminal.
 
+### Instalação de aplicativos
+
+Desligada por padrão (`JARVIS_ENABLE_APP_INSTALL=false`). Quando ligada, continua sem terminal livre:
+
+- A busca roda `winget search --query <nome> --source winget|msstore` com o nome validado (letras, números e espaços, até 60 caracteres), sem shell.
+- Só é possível instalar um pacote que apareceu na **última busca**. O ID passa por regex (`Publicador.Programa` no winget, 12–14 caracteres na Microsoft Store) e a fonte precisa ser `winget` ou `msstore`.
+- O comando é sempre o mesmo, montado como lista de argumentos: `winget install --id <ID> --exact --source <fonte> --accept-package-agreements --accept-source-agreements`.
+- Nada roda antes de a sua **última fala** ser `confirmar instalação <código>`. O código de 6 dígitos aparece no HUD e o Jarvis o fala dígito por dígito.
+- Não existe desinstalação, `upgrade --all` nem qualquer outro subcomando do winget.
+- Instaladores que pedem administrador mostram a janela de permissão do Windows (UAC): você aprova ou recusa ali.
+- A instalação roda em segundo plano; o painel mostra o progresso e o Jarvis anuncia o resultado real informado pelo winget.
+
+### Confirmação por voz
+
+Enviar email e instalar app usam o mesmo código de 6 dígitos. A fala é normalizada antes da comparação, então tudo isto vale para o código 482913:
+
+- "Confirmar 482 913." · "Jarvis, confirma 4-8-2-9-1-3"
+- "Confirmar quatro oito dois nove um três" · "confirmar quatrocentos e oitenta e dois, novecentos e treze"
+
+O que **não** vale: "pode ir", "manda", "sim", "não confirmar 482913", "confirmar 482913 e …" (qualquer palavra fora da frase) e frases que não sejam a sua última fala. Para instalar, a palavra "instalação" é obrigatória; ela não envia email e vice-versa. Se a transcrição da sua fala chegar um instante atrasada, o Jarvis espera até 3 segundos por ela.
+
 ### Leitura de tela
 
 `look_at_screen` só roda quando você pede. O print aparece no HUD e é **enviado ao Gemini (Google)** para análise, incluindo tudo o que estiver visível naquela tela ou janela. Feche arquivos sensíveis (como o `.env`) antes de pedir. O Jarvis é instruído a nunca ler senhas, chaves ou tokens em voz alta.
@@ -268,8 +298,9 @@ JARVIS_ALLOWED_EMAILS=voce@dominio.com,time@dominio.com
 
 Regras do email:
 
-- Nunca é enviado no primeiro pedido: o agente cria um rascunho com um código de 6 dígitos (que também aparece no HUD).
-- O envio só acontece se o último comando do usuário for exatamente `confirmar <codigo>`.
+- Endereços ditados ("gabriel m silva arroba gmail ponto com") são montados por `check_email_address` e lidos de volta para você confirmar antes do rascunho. Se o endereço montado não estiver autorizado mas for parecido com um autorizado, o Jarvis pergunta se é esse.
+- Nunca é enviado no primeiro pedido: o agente cria um rascunho com um código de 6 dígitos (que também aparece no HUD) e fala o código dígito por dígito.
+- O envio só acontece se a última fala do usuário for `confirmar <codigo>` (veja [Confirmação por voz](#confirmação-por-voz)).
 - Se `JARVIS_ALLOWED_EMAILS` estiver vazio, apenas `GMAIL_USER` pode receber emails.
 - O corpo do email e as credenciais não são registrados em logs.
 
@@ -280,7 +311,7 @@ python -m unittest discover -s tests -v
 cd web && npm test && npm run build
 ```
 
-Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email e o servidor de tokens (formato do endpoint e sanitização).
+Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget (com `subprocess` mockado: nada é instalado nos testes) e o servidor de tokens (formato do endpoint e sanitização).
 
 ## Estrutura
 
@@ -290,6 +321,8 @@ backends.py           Gemini / OpenAI Realtime / pipeline compatível
 tools.py              Ferramentas do Jarvis
 hud.py                Ponte ferramentas → HUD (data channel "jarvis.hud")
 pc_control.py         Ações seguras no computador (apps, sites, abas, janelas, mídia, volume, tela)
+installer.py          Busca e instalação de apps pelo winget, com confirmação por código
+confirmation.py       Frase "confirmar <código>" tolerante à transcrição de voz
 win_desktop.py        Monitores, janelas e captura de tela via Win32
 prompts.py            Persona e saudação por horário
 server.py             FastAPI: serve web/dist e emite tokens LiveKit

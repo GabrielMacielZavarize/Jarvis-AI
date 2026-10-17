@@ -86,6 +86,7 @@ class BackendTests(unittest.TestCase):
             [tool.__name__ for tool in enabled_tools],
             [
                 *BASE_TOOLS,
+                "check_email_address",
                 "draft_email",
                 "confirm_email_send",
                 "cancel_pending_email",

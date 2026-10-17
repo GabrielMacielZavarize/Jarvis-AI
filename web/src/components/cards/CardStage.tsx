@@ -7,6 +7,7 @@ import { ProtocolsPanel } from '../ProtocolsPanel';
 import {
   DiagnosticsBody,
   EmailBody,
+  InstallBody,
   MediaBody,
   NewsBody,
   NoteBody,
@@ -40,6 +41,8 @@ function describe(card: HudCard, expanded: boolean): { code: string; title: stri
       return { code: 'MED-08', title: 'Reprodução', body: <MediaBody data={card.data} /> };
     case 'screen':
       return { code: 'VIS-14', title: 'Leitura de tela', body: <ScreenBody data={card.data} /> };
+    case 'install':
+      return { code: 'APP-15', title: 'Instalação de app', body: <InstallBody data={card.data} /> };
   }
 }
 

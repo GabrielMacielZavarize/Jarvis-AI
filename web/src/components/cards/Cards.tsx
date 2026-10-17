@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useClock } from '../../hooks/useClock';
-import { formatDuration, formatUptime, hostnameOf, relativeTime, weekdayShort } from '../../lib/format';
+import { formatDuration, formatUptime, groupCode, hostnameOf, relativeTime, weekdayShort } from '../../lib/format';
 import type {
   DiagnosticsData,
   EmailData,
+  InstallData,
+  InstallPackage,
   MediaData,
   ScreenData,
   NewsData,
@@ -348,13 +350,41 @@ export function ScreenBody({ data }: { data: ScreenData }) {
 }
 
 const EMAIL_STATUS: Record<EmailData['status'], [string, string]> = {
+  address: ['Confira o endereço', 'status-chip--warn'],
   draft: ['Aguardando confirmação', 'status-chip--warn'],
   sent: ['Enviado', 'status-chip--ok'],
   cancelled: ['Cancelado', 'status-chip--off'],
 };
 
+function ConfirmCode({ action, code }: { action: string; code: string }) {
+  return (
+    <div className="mail__code">
+      {action}
+      <b>{groupCode(code)}</b>
+      <span className="mail__code-hint">pode falar os números de uma vez ou dígito por dígito</span>
+    </div>
+  );
+}
+
 export function EmailBody({ data }: { data: EmailData }) {
   const [label, tone] = EMAIL_STATUS[data.status];
+  if (data.status === 'address') {
+    return (
+      <dl className="mail">
+        <span className={`status-chip ${tone}`}>{label}</span>
+        <div>
+          <dt>ENDEREÇO MONTADO</dt>
+          <dd className="mail__address">{data.to}</dd>
+        </div>
+        {data.allowed === false && (
+          <div>
+            <dt>FORA DA LISTA AUTORIZADA</dt>
+            <dd>{data.suggestion ? `Você quis dizer ${data.suggestion}?` : 'Um email para ele seria bloqueado.'}</dd>
+          </div>
+        )}
+      </dl>
+    );
+  }
   return (
     <dl className="mail">
       <span className={`status-chip ${tone}`}>{label}</span>
@@ -375,11 +405,72 @@ export function EmailBody({ data }: { data: EmailData }) {
         </div>
       )}
       {data.preview && <div className="mail__preview">{data.preview}</div>}
-      {data.status === 'draft' && data.code && (
-        <div className="mail__code">
-          Para enviar, diga
-          <b>confirmar {data.code}</b>
+      {data.status === 'draft' && data.code && <ConfirmCode action="Para enviar, diga “confirmar” e o código" code={data.code} />}
+    </dl>
+  );
+}
+
+const INSTALL_STATUS: Record<InstallData['status'], [string, string]> = {
+  results: ['Resultados da busca', 'status-chip--off'],
+  pending: ['Aguardando confirmação', 'status-chip--warn'],
+  installing: ['Instalando…', 'status-chip--warn'],
+  installed: ['Concluído', 'status-chip--ok'],
+  failed: ['Falhou', 'status-chip--danger'],
+  cancelled: ['Cancelado', 'status-chip--off'],
+};
+
+const SOURCE_LABELS: Record<InstallPackage['source'], string> = { winget: 'winget', msstore: 'Microsoft Store' };
+
+function packageMeta(pkg: InstallPackage) {
+  return [pkg.id, pkg.version ? `v${pkg.version}` : null, SOURCE_LABELS[pkg.source] ?? pkg.source]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+export function InstallBody({ data }: { data: InstallData }) {
+  const [label, tone] = INSTALL_STATUS[data.status];
+  if (data.status === 'results') {
+    const candidates = data.candidates ?? [];
+    return (
+      <>
+        <div className="card__sub" style={{ marginBottom: 10 }}>
+          Busca: “{data.query}” · nada instalado ainda
         </div>
+        {candidates.length === 0 ? (
+          <div className="card__sub">Nenhum pacote encontrado no winget nem na Microsoft Store.</div>
+        ) : (
+          <ol className="results">
+            {candidates.map((pkg) => (
+              <li key={`${pkg.source}:${pkg.id}`} className="result">
+                <a role="presentation">{pkg.name}</a>
+                <div className="result__meta">{packageMeta(pkg)}</div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </>
+    );
+  }
+
+  const pkg = data.package;
+  return (
+    <dl className="mail">
+      <span className={`status-chip ${tone}`}>{label}</span>
+      {pkg && (
+        <>
+          <div>
+            <dt>APLICATIVO</dt>
+            <dd>{pkg.name}</dd>
+          </div>
+          <div>
+            <dt>PACOTE</dt>
+            <dd className="mail__address">{packageMeta(pkg)}</dd>
+          </div>
+        </>
+      )}
+      {data.message && <div className="mail__preview">{data.message}</div>}
+      {data.status === 'pending' && data.code && (
+        <ConfirmCode action="Para instalar, diga “confirmar instalação” e o código" code={data.code} />
       )}
     </dl>
   );

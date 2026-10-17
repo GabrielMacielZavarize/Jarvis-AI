@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import requests
 
+import confirmation
+from confirmation import spoken_digits
 from settings import load_settings
-from tools import PENDING_EMAIL_KEY, build_email_tools, get_weather, search_web
+from tools import (
+    PENDING_EMAIL_KEY,
+    assemble_email_address,
+    build_email_tools,
+    get_weather,
+    search_web,
+    spell_email_address,
+)
 
 
 class FakeResponse:
@@ -171,18 +180,191 @@ class SearchToolTests(unittest.IsolatedAsyncioTestCase):
         )
 
 
+def email_tools(**env: str) -> dict:
+    settings = load_settings(
+        {
+            "GOOGLE_API_KEY": "test-key",
+            "JARVIS_ENABLE_EMAIL_TOOL": "true",
+            "GMAIL_USER": "jarvis@example.com",
+            "GMAIL_APP_PASSWORD": "secret",
+            **env,
+        }
+    )
+    return {tool.__name__: tool for tool in build_email_tools(settings)}
+
+
+class EmailAddressTests(unittest.TestCase):
+    def test_assembles_dictated_addresses(self) -> None:
+        cases = {
+            "gabriel m zavarise arroba gmail ponto com": "gabrielmzavarise@gmail.com",
+            "Gabriel M. Zavarise e @gmail.com": "gabrielmzavarisee@gmail.com",
+            "maria underline souza arroba hotmail": "maria_souza@hotmail.com",
+            "joão ponto silva arroba empresa ponto com ponto br": "joao.silva@empresa.com.br",
+            "ana hífen paula arroba uol": "ana-paula@uol.com.br",
+            "Joao.Silva@Empresa.com.": "joao.silva@empresa.com",
+            "jarvis @ example . com": "jarvis@example.com",
+        }
+        for spoken, address in cases.items():
+            with self.subTest(spoken=spoken):
+                self.assertEqual(assemble_email_address(spoken), address)
+
+    def test_returns_none_without_a_valid_address(self) -> None:
+        for spoken in ("gabriel zavarise", "arroba gmail ponto com", "gabriel arroba"):
+            with self.subTest(spoken=spoken):
+                self.assertIsNone(assemble_email_address(spoken))
+
+    def test_spells_address_for_voice(self) -> None:
+        self.assertEqual(
+            spell_email_address("joao.silva_2@gmail.com"),
+            "joao ponto silva underline 2 arroba gmail ponto com",
+        )
+
+
 class EmailToolTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        settings = load_settings(
-            {
-                "GOOGLE_API_KEY": "test-key",
-                "JARVIS_ENABLE_EMAIL_TOOL": "true",
-                "GMAIL_USER": "jarvis@example.com",
-                "GMAIL_APP_PASSWORD": "secret",
-            }
+        self.tools_by_name = email_tools()
+        for name, value in (("CONFIRMATION_WAIT_SECONDS", 0.05), ("CONFIRMATION_POLL_SECONDS", 0.01)):
+            patcher = patch.object(confirmation, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    async def _draft(self, context: FakeRunContext, to_email: str = "jarvis@example.com") -> str:
+        await self.tools_by_name["draft_email"](
+            context,
+            to_email=to_email,
+            subject="Lista de compras",
+            message="Frango, creme de leite, champignon.",
         )
-        tools = build_email_tools(settings)
-        self.tools_by_name = {tool.__name__: tool for tool in tools}
+        return context.userdata[PENDING_EMAIL_KEY]["code"]
+
+    async def _confirm_after_user_says(self, heard: str, code_arg: str | None = None) -> tuple[str, FakeRunContext, MagicMock]:
+        context = FakeRunContext()
+        code = await self._draft(context)
+        context.session.history = FakeHistory([FakeMessage(role="user", text_content=heard.format(code=code))])
+        smtp = MagicMock(wraps=FakeSMTP)
+        with patch("tools.smtplib.SMTP", smtp):
+            result = await self.tools_by_name["confirm_email_send"](context, code=code_arg or code)
+        return result, context, smtp
+
+    async def test_confirm_accepts_voice_transcript_with_grouped_digits(self) -> None:
+        context = FakeRunContext()
+        code = await self._draft(context)
+        heard = f"Confirmar {code[:3]} {code[3:]}."
+        context.session.history = FakeHistory([FakeMessage(role="user", text_content=heard)])
+
+        with patch("tools.smtplib.SMTP", FakeSMTP):
+            result = await self.tools_by_name["confirm_email_send"](context, code=f"{code[:3]} {code[3:]}")
+
+        self.assertIn("Email enviado com sucesso", result)
+        self.assertIsNone(context.userdata[PENDING_EMAIL_KEY])
+
+    async def test_confirm_accepts_code_spoken_as_words(self) -> None:
+        context = FakeRunContext()
+        code = await self._draft(context)
+        context.session.history = FakeHistory(
+            [FakeMessage(role="user", text_content=f"Jarvis, confirma {spoken_digits(code)}.")]
+        )
+
+        with patch("tools.smtplib.SMTP", FakeSMTP):
+            result = await self.tools_by_name["confirm_email_send"](context, code=code)
+
+        self.assertIn("Email enviado com sucesso", result)
+
+    async def test_vague_go_ahead_does_not_send(self) -> None:
+        result, context, smtp = await self._confirm_after_user_says("Pode ir já")
+
+        smtp.assert_not_called()
+        code = context.userdata[PENDING_EMAIL_KEY]["code"]
+        self.assertIn("Envio bloqueado", result)
+        self.assertIn(f"confirmar {code}", result)
+        self.assertIn(spoken_digits(code), result)
+
+    async def test_confirmation_must_be_the_users_latest_words(self) -> None:
+        context = FakeRunContext()
+        code = await self._draft(context)
+        context.session.history = FakeHistory(
+            [
+                FakeMessage(role="user", text_content=f"confirmar {code}"),
+                FakeMessage(role="assistant", text_content="Algo mais?"),
+                FakeMessage(role="user", text_content="na verdade espera"),
+            ]
+        )
+        smtp = MagicMock(wraps=FakeSMTP)
+
+        with patch("tools.smtplib.SMTP", smtp):
+            result = await self.tools_by_name["confirm_email_send"](context, code=code)
+
+        smtp.assert_not_called()
+        self.assertIn("Envio bloqueado", result)
+
+    async def test_negated_or_install_phrase_does_not_send(self) -> None:
+        for heard in ("não confirmar {code}", "confirmar instalação {code}", "confirmar {code} e apaga tudo"):
+            with self.subTest(heard=heard):
+                result, _, smtp = await self._confirm_after_user_says(heard)
+                smtp.assert_not_called()
+                self.assertIn("Envio bloqueado", result)
+
+    async def test_draft_tells_how_to_confirm(self) -> None:
+        context = FakeRunContext()
+        result = await self.tools_by_name["draft_email"](
+            context, to_email="jarvis@example.com", subject="Teste", message="Corpo"
+        )
+        code = context.userdata[PENDING_EMAIL_KEY]["code"]
+
+        self.assertIn("NÃO enviado", result)
+        self.assertIn(spoken_digits(code), result)
+        self.assertIn(f"confirmar {code}", result)
+        self.assertIn("painel", result)
+
+    async def test_draft_assembles_dictated_address(self) -> None:
+        context = FakeRunContext()
+        await self._draft(context, to_email="jarvis arroba example ponto com")
+
+        self.assertEqual(context.userdata[PENDING_EMAIL_KEY]["to_email"], "jarvis@example.com")
+
+    async def test_draft_suggests_closest_allowed_address(self) -> None:
+        tools = email_tools(JARVIS_ALLOWED_EMAILS="gabrielmzavarize@gmail.com")
+        context = FakeRunContext()
+
+        result = await tools["draft_email"](
+            context, to_email="Gabriel M. Zavarise e @gmail.com", subject="Compras", message="Lista"
+        )
+
+        self.assertIn("Envio bloqueado", result)
+        self.assertIn("gabrielmzavarisee@gmail.com", result)
+        self.assertIn("Você quis dizer gabrielmzavarize@gmail.com?", result)
+        self.assertIsNone(context.userdata[PENDING_EMAIL_KEY])
+
+    async def test_check_email_address_reads_back_allowed_address(self) -> None:
+        tools = email_tools(JARVIS_ALLOWED_EMAILS="gabrielmzavarize@gmail.com")
+
+        with patch("tools.show_card", new_callable=AsyncMock) as show_card:
+            result = await tools["check_email_address"](
+                FakeRunContext(), spoken_address="gabriel m zavarize arroba gmail ponto com"
+            )
+
+        self.assertIn("Endereço montado: gabrielmzavarize@gmail.com", result)
+        self.assertIn("gabrielmzavarize arroba gmail ponto com", result)
+        self.assertIn("lista de destinatários autorizados", result)
+        show_card.assert_awaited_once_with(
+            "email",
+            {"status": "address", "to": "gabrielmzavarize@gmail.com", "allowed": True, "suggestion": None},
+        )
+
+    async def test_check_email_address_suggests_allowed_lookalike(self) -> None:
+        tools = email_tools(JARVIS_ALLOWED_EMAILS="gabrielmzavarize@gmail.com")
+
+        result = await tools["check_email_address"](
+            FakeRunContext(), spoken_address="Gabriel M. Zavarise e @gmail.com"
+        )
+
+        self.assertIn("Endereço montado: gabrielmzavarisee@gmail.com", result)
+        self.assertIn("O autorizado mais parecido é gabrielmzavarize@gmail.com", result)
+
+    async def test_check_email_address_asks_to_spell_when_unclear(self) -> None:
+        result = await self.tools_by_name["check_email_address"](FakeRunContext(), spoken_address="gabriel do gmail")
+
+        self.assertIn("Não consegui montar", result)
 
     async def test_draft_email_rejects_non_allowlisted_recipient(self) -> None:
         result = await self.tools_by_name["draft_email"](

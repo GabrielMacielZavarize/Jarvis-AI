@@ -54,3 +54,28 @@ describe('runPanelCommand', () => {
     expect(useHud.getState().cards).toEqual([]);
   });
 });
+
+describe('install panel', () => {
+  beforeEach(() => {
+    useHud.setState({ cards: [], expandedId: null });
+  });
+
+  it('keeps a single install panel that follows search → confirmation → result', () => {
+    const vlc = { name: 'VLC media player', id: 'VideoLAN.VLC', version: '3.0.24', source: 'winget' as const };
+    useHud.getState().pushCard('install', { status: 'results', query: 'vlc', candidates: [vlc] });
+    useHud.getState().pushCard('install', { status: 'pending', package: vlc, code: '482913' });
+    useHud.getState().pushCard('install', { status: 'installed', package: vlc, message: 'instalado com sucesso' });
+
+    const cards = useHud.getState().cards;
+    expect(cards).toHaveLength(1);
+    expect(cards[0].kind).toBe('install');
+    expect(cards[0].data).toMatchObject({ status: 'installed' });
+  });
+
+  it('can be closed by voice like the other panels', () => {
+    useHud.getState().pushCard('install', { status: 'cancelled' });
+    const result = useHud.getState().runPanelCommand('close', ['install']);
+    expect(result.changed).toEqual(['install']);
+    expect(useHud.getState().cards).toEqual([]);
+  });
+});
