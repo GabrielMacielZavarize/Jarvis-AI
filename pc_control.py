@@ -23,7 +23,7 @@ import time
 import unicodedata
 import webbrowser
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Iterator, Literal
 from urllib.parse import quote, quote_plus, urlparse
 
 import psutil
@@ -504,33 +504,99 @@ def _active_title() -> str:
     return _clean_title(win_desktop.foreground_title())
 
 
+# Último conteúdo que o Jarvis abriu ("where": browser ou app), para fechar a aba certa depois.
+_LAST_MEDIA: dict[str, str] | None = None
+
+# "Fecha a aba de reprodução / o vídeo / a live que você abriu" aponta para a última mídia aberta.
+MEDIA_TAB_WORDS = re.compile(
+    r"\b(?:reproducao|video|videos|midia|musica|player|live|transmissao|tocando|abriu|aberta|aberto|ultima|ultimo)\b"
+)
+TAB_FILLER = re.compile(r"\b(?:a|o|aba|guia|do|da|de|no|na)\b")
+
+
+def remember_media(service: str, title: str, url: str = "", where: str = "browser") -> None:
+    global _LAST_MEDIA
+    _LAST_MEDIA = {"service": service, "title": title, "url": url, "host": host_of(url), "where": where}
+
+
+def media_tab_targets(name: str) -> list[str]:
+    """Texts to look for in tab titles, most specific first.
+
+    A generic name ("aba de reprodução") or the service of the last media Jarvis opened
+    ("YouTube") tries that media's exact title first, so the right one of several tabs closes.
+    """
+    text = normalize(name)
+    media = _LAST_MEDIA
+    if not media or media["where"] != "browser":
+        return [text]
+    title = normalize(media["title"])
+    service = normalize(media["service"])
+    core = re.sub(r"\s+", " ", TAB_FILLER.sub(" ", text)).strip()  # "aba do YouTube" -> "youtube"
+    if MEDIA_TAB_WORDS.search(text):
+        targets = [title, service]
+    elif core in {service, normalize(media["host"])}:
+        targets = [title, core]
+    else:
+        targets = [text]
+    return [target for target in dict.fromkeys(targets) if target]
+
+
+def _media_hint() -> str:
+    media = _LAST_MEDIA
+    if not media:
+        return ""
+    if media["where"] == "app":
+        return (
+            f" O que abri por último foi o app do {media['service']}, não uma aba: para fechá-lo use "
+            f"close_app('{media['service']}')."
+        )
+    return f" A última mídia que abri foi '{media['title']}' ({media['service']})."
+
+
+def _forget_media_tab(tab_title: str) -> None:
+    global _LAST_MEDIA
+    media = _LAST_MEDIA
+    if media and media["where"] == "browser" and normalize(media["title"]) in normalize(tab_title):
+        _LAST_MEDIA = None
+
+
+def _find_tab(windows: list[win_desktop.Window], target: str, action: str) -> str | None:
+    import pyautogui
+
+    for window in windows:
+        if not win_desktop.bring_to_front(window.hwnd):
+            continue
+        first = _active_title()
+        title = first
+        for _ in range(40):
+            if target in normalize(title) and HUD_TITLE not in title:
+                if action == "close":
+                    pyautogui.hotkey("ctrl", "w")
+                    _forget_media_tab(title)
+                    return f"Fechei a aba '{title}'."
+                return f"Aba '{title}' em primeiro plano."
+            pyautogui.hotkey("ctrl", "tab")
+            time.sleep(0.25)
+            title = _active_title()
+            if title == first:
+                break
+    return None
+
+
 def browser_tab_action(action: str, name: str | None = None) -> str:
     _require_windows("Controlar abas")
     import pyautogui
 
     windows = _browser_windows()
     if not windows:
-        raise PCControlError("Não encontrei nenhuma janela de navegador aberta.")
+        raise PCControlError("Não encontrei nenhuma janela de navegador aberta." + _media_hint())
 
     if action in {"close", "switch"} and name:
-        target = normalize(name)
-        for window in windows:
-            if not win_desktop.bring_to_front(window.hwnd):
-                continue
-            first = _active_title()
-            title = first
-            for _ in range(40):
-                if target in normalize(title) and HUD_TITLE not in title:
-                    if action == "close":
-                        pyautogui.hotkey("ctrl", "w")
-                        return f"Fechei a aba '{title}'."
-                    return f"Aba '{title}' em primeiro plano."
-                pyautogui.hotkey("ctrl", "tab")
-                time.sleep(0.25)
-                title = _active_title()
-                if title == first:
-                    break
-        raise PCControlError(f"Não encontrei nenhuma aba com '{name}' no título.")
+        for target in media_tab_targets(name):
+            result = _find_tab(windows, target, action)
+            if result:
+                return result
+        raise PCControlError(f"Não encontrei nenhuma aba com '{name}' no título." + _media_hint())
 
     window = windows[0]
     if not win_desktop.bring_to_front(window.hwnd):
@@ -539,8 +605,9 @@ def browser_tab_action(action: str, name: str | None = None) -> str:
     if action == "close":
         title = _active_title()
         if HUD_TITLE in title:
-            raise PCControlError("A aba ativa é o próprio HUD. Diga o nome da aba que devo fechar.")
+            raise PCControlError("A aba ativa é o próprio HUD. Diga o nome da aba que devo fechar." + _media_hint())
         pyautogui.hotkey("ctrl", "w")
+        _forget_media_tab(title)
         return f"Fechei a aba '{title}'."
 
     hotkeys = {
@@ -713,38 +780,446 @@ def open_path(path: Path) -> None:
         subprocess.run(["xdg-open", str(path)], check=False)
 
 
-def find_youtube_video(query: str) -> dict[str, str] | None:
+# ───────────────────────── media lookup ─────────────────────────
+
+YOUTUBE_LIVE_FILTER = "EgJAAQ=="  # filtro "Ao vivo" da busca do YouTube (parâmetro sp)
+# Pedido claro de live ("a live do Gaules", "ao vivo"); "Live and Let Die" continua sendo música.
+LIVE_REQUEST = re.compile(
+    r"\b(?:ao vivo|aovivo|transmissao ao vivo|(?:a|na|uma|essa|em) live|lives? (?:do|da|de|dos|das))\b"
+)
+LIVE_WORDS = re.compile(r"\b(?:ao vivo|aovivo|live|lives|livestream|transmissao|transmissoes|stream|streaming)\b")
+SUBJECT_FILLER = re.compile(r"\b(?:a|o|as|os|do|da|dos|das|de|no|na|nos|nas|em|agora|hoje|canal|youtube|twitch)\b")
+TWITCH_LOGIN = re.compile(r"[a-z0-9_]{3,25}")
+SPOTIFY_LINK = re.compile(
+    r"open\.spotify\.com/(?:intl-[a-z]{2}(?:-[a-z]{2})?/)?(track|album|playlist|artist)/([A-Za-z0-9]{22})",
+    re.IGNORECASE,
+)
+SPOTIFY_TITLE_SUFFIX = re.compile(r"\s*[|\-–]\s*Spotify(?:\s+Playlist)?\s*$", re.IGNORECASE)
+SPOTIFY_TITLE_BY = re.compile(
+    r"^(?P<name>.+?) - (?:song(?: and lyrics)?|m[uú]sica(?: e letra)?|album|[aá]lbum|single|ep|compilation"
+    r"|compila[cç][aã]o|playlist) (?:by|de|por) (?P<artist>.+)$",
+    re.IGNORECASE,
+)
+# Ordem de preferência: faixas e álbuns costumam começar a tocar quando o app abre o link.
+SPOTIFY_KINDS = ("track", "album", "playlist", "artist")
+SPOTIFY_KIND_LABELS = {"track": "a faixa", "album": "o álbum", "playlist": "a playlist", "artist": "a página do artista"}
+SPOTIFY_IDLE_TITLES = {"spotify", "spotify free", "spotify premium"}
+SPOTIFY_POLL_SECONDS = 0.4
+SPOTIFY_START_SECONDS = 8.0
+SPOTIFY_COLD_START_SECONDS = 15.0  # o app ainda vai abrir
+SPOTIFY_PLAY_SECONDS = 4.0
+
+
+def _compact(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", normalize(text))
+
+
+def mentions(subject: str, text: str) -> bool:
+    """True when every word of `subject` appears in `text`, ignoring accents, case and punctuation."""
+    words = [_compact(word) for word in normalize(subject).split()]
+    words = [word for word in words if word]
+    haystack = _compact(text)
+    return bool(words) and all(word in haystack for word in words)
+
+
+def wants_live(text: str) -> bool:
+    return bool(LIVE_REQUEST.search(normalize(text)))
+
+
+def live_subject(text: str) -> str:
+    """'live do Gaules' -> 'gaules': who or what the user wants to watch live."""
+    cleaned = SUBJECT_FILLER.sub(" ", LIVE_WORDS.sub(" ", normalize(text)))
+    return re.sub(r"\s+", " ", cleaned).strip() or normalize(text)
+
+
+def _dicts(node: Any) -> Iterator[dict[str, Any]]:
+    """Every dict inside a JSON tree, depth first (document order)."""
+    if isinstance(node, dict):
+        yield node
+        for value in node.values():
+            yield from _dicts(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _dicts(value)
+
+
+def _yt_text(node: Any) -> str:
+    if not isinstance(node, dict):
+        return ""
+    if "simpleText" in node:
+        return str(node["simpleText"])
+    return "".join(str(run.get("text", "")) for run in node.get("runs", []) if isinstance(run, dict))
+
+
+def _youtube_status(renderer: dict[str, Any]) -> str:
+    badges = {
+        str(badge.get("metadataBadgeRenderer", {}).get("style", ""))
+        for badge in renderer.get("badges", [])
+        if isinstance(badge, dict)
+    }
+    overlays = {
+        str(overlay.get("thumbnailOverlayTimeStatusRenderer", {}).get("style", ""))
+        for overlay in renderer.get("thumbnailOverlays", [])
+        if isinstance(overlay, dict)
+    }
+    if "BADGE_STYLE_TYPE_LIVE_NOW" in badges or "LIVE" in overlays:
+        return "live"
+    if "upcomingEventData" in renderer or "UPCOMING" in overlays:
+        return "upcoming"
+    return "video"
+
+
+def parse_youtube_results(html: str) -> list[dict[str, str]]:
+    """Videos of a YouTube search page, in order, with title, channel and live status."""
+    data = None
+    start = re.search(r'ytInitialData"?\]?\s*=\s*(?=\{)', html)
+    if start:
+        try:
+            data, _ = json.JSONDecoder().raw_decode(html, start.end())
+        except ValueError:
+            data = None
+
+    results: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for node in _dicts(data):
+        renderer = node.get("videoRenderer")
+        if not isinstance(renderer, dict):
+            continue
+        video_id = renderer.get("videoId")
+        if not isinstance(video_id, str) or not re.fullmatch(r"[\w-]{11}", video_id) or video_id in seen:
+            continue
+        seen.add(video_id)
+        results.append(
+            {
+                "id": video_id,
+                "title": _yt_text(renderer.get("title")),
+                "channel": _yt_text(renderer.get("ownerText")) or _yt_text(renderer.get("longBylineText")),
+                "status": _youtube_status(renderer),
+                "viewers": _yt_text(renderer.get("viewCountText")),
+            }
+        )
+    if not results:
+        # Formato desconhecido: fica só com o primeiro vídeo, sem saber se é ao vivo.
+        match = re.search(r'"videoId":"([\w-]{11})"', html)
+        if match:
+            results.append({"id": match.group(1), "title": "", "channel": "", "status": "unknown", "viewers": ""})
+    return results
+
+
+def youtube_search(query: str, live: bool = False) -> list[dict[str, str]]:
+    params = {"search_query": query, "hl": "pt-BR", "gl": "BR"}
+    if live:
+        params["sp"] = YOUTUBE_LIVE_FILTER
     response = requests.get(
         "https://www.youtube.com/results",
-        params={"search_query": query, "hl": "pt-BR", "gl": "BR"},
+        params=params,
         headers={"User-Agent": USER_AGENT, "Accept-Language": "pt-BR,pt;q=0.9"},
         timeout=12,
     )
     response.raise_for_status()
-    match = re.search(r'"videoId":"([\w-]{11})"', response.text)
-    if not match:
+    return parse_youtube_results(response.text)
+
+
+def find_youtube_video(query: str, live: bool = False) -> dict[str, str] | None:
+    """Best video for `query`. With `live`, only a stream that is live right now (or None)."""
+    if live:
+        subject = live_subject(query)
+        lives = [result for result in youtube_search(subject, live=True) if result["status"] == "live"]
+        pick = next((r for r in lives if mentions(subject, r["channel"])), None) or next(
+            (r for r in lives if mentions(subject, r["title"])), None
+        )
+    else:
+        results = youtube_search(query)
+        pick = results[0] if results else None
+    if pick is None:
         return None
-    video_id = match.group(1)
-    url = f"https://www.youtube.com/watch?v={video_id}"
+
+    url = f"https://www.youtube.com/watch?v={pick['id']}"
     video = {
         "url": url,
-        "title": query,
-        "channel": "",
-        "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+        "title": pick["title"] or query,
+        "channel": pick["channel"],
+        "thumbnail": f"https://i.ytimg.com/vi/{pick['id']}/hqdefault.jpg",
+        "status": pick["status"],
+        "viewers": pick["viewers"],
     }
-    try:
-        meta = requests.get(
-            "https://www.youtube.com/oembed",
-            params={"url": url, "format": "json"},
-            timeout=8,
-        )
-        if meta.ok:
-            data = meta.json()
-            video["title"] = data.get("title") or query
-            video["channel"] = data.get("author_name") or ""
-    except (requests.RequestException, ValueError):
-        pass
+    if not pick["title"] or not pick["channel"]:
+        try:
+            meta = requests.get(
+                "https://www.youtube.com/oembed",
+                params={"url": url, "format": "json"},
+                timeout=8,
+            )
+            if meta.ok:
+                data = meta.json()
+                video["title"] = pick["title"] or data.get("title") or query
+                video["channel"] = pick["channel"] or data.get("author_name") or ""
+        except (requests.RequestException, ValueError):
+            pass
     return video
+
+
+def describe_youtube(video: dict[str, str]) -> str:
+    channel = f" do canal {video['channel']}" if video["channel"] else ""
+    if video["status"] == "live":
+        viewers = f", {video['viewers']}" if video["viewers"] else ""
+        state = f" (ao vivo agora{viewers})"
+    elif video["status"] == "upcoming":
+        state = " (transmissão agendada: ainda não começou)"
+    elif video["status"] == "video":
+        state = " (vídeo gravado, não é ao vivo)"
+    else:
+        state = " (não consegui confirmar se é ao vivo)"
+    return (
+        f"Abri no YouTube: '{video['title']}'{channel}{state}. Diga que abriu: o navegador começa o vídeo, "
+        "mas não confirmo o áudio. Para fechar depois, use browser_tab(action='close', "
+        f"name={json.dumps(video['title'], ensure_ascii=False)})."
+    )
+
+
+def parse_twitch_channel(html: str, login: str) -> dict[str, Any] | None:
+    """Channel name and live state from the public page's schema.org data (None: no such channel)."""
+    name = ""
+    live = False
+    title = ""
+    for block in re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL):
+        try:
+            data = json.loads(block)
+        except ValueError:
+            continue
+        for node in _dicts(data):
+            if node.get("@type") == "ProfilePage" and isinstance(node.get("mainEntity"), dict):
+                name = name or str(node["mainEntity"].get("name") or "")
+            publication = node.get("publication")
+            if isinstance(publication, dict) and publication.get("isLiveBroadcast") is True:
+                # O título da transmissão vem em "description"; "name" é só "Canal - Twitch".
+                live = True
+                title = title or str(node.get("description") or node.get("name") or "")
+    if not name:
+        return None
+    rerun = live and normalize(title).startswith(("rerun", "reprise"))
+    return {"login": login, "name": name, "live": live, "rerun": rerun, "title": title, "url": f"https://www.twitch.tv/{login}"}
+
+
+def twitch_login(text: str) -> str | None:
+    candidate = re.sub(r"[^a-z0-9_]", "", live_subject(text).replace(" ", ""))
+    return candidate if TWITCH_LOGIN.fullmatch(candidate) else None
+
+
+def lookup_twitch_channel(text: str) -> dict[str, Any] | None:
+    login = twitch_login(text)
+    if not login:
+        return None
+    try:
+        response = requests.get(f"https://www.twitch.tv/{login}", headers={"User-Agent": USER_AGENT}, timeout=10)
+    except requests.RequestException:
+        return None
+    return parse_twitch_channel(response.text, login) if response.ok else None
+
+
+def twitch_summary(channel: dict[str, Any]) -> str:
+    if channel["live"] and channel["rerun"]:
+        return f"{channel['name']} está passando uma reprise na Twitch ('{channel['title']}'), não uma live ao vivo"
+    if channel["live"]:
+        return f"{channel['name']} está ao vivo na Twitch agora: '{channel['title']}'"
+    return f"{channel['name']} está offline na Twitch agora"
+
+
+def open_twitch(query: str) -> dict[str, Any]:
+    channel = lookup_twitch_channel(query)
+    if channel:
+        url = channel["url"]
+    else:
+        url = STREAMING_SERVICES["twitch"][2].format(q=quote_plus(query), path=quote(query))  # type: ignore[union-attr]
+    webbrowser.open(url, 2)
+    return {"channel": channel, "url": url}
+
+
+def describe_twitch(result: dict[str, Any], query: str) -> str:
+    channel = result["channel"]
+    if channel is None:
+        return (
+            f"Abri a busca da Twitch por '{query}'. Não confirmei nenhum canal ao vivo: o usuário escolhe o "
+            "resultado. Não diga que está tocando."
+        )
+    return f"Abri o canal {channel['name']} na Twitch. {twitch_summary(channel)}."
+
+
+def parse_spotify_result(href: str, title: str) -> dict[str, str] | None:
+    """A Spotify link from a web search result, with the name and artist read from its title."""
+    match = SPOTIFY_LINK.search(href or "")
+    if not match:
+        return None
+    kind, item_id = match.group(1).lower(), match.group(2)
+    text = SPOTIFY_TITLE_SUFFIX.sub("", (title or "").strip())
+    name, artist = text, ""
+    by = SPOTIFY_TITLE_BY.match(text)
+    if by:
+        name, artist = by["name"], by["artist"]
+    return {
+        "kind": kind,
+        "id": item_id,
+        "name": name.strip(),
+        "artist": artist.strip(),
+        "uri": f"spotify:{kind}:{item_id}",
+        "url": f"https://open.spotify.com/{kind}/{item_id}",
+    }
+
+
+def find_spotify_items(query: str) -> list[dict[str, str]]:
+    """Spotify links for `query` found by a web search (no Spotify account or API key needed)."""
+    from ddgs import DDGS
+
+    items: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for result in DDGS().text(f"{query} site:open.spotify.com", max_results=10, region="br-pt") or []:
+        item = parse_spotify_result(str(result.get("href", "")), str(result.get("title", "")))
+        if item and item["uri"] not in seen:
+            seen.add(item["uri"])
+            items.append(item)
+    return items
+
+
+def pick_spotify_item(query: str, items: list[dict[str, str]]) -> dict[str, str] | None:
+    relevant = [item for item in items if mentions(query, f"{item['name']} {item['artist']}")]
+    for kind in SPOTIFY_KINDS:
+        for item in relevant:
+            if item["kind"] == kind:
+                return item
+    return None
+
+
+def spotify_app_installed() -> bool:
+    if not IS_WINDOWS:
+        return False
+    if find_processes("spotify"):
+        return True
+    return any(normalize(app["name"]) == "spotify" for app in list_start_apps())
+
+
+def _spotify_window() -> win_desktop.Window | None:
+    for window in win_desktop.process_windows("spotify.exe"):
+        title = _clean_title(window.title)
+        if " - " in title or normalize(title) in SPOTIFY_IDLE_TITLES:
+            return window
+    return None
+
+
+def spotify_now_playing() -> str | None:
+    """'Artista - Música' while the desktop app plays, '' when paused or idle, None when unreadable.
+
+    The Spotify app shows the current track in its window title and only its name when paused.
+    """
+    window = _spotify_window()
+    if window is None:
+        return None
+    title = _clean_title(window.title)
+    return "" if normalize(title) in SPOTIFY_IDLE_TITLES else title
+
+
+def _spotify_confirms(now: str | None, item: dict[str, str], query: str, before: str | None) -> bool:
+    if not now:
+        return False
+    names = [query, item["artist"]]
+    if item["kind"] == "track":
+        names.append(re.split(r" - | \(", item["name"])[0])
+    if item["kind"] == "artist":
+        names.append(item["name"])
+    if any(name.strip() and mentions(name, now) for name in names):
+        return True
+    # Uma playlist pode ter qualquer artista: vale ter trocado de música depois de abrir o link.
+    return item["kind"] == "playlist" and now != before
+
+
+def _wait_for_spotify(
+    item: dict[str, str], query: str, before: str | None, seconds: float, stop_on_any: bool = False
+) -> str | None:
+    now = spotify_now_playing()
+    for _ in range(max(1, int(seconds / SPOTIFY_POLL_SECONDS))):
+        if _spotify_confirms(now, item, query, before) or (stop_on_any and now):
+            break
+        time.sleep(SPOTIFY_POLL_SECONDS)
+        now = spotify_now_playing()
+    return now
+
+
+def play_spotify(query: str) -> dict[str, Any]:
+    """Try to really play `query` in the Spotify desktop app and check its window title afterwards.
+
+    States: playing (confirmed), opened (opened but not confirmed), unverified (app title
+    unreadable), search (only the search page), web (Spotify Web in the browser, no autoplay).
+    """
+    try:
+        items = find_spotify_items(query)
+    except Exception:
+        logger.warning("A busca de links do Spotify falhou.", exc_info=True)
+        items = []
+    item = pick_spotify_item(query, items)
+    url = item["url"] if item else f"https://open.spotify.com/search/{quote(query)}"
+    result: dict[str, Any] = {"state": "web", "item": item, "url": url, "now": None}
+
+    if not spotify_app_installed():
+        webbrowser.open(url, 2)
+        return result
+    before = spotify_now_playing()
+    try:
+        os.startfile(item["uri"] if item else f"spotify:search:{quote(query)}")  # type: ignore[attr-defined]  # noqa: S606
+    except OSError:
+        logger.warning("O app do Spotify não abriu o link; usando o Spotify Web.", exc_info=True)
+        webbrowser.open(url, 2)
+        return result
+    if item is None:
+        return {**result, "state": "search"}
+
+    wait = SPOTIFY_COLD_START_SECONDS if before is None else SPOTIFY_START_SECONDS
+    now = _wait_for_spotify(item, query, before, wait)
+    if _spotify_confirms(now, item, query, before):
+        return {**result, "state": "playing", "now": now}
+
+    window = _spotify_window() if now == "" and item["kind"] in {"track", "album"} else None
+    if window is not None:
+        # Abriu pausado: dá play só na janela do Spotify (a tecla de mídia global poderia ir para outra aba).
+        win_desktop.send_app_command(window.hwnd, win_desktop.APPCOMMAND_MEDIA_PLAY_PAUSE)
+        now = _wait_for_spotify(item, query, "", SPOTIFY_PLAY_SECONDS, stop_on_any=True)
+        if _spotify_confirms(now, item, query, ""):
+            return {**result, "state": "playing", "now": now}
+        if now:
+            # Retomou a fila antiga em vez do pedido: pausa de novo para não deixar a música errada tocando.
+            win_desktop.send_app_command(window.hwnd, win_desktop.APPCOMMAND_MEDIA_PLAY_PAUSE)
+            now = ""
+    return {**result, "state": "opened" if now is not None else "unverified", "now": now}
+
+
+def describe_spotify(result: dict[str, Any], query: str) -> str:
+    item = result["item"]
+    if item:
+        artist = f" de {item['artist']}" if item["artist"] and item["kind"] in {"track", "album"} else ""
+        what = f"{SPOTIFY_KIND_LABELS[item['kind']]} '{item['name']}'{artist}"
+    else:
+        what = f"'{query}'"
+    state = result["state"]
+    if state == "playing":
+        return f"Tocando agora no app do Spotify: '{result['now']}' (confirmado pelo título da janela do Spotify)."
+    if state == "opened":
+        still = f": ele continua tocando '{result['now']}'" if result["now"] else ""
+        return (
+            f"Abri {what} no app do Spotify, mas não consegui confirmar que começou a tocar{still}. "
+            "Diga isso ao usuário (ele pode apertar play no Spotify). Não diga que está tocando."
+        )
+    if state == "unverified":
+        return (
+            f"Pedi ao app do Spotify para abrir {what}, mas não consegui ler o que ele está tocando. "
+            "Não afirme que está tocando."
+        )
+    if state == "search":
+        return (
+            f"Não achei um link exato; abri só a busca por '{query}' no app do Spotify. Nada começou a tocar: "
+            "o usuário precisa escolher um resultado."
+        )
+    return (
+        f"Abri {what} no Spotify Web, no navegador (o app do Spotify não está disponível). O navegador não "
+        "começa a tocar sozinho: o usuário precisa apertar play. Não diga que está tocando."
+    )
 
 
 def streaming_url(service: str, query: str | None) -> tuple[str, str, bool]:
@@ -884,47 +1359,134 @@ async def look_at_screen(context: RunContext, monitor: int | None = None, window
 
 
 @function_tool()
-async def play_youtube(context: RunContext, query: str) -> str:
-    """Search YouTube and open the best matching video in the browser.
+async def play_youtube(context: RunContext, query: str, live: bool = False) -> str:
+    """Search YouTube and open the best matching video or live stream in the browser.
+
+    The result gives the real title and channel and says whether it is live right now.
+    Opening a page is not confirmed playback: repeat what the result says.
 
     Args:
-        query: What to play, e.g. "lo-fi para estudar" or "trailer Homem de Ferro".
+        query: What or who to watch, e.g. "lo-fi para estudar", "trailer Homem de Ferro" or "Gaules".
+        live: True when the user asks for a live stream ("a live do…", "ao vivo"). Then only a
+            stream that is live right now is opened; if there is none, nothing is opened and the
+            result says what to offer instead (e.g. the Twitch channel).
     """
+    live = live or wants_live(query)
     await net_activity(["youtube.com"], "request")
     try:
-        video = await _run("play_youtube", query, find_youtube_video, query)
+        video = await _run("play_youtube", query, find_youtube_video, query, live)
     except PCControlError as exc:
         return str(exc)
+
+    if video is None and live:
+        subject = live_subject(query)
+        await net_activity(["twitch.tv"], "request")
+        channel = await asyncio.to_thread(lookup_twitch_channel, subject)
+        message = f"Não encontrei uma live de '{subject}' acontecendo agora no YouTube, então não abri nada."
+        if channel:
+            message += f" Conferi a Twitch: {twitch_summary(channel)}."
+            if channel["live"] and not channel["rerun"]:
+                message += f" Ofereça abrir com open_streaming('Twitch', '{channel['login']}')."
+        else:
+            message += f" Ofereça procurar na Twitch com open_streaming('Twitch', {json.dumps(subject, ensure_ascii=False)})."
+        return message + " Não diga que está tocando."
+
     if video is None:
         url = STREAMING_SERVICES["youtube"][2].format(q=quote_plus(query), path=quote(query))  # type: ignore[union-attr]
         await asyncio.to_thread(webbrowser.open, url, 2)
-        return f"Não achei um vídeo exato; abri a busca do YouTube por '{query}'."
+        remember_media("YouTube", "YouTube", url)
+        return f"Não achei um vídeo exato; abri só a busca do YouTube por '{query}'. Nada está tocando ainda."
 
     await asyncio.to_thread(webbrowser.open, video["url"], 2)
-    await show_card("media", {"service": "YouTube", **video})
-    logger.info("YouTube aberto: %s", video["url"])
-    channel = f" do canal {video['channel']}" if video["channel"] else ""
-    return f"Abri no YouTube: '{video['title']}'{channel}."
+    remember_media("YouTube", video["title"], video["url"])
+    channel_label = video["channel"] + (" · AO VIVO" if video["status"] == "live" else "")
+    await show_card(
+        "media",
+        {
+            "service": "YouTube",
+            "title": video["title"],
+            "url": video["url"],
+            "channel": channel_label,
+            "thumbnail": video["thumbnail"],
+        },
+    )
+    logger.info("YouTube aberto (%s): %s", video["status"], video["url"])
+    return describe_youtube(video)
+
+
+async def _open_spotify(query: str) -> str:
+    await net_activity(["duckduckgo.com", "open.spotify.com"], "request")
+    try:
+        result = await _run("open_streaming", f"Spotify: {query}", play_spotify, query)
+    except PCControlError as exc:
+        return str(exc)
+    item = result["item"]
+    in_browser = result["state"] == "web"
+    remember_media("Spotify", "Spotify", result["url"], where="browser" if in_browser else "app")
+    status = {
+        "playing": "Tocando no app do Spotify",
+        "opened": "Aberto no app, sem reprodução confirmada",
+        "unverified": "Aberto no app, sem reprodução confirmada",
+        "search": "Só a busca foi aberta",
+        "web": "Spotify Web: aperte play",
+    }[result["state"]]
+    title = result["now"] if result["state"] == "playing" else (item["name"] if item else query)
+    await show_card("media", {"service": "Spotify", "title": title, "url": result["url"], "channel": status, "thumbnail": ""})
+    logger.info("Spotify (%s): %s", result["state"], item["uri"] if item else query)
+    return describe_spotify(result, query)
+
+
+async def _open_twitch(query: str) -> str:
+    await net_activity(["twitch.tv"], "request")
+    try:
+        result = await _run("open_streaming", f"Twitch: {query}", open_twitch, query)
+    except PCControlError as exc:
+        return str(exc)
+    channel = result["channel"]
+    remember_media("Twitch", channel["name"] if channel else "Twitch", result["url"])
+    if channel:
+        status = "AO VIVO" if channel["live"] and not channel["rerun"] else ("Reprise" if channel["live"] else "Offline")
+        card = {"title": channel["title"] or channel["name"], "channel": f"{channel['name']} · {status}"}
+    else:
+        card = {"title": query, "channel": "Busca da Twitch"}
+    await show_card("media", {"service": "Twitch", "url": result["url"], "thumbnail": "", **card})
+    return describe_twitch(result, query)
 
 
 @function_tool()
 async def open_streaming(context: RunContext, service: str, query: str | None = None) -> str:
-    """Open a streaming/music service, optionally searching for a title.
+    """Open a streaming/music service, optionally with something to find or play.
+
+    - Spotify + query: tries to really play it in the Spotify desktop app and says whether
+      playback was confirmed (otherwise it says it only opened the item or the search).
+    - Twitch + query (a channel name): opens that channel and says if it is live, a rerun or offline.
+    - Other services only open their search page: nothing starts playing by itself.
 
     Args:
         service: Netflix, Prime Video, Spotify, Twitch, Globoplay, Disney+, Max, Crunchyroll, Deezer or YouTube.
-        query: Optional title, artist or show to search for.
+        query: Optional title, artist, song, show or channel.
     """
     try:
         label, url, searched = streaming_url(service, query)
+    except PCControlError as exc:
+        return str(exc)
+    if label == "Spotify" and query:
+        return await _open_spotify(query)
+    if label == "Twitch" and query:
+        return await _open_twitch(query)
+
+    try:
         await net_activity([host_of(url)], "request")
         await _run("open_streaming", label, webbrowser.open, url, 2)
     except PCControlError as exc:
         return str(exc)
+    remember_media(label, label, url)
     await show_card("media", {"service": label, "title": query or label, "url": url, "channel": "", "thumbnail": ""})
     if query and not searched:
-        return f"Abri o {label}; a busca direta não é suportada nele, então procure '{query}' por lá."
-    return f"Abri o {label}" + (f" buscando '{query}'." if query else ".")
+        return f"Abri o {label}; a busca direta não é suportada nele, então procure '{query}' por lá. Nada está tocando."
+    if query:
+        return f"Abri a busca do {label} por '{query}'. Só mostra os resultados: nada está tocando até o usuário escolher."
+    return f"Abri o {label}."
 
 
 @function_tool()
@@ -969,6 +1531,10 @@ async def browser_tab(
 ) -> str:
     """Control tabs of the open web browser.
 
+    To close a video, live or music Jarvis opened ("fecha a aba de reprodução", "fecha o vídeo"),
+    use action="close" with the title the media tool reported, or just name="reprodução":
+    the last opened media is found by its exact title. Closing is never pausing.
+
     Args:
         action: new (open a new tab), close, next, previous, reopen (last closed tab) or switch.
         name: Text from the tab title for close/switch, e.g. "YouTube" or "Tudo Gostoso".
@@ -987,14 +1553,20 @@ async def media_control(
     context: RunContext,
     action: Literal["play_pause", "next", "previous", "stop"],
 ) -> str:
-    """Control whatever media is playing (YouTube, Spotify, Netflix…) with the media keys.
+    """Pause/resume or skip whatever media is playing (YouTube, Spotify, Netflix…) with the media keys.
+
+    This never closes anything. To close a video, live or music Jarvis opened, use
+    browser_tab(action="close", name=<its title>); for an app (e.g. Spotify) use close_app.
 
     Args:
-        action: play_pause, next, previous or stop.
+        action: play_pause (toggles), next, previous or stop.
     """
     try:
         await _run("media_control", action, press_media_key, action)
-        return "Comando de mídia enviado."
+        return (
+            f"Tecla de mídia '{action}' enviada. Ela só pausa, retoma ou pula: não fecha nada, e não sei "
+            "se a mídia ficou tocando ou pausada."
+        )
     except PCControlError as exc:
         return str(exc)
 

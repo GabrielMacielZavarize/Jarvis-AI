@@ -275,3 +275,38 @@ def grab_monitor(monitor: Monitor | None) -> Any:
     if monitor is None:
         return ImageGrab.grab(all_screens=True)
     return ImageGrab.grab(bbox=(monitor.left, monitor.top, monitor.right, monitor.bottom), all_screens=True)
+
+
+WM_APPCOMMAND = 0x0319
+APPCOMMAND_MEDIA_PLAY_PAUSE = 14
+
+
+def process_windows(process: str) -> list[Window]:
+    """Top-level windows of one executable, hidden ones included (apps minimized to the tray)."""
+    if not IS_WINDOWS:
+        return []
+    wanted = process.lower()
+    pids = {proc.pid for proc in psutil.process_iter(["name"]) if (proc.info.get("name") or "").lower() == wanted}
+    if not pids:
+        return []
+    user32 = ctypes.windll.user32
+    found: list[Window] = []
+
+    def collect(hwnd: Any, _param: Any) -> bool:
+        pid = ctypes.c_ulong()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        length = user32.GetWindowTextLengthW(hwnd)
+        if pid.value not in pids or length == 0:
+            return True
+        title = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, title, length + 1)
+        found.append(Window(hwnd=int(hwnd), title=title.value, process=wanted, pid=pid.value))
+        return True
+
+    user32.EnumWindows(_WINDOW_ENUM_PROC(collect), 0)
+    return found
+
+
+def send_app_command(hwnd: int, command: int) -> None:
+    """Send a media command (WM_APPCOMMAND) to one window only, without focusing it."""
+    ctypes.windll.user32.PostMessageW(hwnd, WM_APPCOMMAND, hwnd, command << 16)
