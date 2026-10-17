@@ -6,6 +6,11 @@ só existem ações visíveis e reversíveis — abrir/fechar apps e sites, míd
 abas do navegador, pastas, captura de tela e bloqueio de tela. Desinstaladores são
 ignorados, processos do sistema e o próprio Jarvis são protegidos, e nenhum arquivo
 ou credencial é lido. Cada ação fica registrada no log e no HUD.
+
+O único programa lançado com argumentos é o navegador padrão (um executável de navegador
+conhecido), com --new-window e uma URL http(s) já validada. Depois de abrir, fechar ou mover
+algo, o resultado relata o que o Windows mostra de fato (janela visível, processo encerrado,
+tela onde a janela ficou), nunca só o que foi pedido.
 """
 
 from __future__ import annotations
@@ -22,6 +27,8 @@ import sys
 import time
 import unicodedata
 import webbrowser
+from collections.abc import Iterator
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote, quote_plus, urlparse
@@ -123,6 +130,24 @@ PROCESS_ALIASES = {
 }
 
 BROWSER_PROCESSES = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe"}
+DEFAULT_BROWSER_KEYS = (
+    r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoiceLatest\ProgId",
+    r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice",
+)
+EDGE_APP_PATH = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe"
+
+# Esperas depois de abrir/fechar algo: o Windows leva um tempo para mostrar ou encerrar janelas.
+POLL_SECONDS = 0.3
+SITE_WINDOW_SECONDS = 6.0
+APP_WINDOW_SECONDS = 8.0
+APP_REUSE_AFTER_SECONDS = 2.0  # sem janela nova até aqui, vale a que já estava aberta
+APP_RELAUNCH_AFTER_SECONDS = 4.0
+CLOSE_WAIT_SECONDS = 5.0
+FIND_WINDOW_SECONDS = 2.0
+# Títulos provisórios de uma janela de navegador que ainda está carregando.
+PLACEHOLDER_TITLES = ("nova guia", "new tab", "about:blank", "carregando", "loading", "sem titulo", "untitled")
+MAX_SAVED_POSITIONS = 10
+MAX_REMEMBERED_WINDOWS = 30
 
 # Processos do sistema que fechar derrubaria o Windows, a segurança ou o próprio Jarvis.
 PROTECTED_PROCESSES = {
@@ -246,6 +271,24 @@ class PCControlError(Exception):
     """User-facing failure of a desktop action (message is safe to speak)."""
 
 
+@dataclass(frozen=True)
+class SavedPosition:
+    placement: win_desktop.Placement
+    monitor: int | None
+
+
+@dataclass
+class WindowMemory:
+    """What Jarvis remembers about windows while it runs (keys are hwnds)."""
+
+    positions: dict[int, list[SavedPosition]] = field(default_factory=dict)  # antes de cada move, para 'back'
+    labels: dict[int, set[str]] = field(default_factory=dict)  # janelas que o Jarvis abriu → nomes pedidos
+    hud_windows: set[int] = field(default_factory=set)  # janelas de navegador onde o HUD já apareceu
+
+
+MEMORY = WindowMemory()
+
+
 # ───────────────────────── helpers ─────────────────────────
 
 
@@ -344,6 +387,37 @@ def _require_windows(feature: str) -> None:
         raise PCControlError(f"{feature} só está disponível no Windows por enquanto.")
 
 
+def _poll(seconds: float) -> Iterator[int]:
+    """Yield the step number about every POLL_SECONDS for `seconds` (at least once, no initial wait)."""
+    for step in range(max(1, int(seconds / POLL_SECONDS))):
+        if step:
+            time.sleep(POLL_SECONDS)
+        yield step
+
+
+def _desktop_windows() -> list[win_desktop.Window]:
+    """Visible windows; also remembers which browser windows have shown the HUD tab."""
+    found = win_desktop.windows()
+    MEMORY.hud_windows.update(window.hwnd for window in found if HUD_TITLE in window.title)
+    return found
+
+
+def _remember_opened(hwnd: int, *names: str) -> None:
+    """Tie a window Jarvis just opened to the names used for it, so it is found before its title loads."""
+    labels = MEMORY.labels.pop(hwnd, set())
+    for name in names:
+        value = normalize(name)
+        if not value:
+            continue
+        labels.add(value)
+        host = value.removeprefix("www.")
+        if "." in host and " " not in host:
+            labels.update({host, host.split(".")[0]})
+    MEMORY.labels[hwnd] = labels
+    while len(MEMORY.labels) > MAX_REMEMBERED_WINDOWS:
+        MEMORY.labels.pop(next(iter(MEMORY.labels)))
+
+
 def _jarvis_ancestor_names() -> set[str]:
     """Names of the processes that host this agent (terminal, IDE, python...)."""
     names: set[str] = set()
@@ -393,14 +467,11 @@ def list_start_apps() -> list[dict[str, str]]:
     return apps
 
 
-def launch_app(name: str) -> str:
+def resolve_app(name: str) -> tuple[str, str, bool]:
+    """(label, target, is_site): what os.startfile opens, or the site URL when no app is installed."""
     builtin = BUILTIN_APPS.get(normalize(name))
     if builtin:
-        _require_windows("Abrir apps")
-        os.startfile(builtin)  # type: ignore[attr-defined]  # noqa: S606
-        return name.strip().capitalize()
-
-    _require_windows("Abrir apps")
+        return name.strip().capitalize(), builtin, False
     if is_blocked_app(name):
         raise PCControlError("Por segurança, não abro instaladores nem desinstaladores.")
     apps = list_start_apps()
@@ -411,16 +482,101 @@ def launch_app(name: str) -> str:
             label, url = resolve_site(name)
         except PCControlError:
             raise PCControlError(f"Não encontrei nenhum app ou site conhecido chamado '{name}'.") from None
-        webbrowser.open(url, 2)
-        return f"{label} (site, no navegador)"
+        return label, url, True
     app_id = next(app["app_id"] for app in apps if app["name"] == match)
-    os.startfile(f"shell:AppsFolder\\{app_id}")  # type: ignore[attr-defined]  # noqa: S606
-    return match
+    return match, f"shell:AppsFolder\\{app_id}", False
 
 
-def find_processes(name: str) -> list[str]:
-    """Executable names (lowercase) of the current user's processes matching `name`."""
-    wanted = PROCESS_ALIASES.get(normalize(name))
+def _is_app_window(window: win_desktop.Window, names: tuple[str, ...]) -> tuple[bool, bool]:
+    """(matches, by_process) for a window of the app known by any of `names`."""
+    if HUD_TITLE in window.title:
+        return False, False
+    queries = {normalize(APP_NAME_ALIASES.get(normalize(n), n)) for n in names} - {""}
+    if window.process in _matching_exes_for(queries, {window.process}):
+        return True, True
+    title = normalize(window.title)
+    return any(query in title for query in queries), False
+
+
+def _matching_exes_for(queries: set[str], exes: set[str]) -> set[str]:
+    return {exe for query in queries for exe in _matching_exes(query, exes, fuzzy=False)}
+
+
+def _wait_for_app_window(
+    names: tuple[str, ...], before: set[int], relaunch: Any = None
+) -> tuple[win_desktop.Window | None, bool]:
+    """(window, already_open): a new window of the app, or after a grace period one that already existed.
+
+    Windows of the app's own process beat windows that only mention it in the title
+    (e.g. a browser tab called "Claude" vs. the Claude app).
+    """
+    reuse_step = int(APP_REUSE_AFTER_SECONDS / POLL_SECONDS)
+    relaunch_step = int(APP_RELAUNCH_AFTER_SECONDS / POLL_SECONDS)
+    for step in _poll(APP_WINDOW_SECONDS):
+        ranked = []
+        for window in _desktop_windows():
+            matches, by_process = _is_app_window(window, names)
+            if matches:
+                ranked.append((window.hwnd in before, not by_process, window))
+        ranked.sort(key=lambda item: item[:2])
+        new = [item for item in ranked if not item[0]]
+        if new:
+            return new[0][2], False
+        if ranked and step >= reuse_step:
+            return ranked[0][2], True
+        if relaunch is not None and step == relaunch_step:
+            # Apps escondidos na bandeja (Discord, Steam...) às vezes só reaparecem no segundo pedido.
+            relaunch()
+    return None, False
+
+
+def launch_app(name: str, monitor: int | None = None) -> str:
+    """Open an app, confirm a visible window appeared and bring it to the front (or to `monitor`)."""
+    _require_windows("Abrir apps")
+    screen = pick_monitor(monitor) if monitor is not None else None
+    label, target, is_site = resolve_app(name)
+    if is_site:
+        if screen is not None:
+            return open_in_new_window(label, target, screen.number)
+        webbrowser.open(target, 2)
+        return f"Abri {label} no navegador (é um site, não um app instalado)."
+
+    names = (name, label, target) if target in BUILTIN_APPS.values() else (name, label)
+    running_before = bool(_app_processes(name, label))
+    before = {window.hwnd for window in _desktop_windows()}
+
+    def start() -> None:
+        os.startfile(target)  # type: ignore[attr-defined]  # noqa: S606
+
+    start()
+    window, already_open = _wait_for_app_window(names, before, relaunch=start if running_before else None)
+    seconds = int(APP_WINDOW_SECONDS)
+    if window is None:
+        running = _app_processes(name, label)
+        if running:
+            return (
+                f"Pedi para abrir {label}, mas nenhuma janela apareceu em {seconds} s. O processo "
+                f"({', '.join(running)}) está rodando, então deve estar escondido na bandeja, perto do relógio. "
+                "Não posso confirmar que a janela abriu."
+            )
+        return (
+            f"Pedi ao Windows para abrir {label}, mas nenhuma janela apareceu em {seconds} s; "
+            "pode ainda estar carregando. Não posso confirmar que abriu."
+        )
+
+    _remember_opened(window.hwnd, name, label)
+    opening = f"{label} já estava aberto" if already_open else f"Abri {label}"
+    if screen is not None:
+        return f"{opening}. {_move_window(window, screen)}"
+    landed = win_desktop.window_monitor(window.hwnd)
+    where = f" na tela {landed.number}" if landed else ""
+    if not win_desktop.bring_to_front(window.hwnd):
+        return f"{opening}; a janela está{where}, mas o Windows não deixou trazê-la para frente."
+    return f"{opening}; a janela '{_clean_title(window.title)}' está em primeiro plano{where}."
+
+
+def _running_processes() -> set[str]:
+    """Executable names (lowercase) of the current user's processes."""
     try:
         me = psutil.Process().username()
     except psutil.Error:
@@ -432,24 +588,59 @@ def find_processes(name: str) -> list[str]:
         if not info.get("name") or (me and info.get("username") != me):
             continue
         running.add(info["name"].lower())
+    return running
 
+
+def _matching_exes(name: str, exes: set[str], fuzzy: bool = True) -> list[str]:
+    """Which of `exes` belong to the app called `name` (alias, then substring, then fuzzy)."""
+    wanted = PROCESS_ALIASES.get(normalize(name))
     if wanted:
-        return sorted(exe for exe in wanted if exe in running)
+        return sorted(exe for exe in wanted if exe in exes)
 
     target = normalize(name).replace(" ", "")
-    matches = [exe for exe in running if target and target in exe.removesuffix(".exe").replace(" ", "")]
-    if not matches:
-        close = difflib.get_close_matches(target, [exe.removesuffix(".exe") for exe in running], n=1, cutoff=0.75)
+    matches = [exe for exe in exes if target and target in exe.removesuffix(".exe").replace(" ", "")]
+    if not matches and fuzzy and target:
+        close = difflib.get_close_matches(target, [exe.removesuffix(".exe") for exe in exes], n=1, cutoff=0.75)
         matches = [f"{close[0]}.exe"] if close else []
     return sorted(matches)
 
 
+def find_processes(name: str) -> list[str]:
+    """Executable names (lowercase) of the current user's processes matching `name`."""
+    return _matching_exes(name, _running_processes())
+
+
+def _app_processes(*names: str) -> list[str]:
+    """Running processes of the app, trying each of its names in turn."""
+    running = _running_processes()
+    return next((found for found in (_matching_exes(name, running) for name in names) if found), [])
+
+
 def hud_browser_processes() -> set[str]:
     """Browser executables whose active tab is the Jarvis HUD."""
-    return {window.process for window in win_desktop.windows() if HUD_TITLE in window.title}
+    return {window.process for window in _desktop_windows() if HUD_TITLE in window.title}
 
 
-def close_app_processes(name: str) -> list[str]:
+def _confirm_closed(name: str, exes: list[str]) -> str:
+    """Wait for the processes to really exit and say what actually happened."""
+    still = set(exes)
+    for _ in _poll(CLOSE_WAIT_SECONDS):
+        still = set(exes) & _running_processes()
+        if not still:
+            return f"Fechei {name}; o processo ({', '.join(exes)}) encerrou."
+    left = ", ".join(sorted(still))
+    if any(window.process in still for window in _desktop_windows()):
+        return (
+            f"Pedi para fechar {name}, mas a janela continua aberta ({left} rodando); "
+            "talvez esteja pedindo para salvar ou confirmar algo."
+        )
+    return (
+        f"A janela de {name} fechou, mas o processo ({left}) continua rodando em segundo plano, "
+        "provavelmente na bandeja perto do relógio."
+    )
+
+
+def close_app_processes(name: str) -> str:
     targets = find_processes(name)
     if not targets:
         raise PCControlError(f"Não encontrei '{name}' aberto.")
@@ -485,7 +676,7 @@ def close_app_processes(name: str) -> list[str]:
             closed.append(exe)
     if not closed:
         raise PCControlError(f"'{name}' não aceitou fechar normalmente.")
-    return closed
+    return _confirm_closed(name, closed)
 
 
 # ───────────────────────── browser & media ─────────────────────────
@@ -497,7 +688,7 @@ def _clean_title(title: str) -> str:
 
 def _browser_windows() -> list[win_desktop.Window]:
     # Ordem Z: a primeira janela é a usada mais recentemente.
-    return [window for window in win_desktop.windows() if window.process in BROWSER_PROCESSES]
+    return [window for window in _desktop_windows() if window.process in BROWSER_PROCESSES]
 
 
 def _active_title() -> str:
@@ -559,21 +750,27 @@ def browser_tab_action(action: str, name: str | None = None) -> str:
 # ───────────────────────── windows & monitors ─────────────────────────
 
 
-def find_window(target: str) -> win_desktop.Window:
-    """Most recently used window whose title or app matches `target`."""
-    windows = [window for window in win_desktop.windows() if HUD_TITLE not in window.title]
+def _matching_windows(target: str) -> list[win_desktop.Window]:
+    """Windows for `target`, best first: opened by Jarvis under that name, title, app, fuzzy title."""
+    windows = [window for window in _desktop_windows() if HUD_TITLE not in window.title]
     query = normalize(APP_NAME_ALIASES.get(normalize(target), target))
-    by_title = [window for window in windows if query and query in normalize(window.title)]
-    if by_title:
-        return by_title[0]
-    processes = set(PROCESS_ALIASES.get(query, [])) or set(find_processes(target))
+    if not query:
+        return []
+    opened = [window for window in windows if query in MEMORY.labels.get(window.hwnd, ())]
+    by_title = [window for window in windows if query in normalize(window.title)]
+    processes = set(_matching_exes(query, {window.process for window in windows}))
     by_process = [window for window in windows if window.process in processes]
-    if by_process:
-        return by_process[0]
-    titles = [window.title for window in windows]
-    close = best_match(query, titles)
-    if close:
-        return next(window for window in windows if window.title == close)
+    close = best_match(query, [window.title for window in windows])
+    fuzzy = [window for window in windows if close and window.title == close]
+    return list({window.hwnd: window for window in opened + by_title + by_process + fuzzy}.values())
+
+
+def find_window(target: str, wait: float = 0.0) -> win_desktop.Window:
+    """Most likely window for `target`, waiting up to `wait` seconds for one that is still opening."""
+    for _ in _poll(wait):
+        matches = _matching_windows(target)
+        if matches:
+            return matches[0]
     raise PCControlError(f"Não encontrei nenhuma janela aberta de '{target}'.")
 
 
@@ -590,22 +787,88 @@ def pick_monitor(number: int | None) -> win_desktop.Monitor:
     raise PCControlError(f"Não existe tela {number}. Telas disponíveis: {numbers}.")
 
 
+def _remember_position(hwnd: int) -> None:
+    """Save where the window is before Jarvis moves it, so 'back' can undo the move."""
+    placement = win_desktop.get_placement(hwnd)
+    if placement is None:
+        return
+    screen = win_desktop.window_monitor(hwnd) or win_desktop.monitor_for_rect(placement.normal, win_desktop.monitors())
+    stack = MEMORY.positions.pop(hwnd, [])  # reinserir deixa a janela movida por último no fim
+    MEMORY.positions[hwnd] = [*stack, SavedPosition(placement, screen.number if screen else None)][
+        -MAX_SAVED_POSITIONS:
+    ]
+    while len(MEMORY.positions) > MAX_REMEMBERED_WINDOWS:
+        MEMORY.positions.pop(next(iter(MEMORY.positions)))
+
+
+def _hud_note(hwnd: int) -> str:
+    if hwnd in MEMORY.hud_windows:
+        return " O HUD do Jarvis está numa aba dessa mesma janela e foi junto."
+    return ""
+
+
+def _landed(hwnd: int, title: str, wanted: int | None, verb: str) -> tuple[int | None, str]:
+    """(monitor the window really is on, problem to report) — never trust the monitor we only asked for."""
+    screen = win_desktop.window_monitor(hwnd)
+    if screen is None:
+        return None, f"Tentei {verb} '{title}', mas não consegui confirmar em que tela ela ficou."
+    if wanted is not None and screen.number != wanted:
+        return screen.number, f"Tentei {verb} '{title}' para a tela {wanted}, mas ela ficou na tela {screen.number}."
+    return screen.number, ""
+
+
+def _move_window(window: win_desktop.Window, screen: win_desktop.Monitor, maximize: bool | None = None) -> str:
+    _remember_position(window.hwnd)
+    win_desktop.move_to_monitor(window.hwnd, screen, maximize=maximize)
+    title = _clean_title(window.title)
+    number, problem = _landed(window.hwnd, title, screen.number, "levar")
+    state = " e maximizada" if maximize else ""
+    return problem or f"'{title}' agora está na tela {number}{state}.{_hud_note(window.hwnd)}"
+
+
+def _move_back(target: str) -> str:
+    candidates = _matching_windows(target)
+    window = next((w for w in candidates if MEMORY.positions.get(w.hwnd)), None)
+    if window is None:
+        if not candidates:
+            raise PCControlError(f"Não encontrei nenhuma janela aberta de '{target}'.")
+        raise PCControlError(
+            f"Não tenho registro de onde '{_clean_title(candidates[0].title)}' estava antes: só lembro das "
+            "janelas que eu mesmo movi. Pergunte para qual tela devo levá-la."
+        )
+    stack = MEMORY.positions[window.hwnd]
+    saved = stack.pop()
+    if not stack:
+        del MEMORY.positions[window.hwnd]
+    win_desktop.restore_placement(window.hwnd, saved.placement)
+    title = _clean_title(window.title)
+    number, problem = _landed(window.hwnd, title, saved.monitor, "devolver")
+    state = ", maximizada" if saved.placement.maximized else ""
+    return problem or f"'{title}' voltou para onde estava: tela {number}{state}.{_hud_note(window.hwnd)}"
+
+
 def window_action(target: str, action: str, monitor: int | None) -> str:
     _require_windows("Controlar janelas")
-    window = find_window(target)
+    if action == "back":
+        return _move_back(target)
+    window = find_window(target, wait=FIND_WINDOW_SECONDS)
     protected = PROTECTED_PROCESSES | _jarvis_ancestor_names()
 
     if action == "move":
-        screen = pick_monitor(monitor)
-        win_desktop.move_to_monitor(window.hwnd, screen)
-        return f"'{window.title}' agora está na tela {screen.number}."
+        if monitor is None:
+            raise PCControlError(
+                "Diga para qual tela devo mover a janela. Para devolvê-la aonde estava, use a ação 'back'."
+            )
+        return _move_window(window, pick_monitor(monitor))
     if action == "maximize":
         if monitor is not None:
-            win_desktop.move_to_monitor(window.hwnd, pick_monitor(monitor), maximize=True)
-        else:
-            win_desktop.show_window(window.hwnd, win_desktop.SW_MAXIMIZE)
-            win_desktop.bring_to_front(window.hwnd)
-        return f"'{window.title}' maximizada."
+            return _move_window(window, pick_monitor(monitor), maximize=True)
+        _remember_position(window.hwnd)
+        win_desktop.show_window(window.hwnd, win_desktop.SW_MAXIMIZE)
+        win_desktop.bring_to_front(window.hwnd)
+        screen = win_desktop.window_monitor(window.hwnd)
+        where = f" na tela {screen.number}" if screen else ""
+        return f"'{window.title}' maximizada{where}."
     if action == "minimize":
         win_desktop.show_window(window.hwnd, win_desktop.SW_MINIMIZE)
         return f"'{window.title}' minimizada."
@@ -619,6 +882,7 @@ def window_action(target: str, action: str, monitor: int | None) -> str:
 
         if not win_desktop.bring_to_front(window.hwnd):
             raise PCControlError("O Windows não deixou focar essa janela.")
+        _remember_position(window.hwnd)
         pyautogui.hotkey("win", "left" if action == "snap_left" else "right")
         return f"'{window.title}' encaixada à {'esquerda' if action == 'snap_left' else 'direita'}."
     if action == "close":
@@ -627,6 +891,108 @@ def window_action(target: str, action: str, monitor: int | None) -> str:
         win_desktop.close_window(window.hwnd)
         return f"Pedi para fechar a janela '{window.title}'."
     raise PCControlError(f"Ação de janela desconhecida: {action}.")
+
+
+def command_executable(command: str) -> str:
+    """Executable of a registry 'open' command such as '"C:\\...\\msedge.exe" --single-argument %1'."""
+    command = command.strip()
+    if command.startswith('"'):
+        return command[1:].split('"', 1)[0]
+    return command.split(" ", 1)[0]
+
+
+def default_browser() -> Path | None:
+    """The default web browser's executable (only well-known browsers), falling back to Edge."""
+    if not IS_WINDOWS:
+        return None
+    import winreg
+
+    candidates: list[str] = []
+    for key_path in DEFAULT_BROWSER_KEYS:
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                prog_id = winreg.QueryValueEx(key, "ProgId")[0]
+            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, rf"{prog_id}\shell\open\command") as key:
+                candidates.append(command_executable(winreg.QueryValueEx(key, "")[0]))
+            break
+        except OSError:
+            continue
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, EDGE_APP_PATH) as key:
+            candidates.append(winreg.QueryValueEx(key, "")[0])
+    except OSError:
+        pass
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.name.lower() in BROWSER_PROCESSES and path.is_file():
+            return path
+    return None
+
+
+def new_window_command(browser: Path, url: str) -> list[str]:
+    """Fixed command line that opens one validated http(s) URL in a new browser window."""
+    target = normalize_url(url)  # só http(s) chega à linha de comando, nunca uma opção do navegador
+    flag = "-new-window" if browser.name.lower() == "firefox.exe" else "--new-window"
+    return [str(browser), flag, target]
+
+
+def _is_placeholder(title: str) -> bool:
+    value = normalize(_clean_title(title))
+    return not value or value.startswith(PLACEHOLDER_TITLES)
+
+
+def _wait_for_browser_window(process: str, before: set[int]) -> win_desktop.Window | None:
+    """New window of `process` once its title stops being 'Nova guia'/loading (or time runs out)."""
+    window: win_desktop.Window | None = None
+    last_title: str | None = None
+    for _ in _poll(SITE_WINDOW_SECONDS):
+        if window is None:
+            window = next((w for w in _desktop_windows() if w.process == process and w.hwnd not in before), None)
+            if window is None:
+                continue
+        title = _clean_title(win_desktop.window_title(window.hwnd))
+        if title == last_title and not _is_placeholder(title):
+            break
+        last_title = title
+    if window is None:
+        return None
+    return replace(window, title=last_title or window.title)
+
+
+def open_in_new_window(label: str, url: str, monitor: int) -> str:
+    """Open a site in its own browser window and move it to `monitor`.
+
+    A tab would land in an existing window — often the one holding the HUD — and moving
+    that window would drag the HUD along, so a dedicated window is opened instead.
+    """
+    _require_windows("Abrir sites em outra tela")
+    screen = pick_monitor(monitor)
+    browser = default_browser()
+    if browser is None:
+        webbrowser.open(url, 2)
+        return (
+            f"Abri {label} numa aba do navegador, mas não consegui abrir uma janela separada; "
+            f"não movi para a tela {screen.number} para não levar o HUD junto."
+        )
+    command = new_window_command(browser, url)
+    before = {window.hwnd for window in _desktop_windows()}
+    subprocess.Popen(command, creationflags=NO_WINDOW, close_fds=True)  # noqa: S603 — executável e URL validados
+    window = _wait_for_browser_window(browser.name.lower(), before)
+    if window is None:
+        return (
+            f"Pedi ao navegador para abrir {label} numa janela nova, mas ela não apareceu em "
+            f"{int(SITE_WINDOW_SECONDS)} s, então não a movi para a tela {screen.number}."
+        )
+    _remember_opened(window.hwnd, label, host_of(command[-1]))
+    return f"Abri {label} numa janela nova do navegador. {_move_window(window, screen)}"
+
+
+def open_url(label: str, url: str, monitor: int | None) -> str:
+    """New tab in the current browser window, or a window of its own on `monitor`."""
+    if monitor is not None:
+        return open_in_new_window(label, url, monitor)
+    webbrowser.open(url, 2)
+    return f"Abri {label} no navegador."
 
 
 def capture_screen(monitor: int | None, window: str | None = None) -> tuple[Any, str]:
@@ -788,20 +1154,23 @@ async def _run(name: str, detail: str | None, func: Any, *args: Any) -> Any:
 
 
 @function_tool()
-async def open_website(context: RunContext, url: str) -> str:
-    """Open a website in the user's default browser (new tab).
+async def open_website(context: RunContext, url: str, monitor: int | None = None) -> str:
+    """Open a website in the user's default browser (new tab, or its own window on a monitor).
 
     Args:
         url: A full URL, a domain ("github.com"), a well-known service name ("Google Maps",
             "Gmail", "Claude", "ChatGPT") or one of the user's saved shortcuts.
             Never invent URLs: if unsure, search_web first and pass the official result URL.
+        monitor: Monitor number (tela 1, 2, 3) when the user says where to open it
+            ("abre o YouTube no monitor 1"). The site then opens in a new browser window that is
+            moved there, so the HUD's window stays put. Don't call manage_window afterwards.
     """
     try:
         label, target = resolve_site(url)
         await net_activity([host_of(target)], "request")
-        await _run("open_website", label, webbrowser.open, target, 2)
-        logger.info("Site aberto: %s", target)
-        return f"Abri {label} no navegador."
+        result = await _run("open_website", label, open_url, label, target, monitor)
+        logger.info("Site aberto: %s %s", target, f"(tela {monitor})" if monitor else "")
+        return result
     except PCControlError as exc:
         return str(exc)
 
@@ -826,16 +1195,20 @@ async def save_shortcut(context: RunContext, name: str, url: str) -> str:
 async def manage_window(
     context: RunContext,
     target: str,
-    action: Literal["move", "maximize", "minimize", "restore", "focus", "snap_left", "snap_right", "close"],
+    action: Literal["move", "back", "maximize", "minimize", "restore", "focus", "snap_left", "snap_right", "close"],
     monitor: int | None = None,
 ) -> str:
     """Move, maximize, minimize, focus, snap or close an application window, across monitors.
 
+    The result says the monitor the window really ended up on: report that one.
+
     Args:
         target: App name or text from the window title, e.g. "Configurações", "Edge", "WhatsApp".
-        action: move (to another monitor), maximize, minimize, restore, focus, snap_left,
-            snap_right or close (polite close of that single window).
+        action: move (to another monitor; needs `monitor`), back (undo the last move/maximize/snap
+            and put the window where it was before — "volta pra antiga", "desfaz"), maximize,
+            minimize, restore, focus, snap_left, snap_right or close (polite close of that single window).
         monitor: Monitor number as Windows numbers them (tela 1, 2, 3) for move/maximize.
+            Never guess it for "back".
     """
     try:
         result = await _run("manage_window", target, window_action, target, action, monitor)
@@ -883,63 +1256,88 @@ async def look_at_screen(context: RunContext, monitor: int | None = None, window
     )
 
 
+def play_video(query: str, monitor: int | None) -> tuple[dict[str, str] | None, str]:
+    """Open the best YouTube match (or the search page), optionally in its own window on `monitor`."""
+    if monitor is not None:
+        pick_monitor(monitor)  # tela inexistente falha antes de abrir qualquer coisa
+    video = find_youtube_video(query)
+    if video is None:
+        url = STREAMING_SERVICES["youtube"][2].format(q=quote_plus(query), path=quote(query))  # type: ignore[union-attr]
+        if monitor is None:
+            webbrowser.open(url, 2)
+            return None, f"Não achei um vídeo exato; abri a busca do YouTube por '{query}'."
+        return None, "Não achei um vídeo exato. " + open_in_new_window(f"a busca do YouTube por '{query}'", url, monitor)
+    channel = f" do canal {video['channel']}" if video["channel"] else ""
+    if monitor is None:
+        webbrowser.open(video["url"], 2)
+        return video, f"Abri no YouTube: '{video['title']}'{channel}."
+    return video, open_in_new_window(f"'{video['title']}'{channel} no YouTube", video["url"], monitor)
+
+
 @function_tool()
-async def play_youtube(context: RunContext, query: str) -> str:
+async def play_youtube(context: RunContext, query: str, monitor: int | None = None) -> str:
     """Search YouTube and open the best matching video in the browser.
 
     Args:
         query: What to play, e.g. "lo-fi para estudar" or "trailer Homem de Ferro".
+        monitor: Monitor number (tela 1, 2, 3) when the user says where to play it; the video
+            opens in its own browser window moved there.
     """
     await net_activity(["youtube.com"], "request")
     try:
-        video = await _run("play_youtube", query, find_youtube_video, query)
+        video, result = await _run("play_youtube", query, play_video, query, monitor)
     except PCControlError as exc:
         return str(exc)
-    if video is None:
-        url = STREAMING_SERVICES["youtube"][2].format(q=quote_plus(query), path=quote(query))  # type: ignore[union-attr]
-        await asyncio.to_thread(webbrowser.open, url, 2)
-        return f"Não achei um vídeo exato; abri a busca do YouTube por '{query}'."
-
-    await asyncio.to_thread(webbrowser.open, video["url"], 2)
-    await show_card("media", {"service": "YouTube", **video})
-    logger.info("YouTube aberto: %s", video["url"])
-    channel = f" do canal {video['channel']}" if video["channel"] else ""
-    return f"Abri no YouTube: '{video['title']}'{channel}."
+    if video is not None:
+        await show_card("media", {"service": "YouTube", **video})
+        logger.info("YouTube aberto: %s", video["url"])
+    return result
 
 
 @function_tool()
-async def open_streaming(context: RunContext, service: str, query: str | None = None) -> str:
+async def open_streaming(
+    context: RunContext, service: str, query: str | None = None, monitor: int | None = None
+) -> str:
     """Open a streaming/music service, optionally searching for a title.
 
     Args:
         service: Netflix, Prime Video, Spotify, Twitch, Globoplay, Disney+, Max, Crunchyroll, Deezer or YouTube.
         query: Optional title, artist or show to search for.
+        monitor: Monitor number (tela 1, 2, 3) when the user says where to open it; the service
+            opens in its own browser window moved there.
     """
     try:
         label, url, searched = streaming_url(service, query)
         await net_activity([host_of(url)], "request")
-        await _run("open_streaming", label, webbrowser.open, url, 2)
+        what = f"o {label}" + (f" buscando '{query}'" if query and searched else "")
+        if monitor is None:
+            await _run("open_streaming", label, webbrowser.open, url, 2)
+            result = f"Abri {what}."
+        else:
+            result = await _run("open_streaming", label, open_in_new_window, what, url, monitor)
     except PCControlError as exc:
         return str(exc)
     await show_card("media", {"service": label, "title": query or label, "url": url, "channel": "", "thumbnail": ""})
     if query and not searched:
-        return f"Abri o {label}; a busca direta não é suportada nele, então procure '{query}' por lá."
-    return f"Abri o {label}" + (f" buscando '{query}'." if query else ".")
+        result += f" A busca direta não é suportada nele, então procure '{query}' por lá."
+    return result
 
 
 @function_tool()
-async def open_app(context: RunContext, name: str) -> str:
-    """Open an installed application by name (any app in the Start Menu).
+async def open_app(context: RunContext, name: str, monitor: int | None = None) -> str:
+    """Open an installed application by name (any app in the Start Menu) and bring its window to the front.
 
-    Never opens installers or uninstallers.
+    It checks that a visible window really appeared; report exactly what the result says
+    (it may say the app is hidden in the tray or did not open). Never opens installers or uninstallers.
 
     Args:
         name: App name, e.g. "Spotify", "calculadora", "VS Code", "WhatsApp", "Steam".
+        monitor: Monitor number (tela 1, 2, 3) when the user says where to open it.
     """
     try:
-        opened = await _run("open_app", name, launch_app, name)
-        logger.info("App aberto: %s", opened)
-        return f"Abri {opened}."
+        result = await _run("open_app", name, launch_app, name, monitor)
+        logger.info("App aberto: %s → %s", name, result)
+        return result
     except PCControlError as exc:
         return str(exc)
 
@@ -948,15 +1346,17 @@ async def open_app(context: RunContext, name: str) -> str:
 async def close_app(context: RunContext, name: str) -> str:
     """Close an open application gracefully (like clicking the X).
 
+    It waits for the process to really exit; if the result says it is still running
+    (tray, unsaved work), tell the user that instead of saying it closed.
     System processes and Jarvis itself are protected.
 
     Args:
         name: App name, e.g. "Spotify", "Discord", "bloco de notas".
     """
     try:
-        closed = await _run("close_app", name, close_app_processes, name)
-        logger.info("App fechado: %s", ", ".join(closed))
-        return f"Pedi para fechar {name} ({', '.join(closed)})."
+        result = await _run("close_app", name, close_app_processes, name)
+        logger.info("Fechar app %s → %s", name, result)
+        return result
     except PCControlError as exc:
         return str(exc)
 

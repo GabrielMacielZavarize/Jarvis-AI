@@ -56,9 +56,9 @@ flowchart LR
 | HUD-07 | `manage_hud_panels` — lista (tipo + título exibido), fecha e amplia painéis do HUD pelo tipo, pelo título ou "o último"; diz "NADA foi fechado" quando nada mudou | "Feche a aba." · "Fecha a aba de reprodução." · "Maximiza o rascunho da lista de compras." · "Fecha essas abinhas da esquerda." |
 | MED-08 | `play_youtube` / `open_streaming` / `media_control` | "Toque lo-fi no YouTube." · "Pausa." |
 | PC-09 | `open_app` / `close_app` / `open_folder` / `lock_computer` / `take_screenshot` | "Abra o Spotify." · "Bloqueie a tela." |
-| WEB-10 | `open_website` / `browser_tab` / `save_shortcut` | "Abre o Google Maps." · "Feche a aba do YouTube." · "Salva esse site como portal SATC." |
+| WEB-10 | `open_website` / `browser_tab` / `save_shortcut` — com `monitor`, abre numa janela própria nessa tela | "Abre o Google Maps." · "Abre o YouTube no monitor 1." · "Feche a aba do YouTube." · "Salva esse site como portal SATC." |
 | AUD-11 | `set_volume` | "Volume em 30%." |
-| JAN-13 | `manage_window` — mover entre monitores, maximizar, minimizar, encaixar, fechar janela | "Joga as Configurações na tela 3." |
+| JAN-13 | `manage_window` — mover entre monitores, voltar à posição anterior, maximizar, minimizar, encaixar, fechar janela | "Joga as Configurações na tela 3." · "Volta pra onde estava." |
 | VIS-14 | `look_at_screen` — print de um monitor ou janela, mostrado no HUD e analisado | "O que tem aberto no PhpStorm?" |
 | COM-12 | `check_email_address` / `draft_email` / `confirm_email_send` / `cancel_pending_email` | "Escreva um email para gabriel arroba gmail ponto com…" |
 | APP-15 | `search_apps` / `prepare_app_install` / `confirm_app_install` / `cancel_app_install` — instala apps pelo winget, com código de confirmação | "Instala o VLC pra mim." |
