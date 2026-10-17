@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useHud } from '../../lib/hudStore';
+import { PANEL_META, panelTitle } from '../../lib/panels';
 import type { HudCard } from '../../lib/types';
 import { ProtocolsPanel } from '../ProtocolsPanel';
 import {
@@ -18,29 +19,34 @@ import {
 } from './Cards';
 import { HoloCard } from './HoloCard';
 
-function describe(card: HudCard, expanded: boolean): { code: string; title: string; body: ReactNode } {
+function panelBody(card: HudCard, expanded: boolean): ReactNode {
   switch (card.kind) {
     case 'weather':
-      return { code: 'WX-01', title: 'Meteorologia', body: <WeatherBody data={card.data} expanded={expanded} /> };
+      return <WeatherBody data={card.data} expanded={expanded} />;
     case 'search':
-      return { code: 'NET-02', title: 'Pesquisa', body: <SearchBody data={card.data} /> };
+      return <SearchBody data={card.data} />;
     case 'news':
-      return { code: 'NWS-03', title: 'Notícias', body: <NewsBody data={card.data} /> };
+      return <NewsBody data={card.data} />;
     case 'time':
-      return { code: 'CHR-04', title: 'Cronometria', body: <TimeBody data={card.data} /> };
+      return <TimeBody data={card.data} />;
     case 'diagnostics':
-      return { code: 'SYS-05', title: 'Diagnóstico', body: <DiagnosticsBody data={card.data} /> };
+      return <DiagnosticsBody data={card.data} />;
     case 'timer':
-      return { code: 'TMR-06', title: 'Timer', body: <TimerBody data={card.data} /> };
+      return <TimerBody data={card.data} />;
     case 'note':
-      return { code: 'HUD-07', title: card.data.title, body: <NoteBody data={card.data} /> };
+      return <NoteBody data={card.data} />;
     case 'email':
-      return { code: 'COM-12', title: 'Email', body: <EmailBody data={card.data} /> };
+      return <EmailBody data={card.data} />;
     case 'media':
-      return { code: 'MED-08', title: 'Reprodução', body: <MediaBody data={card.data} /> };
+      return <MediaBody data={card.data} />;
     case 'screen':
-      return { code: 'VIS-14', title: 'Leitura de tela', body: <ScreenBody data={card.data} /> };
+      return <ScreenBody data={card.data} />;
   }
+}
+
+/** Code and title come from PANEL_META, the same names the agent gets when it lists the panels. */
+function describe(card: HudCard, expanded: boolean): { code: string; title: string; body: ReactNode } {
+  return { code: PANEL_META[card.kind].code, title: panelTitle(card), body: panelBody(card, expanded) };
 }
 
 /** One panel enlarged in the middle of the HUD ("Jarvis, amplia o clima"). */

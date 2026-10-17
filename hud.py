@@ -93,10 +93,13 @@ def _hud_participant() -> tuple[Any, str] | None:
         return None
 
 
-async def hud_request(action: str, kinds: list[str] | None = None) -> dict[str, Any] | None:
-    """Ask the HUD to list/close/expand panels and return what it actually did.
+async def hud_request(action: str, payload: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """Ask the HUD something over RPC and return what it actually did.
 
-    Returns None when no HUD is connected (console mode, tests, closed tab).
+    Actions: list/close/close_all/expand/collapse panels (``payload`` carries ``targets``),
+    ``mic`` (microphone selected in the Sistema panel) and ``end_session`` (same as the
+    "Encerrar link" button). Returns None when no HUD is connected (console mode, tests,
+    closed tab) or it did not answer.
     """
     target = _hud_participant()
     if target is None:
@@ -106,13 +109,14 @@ async def hud_request(action: str, kinds: list[str] | None = None) -> dict[str, 
         response = await participant.perform_rpc(
             destination_identity=identity,
             method=HUD_RPC_METHOD,
-            payload=json.dumps({"action": action, "kinds": kinds or []}),
+            payload=json.dumps({"action": action, **(payload or {})}, ensure_ascii=False),
             response_timeout=4.0,
         )
-        return json.loads(response)
+        reply = json.loads(response)
     except Exception:
         logger.debug("HUD não respondeu ao comando '%s'.", action, exc_info=True)
         return None
+    return reply if isinstance(reply, dict) else None
 
 
 async def send_screenshot(image: Any, label: str) -> bool:

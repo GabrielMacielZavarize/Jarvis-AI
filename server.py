@@ -36,8 +36,11 @@ TOOL_NAMES = [
     "get_current_time",
     "run_diagnostics",
     "set_timer",
+    "get_timers",
     "show_on_hud",
     "manage_hud_panels",
+    "check_microphone",
+    "end_session",
 ]
 PC_TOOL_NAMES = [
     "open_website",
