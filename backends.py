@@ -6,7 +6,7 @@ from typing import Any
 from livekit.agents import Agent, AgentSession, room_io
 from livekit.plugins import google, noise_cancellation, openai, silero
 
-from prompts import AGENT_INSTRUCTION, INITIAL_REPLY_INSTRUCTION
+from prompts import AGENT_INSTRUCTION, build_initial_reply_instruction
 from settings import Settings
 from tools import PENDING_EMAIL_KEY, build_tools
 
@@ -40,7 +40,7 @@ class JarvisAgent(Agent):
         super().__init__(instructions=AGENT_INSTRUCTION)
 
     async def on_enter(self) -> None:
-        self.session.generate_reply(instructions=INITIAL_REPLY_INSTRUCTION)
+        self.session.generate_reply(instructions=build_initial_reply_instruction())
 
 
 def build_backend_components(settings: Settings) -> BackendComponents:

@@ -1,0 +1,170 @@
+:root {
+  --c-primary-rgb: 95 244 255;
+  --c-accent-rgb: 255 182 72;
+  --c-primary: rgb(var(--c-primary-rgb));
+  --c-accent: rgb(var(--c-accent-rgb));
+  --c-danger: #ff5a5a;
+  --c-ok: #52ffb0;
+  --bg: #010409;
+  --panel-bg: linear-gradient(160deg, rgb(8 34 52 / 0.55), rgb(2 12 22 / 0.35));
+  --line: rgb(var(--c-primary-rgb) / 0.22);
+  --line-strong: rgb(var(--c-primary-rgb) / 0.55);
+  --text: #dcfcff;
+  --text-dim: rgb(220 252 255 / 0.58);
+  --text-faint: rgb(220 252 255 / 0.36);
+  --glow: 0 0 18px rgb(var(--c-primary-rgb) / 0.35);
+  --font-display: 'Orbitron', 'Rajdhani', sans-serif;
+  --font-ui: 'Rajdhani', 'Segoe UI', sans-serif;
+  --font-mono: 'Share Tech Mono', ui-monospace, monospace;
+  --side: clamp(300px, 24vw, 430px);
+  --cut: 14px;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: rgb(var(--c-primary-rgb) / 0.35);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-primary-rgb) / 0.25);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 1px solid var(--c-primary);
+  outline-offset: 3px;
+}
+
+/* Mode-driven palette — kept in sync with the 3D scene colours. */
+.app[data-mode='thinking'] {
+  --c-primary-rgb: 255 193 94;
+  --c-accent-rgb: 95 244 255;
+}
+.app[data-mode='error'] {
+  --c-primary-rgb: 255 90 90;
+  --c-accent-rgb: 255 160 75;
+}
+.app[data-mode='offline'] {
+  --c-primary-rgb: 112 182 214;
+}
+
+.app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.scene {
+  position: absolute !important;
+  inset: 0;
+}
+
+/* Screen-space effects layered over the WebGL canvas. */
+.fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.fx--scanlines {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.025) 0,
+    rgb(255 255 255 / 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+}
+.fx--sweep {
+  background: linear-gradient(to bottom, transparent, rgb(var(--c-primary-rgb) / 0.06), transparent);
+  height: 22vh;
+  animation: sweep 7s linear infinite;
+}
+.fx--frame {
+  inset: 10px;
+  border: 1px solid rgb(var(--c-primary-rgb) / 0.08);
+  clip-path: polygon(
+    0 0, 60px 0, 60px 1px, calc(100% - 60px) 1px, calc(100% - 60px) 0, 100% 0,
+    100% 100%, calc(100% - 60px) 100%, calc(100% - 60px) calc(100% - 1px), 60px calc(100% - 1px), 60px 100%, 0 100%
+  );
+}
+
+@keyframes sweep {
+  from {
+    transform: translateY(-25vh);
+  }
+  to {
+    transform: translateY(110vh);
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes pulse-ring {
+  from {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

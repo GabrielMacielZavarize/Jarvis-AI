@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 from backends import build_backend_components
 from settings import SettingsError, load_settings
 
@@ -70,11 +73,21 @@ def main() -> int:
     else:
         print("LIVEKIT_URL, LIVEKIT_API_KEY e LIVEKIT_API_SECRET estão configuradas.")
 
+    _print_section("HUD holográfico")
+    web_dir = Path(__file__).resolve().parent / "web"
+    if (web_dir / "dist" / "index.html").exists():
+        print("Interface compilada em web/dist.")
+    elif shutil.which("npm"):
+        print("Interface ainda não compilada; `python jarvis.py` compila na primeira execução.")
+    else:
+        print("Node.js/npm não encontrado: instale o Node 20+ para compilar a interface.")
+
     _print_section("Próximos passos")
     if problems:
         print("Corrija os problemas acima e rode `python3 doctor.py` novamente.")
         return 1
 
+    print("HUD + agente: python3 jarvis.py")
     print("Console: python3 agent.py console")
     print("Checagem rápida: python3 agent.py --help")
     if warnings:

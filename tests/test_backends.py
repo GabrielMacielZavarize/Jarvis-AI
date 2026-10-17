@@ -4,6 +4,16 @@ from backends import build_backend_components
 from settings import load_settings
 from tools import build_tools
 
+BASE_TOOLS = [
+    "get_weather",
+    "search_web",
+    "search_news",
+    "get_current_time",
+    "run_diagnostics",
+    "set_timer",
+    "show_on_hud",
+]
+
 
 class BackendTests(unittest.TestCase):
     def test_gemini_backend_builds_realtime_components(self) -> None:
@@ -69,13 +79,12 @@ class BackendTests(unittest.TestCase):
 
         self.assertEqual(
             [tool.__name__ for tool in disabled_tools],
-            ["get_weather", "search_web"],
+            BASE_TOOLS,
         )
         self.assertEqual(
             [tool.__name__ for tool in enabled_tools],
             [
-                "get_weather",
-                "search_web",
+                *BASE_TOOLS,
                 "draft_email",
                 "confirm_email_send",
                 "cancel_pending_email",

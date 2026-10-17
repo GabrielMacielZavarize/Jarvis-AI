@@ -50,12 +50,14 @@ def create_token(
     name: str,
     agent_name: str,
     ttl_minutes: int,
+    api_key: str | None = None,
+    api_secret: str | None = None,
 ) -> str:
     room_config = api.RoomConfiguration()
     room_config.agents.append(api.RoomAgentDispatch(agent_name=agent_name))
 
     token = (
-        api.AccessToken()
+        api.AccessToken(api_key, api_secret)
         .with_identity(identity)
         .with_name(name)
         .with_grants(

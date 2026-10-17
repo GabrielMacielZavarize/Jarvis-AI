@@ -6,3 +6,8 @@ livekit-plugins-noise-cancellation
 ddgs
 requests
 python-dotenv
+psutil
+tzdata
+fastapi
+uvicorn[standard]
+httpx

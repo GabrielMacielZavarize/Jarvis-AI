@@ -1,76 +1,109 @@
-# Jarvis
+# J.A.R.V.I.S. v2
 
-Assistente de voz em Python com LiveKit Agents, persona estilo Jarvis, tools úteis e arquitetura pronta para múltiplos providers.
+Assistente de voz em Python com persona inspirada no Jarvis do Homem de Ferro, agora com um **HUD holográfico 3D** no navegador: núcleo de energia que reage à voz, anéis rotativos, espectro de áudio, globo holográfico e painéis que se projetam quando o Jarvis usa uma ferramenta.
 
-Short English summary: this project is a portfolio-ready voice assistant built with LiveKit Agents, secure tool usage, and switchable model backends for Gemini or OpenAI-style providers.
+Short English summary: real-time voice assistant built on LiveKit Agents (Gemini Live or OpenAI Realtime) with a React Three Fiber holographic HUD. Tools push structured results to the HUD over the LiveKit data channel.
 
-## O que ele faz
+## O que tem de novo na v2
 
-- Conversa por voz em tempo real com persona fixa em PT-BR.
-- Pesquisa na web com DuckDuckGo via `ddgs`.
-- Consulta clima atual usando Open-Meteo.
-- Suporte a três backends por ambiente:
-  - `gemini-realtime`
-  - `openai-realtime`
-  - `openai-compatible-pipeline`
-- Fluxo seguro de email com rascunho, allowlist e confirmação explícita.
-- Cancelamento de ruído no áudio de entrada.
+- **HUD 3D estilo Homem de Ferro** (React + Three.js): núcleo de plasma com shader, anéis com marcações, órbitas giroscópicas, disco de partículas, grade holográfica e bloom. Tudo reage em tempo real ao áudio do Jarvis e do seu microfone e muda de cor conforme o estado (ouvindo, processando, respondendo).
+- **Painéis holográficos**: clima com previsão de 5 dias e globo que gira até a cidade, resultados de pesquisa, notícias, relógio mundial, diagnóstico do PC, timers com contagem regressiva, notas e rascunhos de email.
+- **Novas ferramentas**: notícias, horário em qualquer cidade, diagnóstico do computador, timers que o Jarvis anuncia em voz alta e um painel livre (`show_on_hud`) para listas e resumos.
+- **Transcrição ao vivo e comandos por texto** direto no HUD.
+- **Modo simulação** para explorar a interface sem credenciais.
+- **Um comando para subir tudo**: `python jarvis.py`.
+- Ferramentas de rede agora rodam fora do event loop (`asyncio.to_thread`), então o áudio não engasga durante uma pesquisa.
 
-## Status do projeto
+## Arquitetura
 
-| Item | Status |
-| --- | --- |
-| CLI do agente (`--help`, `dev`, `start`, `connect`, `console`, `download-files`) | Testado localmente |
-| Backend Gemini | Implementado e validado por smoke local |
-| Backend OpenAI Realtime | Implementado e validado por instanciamento local |
-| Backend compatível com OpenAI | Implementado em modo pipeline e documentado como best-effort |
-| Fluxo seguro de email | Implementado e coberto por testes |
-| Integração real com providers alternativos | Implementada, mas depende de credenciais externas para teste end-to-end |
+```mermaid
+flowchart LR
+    subgraph Navegador
+      HUD["HUD 3D<br/>React + Three.js"]
+    end
+    subgraph "Seu computador"
+      API["server.py<br/>FastAPI: UI + tokens"]
+      AGENT["agent.py<br/>LiveKit Agents worker"]
+    end
+    LK(("LiveKit Cloud"))
+    LLM["Gemini Live /<br/>OpenAI Realtime"]
+
+    HUD -- "POST /api/token" --> API
+    HUD <-- "áudio WebRTC +<br/>transcrições" --> LK
+    AGENT <-- "áudio + data channel<br/>(tópico jarvis.hud)" --> LK
+    AGENT <--> LLM
+```
+
+1. O navegador pede um token em `/api/token` (com despacho do agente `jarvis`).
+2. O worker (`agent.py`) entra na mesma sala do LiveKit e conversa por voz.
+3. Quando uma ferramenta roda, `hud.py` publica eventos JSON no tópico `jarvis.hud`; o HUD transforma cada evento em um painel holográfico.
+
+## Protocolos (ferramentas)
+
+| Código | Ferramenta | Exemplo de pedido |
+| --- | --- | --- |
+| WX-01 | `get_weather` — clima atual + previsão de 5 dias | "Como está o tempo em Lisboa?" |
+| NET-02 | `search_web` — pesquisa DuckDuckGo | "Pesquise sobre fusão nuclear." |
+| NWS-03 | `search_news` — manchetes recentes | "Últimas notícias de tecnologia." |
+| CHR-04 | `get_current_time` — hora local ou de qualquer cidade | "Que horas são em Tóquio?" |
+| SYS-05 | `run_diagnostics` — CPU, RAM, disco, bateria, uptime | "Rode um diagnóstico do sistema." |
+| TMR-06 | `set_timer` — contagem regressiva com aviso falado | "Timer de 10 minutos pro café." |
+| HUD-07 | `show_on_hud` — painel com listas, passos, resumos | "Mostre os passos no painel." |
+| COM-08 | `draft_email` / `confirm_email_send` / `cancel_pending_email` | "Escreva um email para…" |
 
 ## Pré-requisitos
 
 - Python 3.10+
-- PortAudio instalado no sistema para `console`
-- Conta LiveKit Cloud para `dev`, `start` e `connect`
-- Uma das credenciais abaixo:
-  - `GOOGLE_API_KEY` para `gemini-realtime`
-  - `OPENAI_API_KEY` para `openai-realtime`
-  - `OPENAI_API_KEY` e opcionalmente `OPENAI_BASE_URL` para `openai-compatible-pipeline`
-- Gmail com App Password apenas se você quiser habilitar envio de email
+- Node.js 20+ (para compilar o HUD)
+- Conta no [LiveKit Cloud](https://cloud.livekit.io) (gratuita para começar)
+- Uma chave de modelo:
+  - `GOOGLE_API_KEY` para `gemini-realtime` (padrão)
+  - `OPENAI_API_KEY` para `openai-realtime` ou `openai-compatible-pipeline`
+- PortAudio apenas se quiser usar o modo `console` no terminal
 
 ## Instalação
 
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/GabrielMacielZavarize/Jarvis-AI.git
+cd Jarvis-AI
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+copy .env.example .env
+```
+
+### Linux / macOS
+
 ```bash
-git clone https://github.com/seu-usuario/jarvis.git
-cd jarvis
-python3 -m venv venv
-source venv/bin/activate
+git clone https://github.com/GabrielMacielZavarize/Jarvis-AI.git
+cd Jarvis-AI
+python3 -m venv .venv
+source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### PortAudio
+Depois preencha o `.env` (veja abaixo) e baixe os modelos locais usados pelo LiveKit:
 
 ```bash
-# Ubuntu / Debian
-sudo apt-get install -y libportaudio2 portaudio19-dev
-
-# Fedora
-sudo dnf install portaudio portaudio-devel
-
-# macOS
-brew install portaudio
+python agent.py download-files
 ```
 
-### Modelos locais usados pelo LiveKit
+## Configuração
 
-```bash
-python3 agent.py download-files
+### LiveKit (obrigatório para conversar por voz)
+
+Crie um projeto no LiveKit Cloud e copie as credenciais em **Settings → Keys**:
+
+```env
+LIVEKIT_URL=wss://seu-projeto.livekit.cloud
+LIVEKIT_API_KEY=sua-api-key
+LIVEKIT_API_SECRET=seu-api-secret
 ```
 
-## Configuração rápida
-
-### Opção 1: Gemini Realtime
+### Opção 1: Gemini Live (padrão)
 
 ```env
 JARVIS_BACKEND=gemini-realtime
@@ -100,93 +133,77 @@ OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=ash
 ```
 
-### LiveKit
-
-Essas variáveis são necessárias para `dev`, `start` e `connect`:
-
-```env
-LIVEKIT_URL=wss://seu-projeto.livekit.cloud
-LIVEKIT_API_KEY=sua-api-key
-LIVEKIT_API_SECRET=seu-api-secret
-```
-
-## Matriz de backends
-
-| Backend | Tipo | Variáveis obrigatórias | Observações |
-| --- | --- | --- | --- |
-| `gemini-realtime` | Realtime | `GOOGLE_API_KEY` | Use um modelo Live, por padrão `gemini-2.5-flash-native-audio-preview-12-2025` |
-| `openai-realtime` | Realtime | `OPENAI_API_KEY` | Pode usar `OPENAI_BASE_URL` |
-| `openai-compatible-pipeline` | Pipeline | `OPENAI_API_KEY` | Best-effort para endpoints compatíveis |
-
-## Comandos principais
-
-### Checagem de setup
+Confira tudo com:
 
 ```bash
-python3 doctor.py
+python doctor.py
 ```
 
-### Gerar token para o playground
+## Rodando
+
+### Tudo de uma vez
 
 ```bash
-python3 generate_playground_token.py
+python jarvis.py
 ```
 
-Exemplo com sala fixa:
+Compila o HUD na primeira execução, sobe o worker do agente (`agent.py dev`) e o servidor em `http://127.0.0.1:8000`, e abre o navegador. Clique no núcleo (ou pressione **Espaço**) para iniciar o link e fale normalmente.
+
+Opções úteis:
+
+| Comando | O que faz |
+| --- | --- |
+| `python jarvis.py --no-agent` | Só o HUD (útil para o modo simulação) |
+| `python jarvis.py --agent-mode start` | Worker sem hot reload |
+| `python jarvis.py --port 8080 --no-browser` | Outra porta, sem abrir o navegador |
+| `python jarvis.py --rebuild` | Recompila a interface |
+
+### Desenvolvimento do HUD (hot reload)
+
+Em três terminais:
 
 ```bash
-python3 generate_playground_token.py --room jarvis-demo --name Gabriel
+python server.py
 ```
-
-### Ajuda da CLI
 
 ```bash
-python3 agent.py --help
+python agent.py dev
 ```
-
-### Console
 
 ```bash
-python3 agent.py console
+cd web
+npm install
+npm run dev
 ```
 
-Modo local com microfone e saída de áudio.
+Abra `http://localhost:5173` — o Vite encaminha `/api` para o `server.py`.
 
-### Dev
+### Modo simulação
+
+Sem LiveKit configurado, o botão **Simulação** roda uma conversa roteirizada com áudio sintético para você ver todos os estados e painéis. Os dados exibidos nesse modo são fictícios e o HUD mostra o selo "SIMULAÇÃO".
+
+### Atalhos do HUD
+
+| Tecla | Ação |
+| --- | --- |
+| `Espaço` | Inicializar o link |
+| `M` | Silenciar / ativar microfone |
+| `/` | Focar a linha de comando de texto |
+| `Esc` | Limpar os painéis holográficos |
+
+### Outros modos do agente
 
 ```bash
-python3 agent.py dev
+python agent.py console          # voz direto no terminal (sem HUD)
+python agent.py connect --room minha-sala
+python generate_playground_token.py --room jarvis-demo --name Gabriel   # LiveKit Agents Playground
 ```
 
-Use com o Playground do LiveKit Cloud.
+## Segurança
 
-### Start
-
-```bash
-python3 agent.py start
-```
-
-Inicia o worker sem auto-reload.
-
-### Connect
-
-```bash
-python3 agent.py connect --room minha-sala
-```
-
-Conecta o agente a uma sala existente.
-
-### Download de assets do LiveKit
-
-```bash
-python3 agent.py download-files
-```
-
-## Segurança do email
-
-O envio de email fica desligado por padrão.
-
-Para ativar:
+- O servidor do HUD escuta apenas em `127.0.0.1` por padrão: o endpoint de token não tem autenticação, então não o exponha na rede sem colocar uma camada de acesso na frente.
+- O `.env` nunca é enviado ao navegador; `/api/status` só informa se cada item está configurado.
+- Email continua desligado por padrão. Para ativar:
 
 ```env
 JARVIS_ENABLE_EMAIL_TOOL=true
@@ -195,76 +212,70 @@ GMAIL_APP_PASSWORD="xxxx xxxx xxxx xxxx"
 JARVIS_ALLOWED_EMAILS=voce@dominio.com,time@dominio.com
 ```
 
-Regras atuais:
+Regras do email:
 
-- O email nunca é enviado no primeiro pedido.
-- O agente cria um rascunho e gera um código de 6 dígitos.
+- Nunca é enviado no primeiro pedido: o agente cria um rascunho com um código de 6 dígitos (que também aparece no HUD).
 - O envio só acontece se o último comando do usuário for exatamente `confirmar <codigo>`.
 - Se `JARVIS_ALLOWED_EMAILS` estiver vazio, apenas `GMAIL_USER` pode receber emails.
-- O corpo do email e credenciais não são registrados em logs.
+- O corpo do email e as credenciais não são registrados em logs.
 
 ## Testes
 
 ```bash
-python3 -m unittest discover -s tests -v
+python -m unittest discover -s tests -v
+cd web && npm run build
 ```
 
-Cobertura desta fase:
+Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email e o servidor de tokens (formato do endpoint e sanitização).
 
-- validação de settings
-- seleção de backend
-- registro dinâmico de tools
-- clima
-- busca web
-- fluxo de email com confirmação e cancelamento
+## Estrutura
+
+```
+agent.py              Worker LiveKit (entrypoint do agente)
+backends.py           Gemini / OpenAI Realtime / pipeline compatível
+tools.py              Ferramentas do Jarvis
+hud.py                Ponte ferramentas → HUD (data channel "jarvis.hud")
+prompts.py            Persona e saudação por horário
+server.py             FastAPI: serve web/dist e emite tokens LiveKit
+jarvis.py             Inicializador: HUD + agente em um comando
+doctor.py             Checagem de configuração
+web/
+  src/scene/          Cena 3D (núcleo, anéis, espectro, órbitas, partículas, grade)
+  src/components/     Painéis do HUD e cartões holográficos
+  src/hooks/          Sessão LiveKit, simulação, status do servidor
+  src/lib/            Estado do HUD, áudio, catálogo de protocolos
+```
 
 ## Troubleshooting
 
-### `python` não existe no terminal
+### `Python was not found` no Windows
 
-Use `python3` nos comandos.
+O comando `python` pode ser só o atalho da Microsoft Store. Instale o Python (por exemplo `winget install Python.Python.3.12`) e use o venv: `.venv\Scripts\python.exe`.
 
-### `ModuleNotFoundError: No module named 'livekit'`
+### O HUD diz "Configuração pendente"
 
-Ative o ambiente virtual e instale as dependências:
+O painel **Sistema** lista exatamente o que falta no `.env`. O servidor relê o `.env` a cada requisição, então basta salvar o arquivo e aguardar alguns segundos.
 
-```bash
-source venv/bin/activate
-python3 -m pip install -r requirements.txt
-```
+### O link conecta mas o Jarvis não responde
 
-### `Configuração inválida para o backend`
+O worker precisa estar rodando (`python jarvis.py` já sobe, ou `python agent.py dev`). O HUD avisa depois de alguns segundos se nenhum agente entrar na sala.
 
-Rode:
+### O microfone não funciona
 
-```bash
-python3 doctor.py
-```
-
-O script informa exatamente quais variáveis estão faltando.
+O navegador só libera o microfone em `localhost`/`127.0.0.1` ou HTTPS. Verifique também a permissão de microfone do site.
 
 ### `models/... is not found for API version v1beta`
 
-Isso quase sempre significa que `GOOGLE_MODEL` aponta para um modelo que não é Live. Para o backend `gemini-realtime`, prefira:
-
-```env
-GOOGLE_MODEL=gemini-2.5-flash-native-audio-preview-12-2025
-```
-
-Evite usar modelos como `gemini-2.5-flash-lite` nesse modo, porque eles não suportam a sessão bidirecional de áudio do Gemini Live.
-
-### `dev`, `start` ou `connect` não sobem
-
-Confira `LIVEKIT_URL`, `LIVEKIT_API_KEY` e `LIVEKIT_API_SECRET`.
+`GOOGLE_MODEL` aponta para um modelo que não é Live. No backend `gemini-realtime`, use um modelo com `-live-` ou `-native-audio-` no nome.
 
 ### O provider compatível com OpenAI falhou
 
-Esse modo é `pipeline-first` e tratado como best-effort. Confirme se seu endpoint realmente suporta os paths usados por chat, STT e TTS.
+Esse modo é `pipeline-first` e best-effort. Confirme se o endpoint suporta os paths de chat, STT e TTS.
 
 ## Referências
 
 - [LiveKit Agents](https://docs.livekit.io/agents/)
-- [LiveKit Realtime Models](https://docs.livekit.io/agents/models/realtime/)
-- [LiveKit OpenAI Plugin](https://docs.livekit.io/agents/models/realtime/plugins/openai/)
+- [LiveKit — Token endpoint](https://docs.livekit.io/frontends/build/authentication/endpoint/)
 - [Google Gemini Live API](https://ai.google.dev/gemini-api/docs/live)
+- [React Three Fiber](https://r3f.docs.pmnd.rs/)
 - [Tutorial original que inspirou o projeto](https://youtu.be/An4NwL8QSQ4)

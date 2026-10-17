@@ -1,0 +1,153 @@
+export type JarvisMode =
+  | 'offline'
+  | 'standby'
+  | 'connecting'
+  | 'listening'
+  | 'thinking'
+  | 'speaking'
+  | 'error';
+
+export type CardKind =
+  | 'weather'
+  | 'search'
+  | 'news'
+  | 'time'
+  | 'diagnostics'
+  | 'timer'
+  | 'note'
+  | 'email';
+
+export interface WeatherDay {
+  date: string;
+  code: number;
+  label: string;
+  max: number;
+  min: number;
+  rain?: number | null;
+}
+
+export interface WeatherData {
+  location: string;
+  country?: string | null;
+  latitude: number;
+  longitude: number;
+  timezone?: string | null;
+  current: {
+    temperature: number;
+    feels_like?: number | null;
+    humidity: number;
+    wind: number;
+    code: number;
+    label: string;
+    is_day?: number;
+  };
+  daily: WeatherDay[];
+}
+
+export interface SearchData {
+  query: string;
+  results: { title: string; url: string; snippet: string }[];
+}
+
+export interface NewsData {
+  topic: string;
+  items: {
+    title: string;
+    url: string;
+    source?: string;
+    date?: string | null;
+    snippet?: string;
+    image?: string | null;
+  }[];
+}
+
+export interface TimeData {
+  location: string;
+  timezone: string;
+  iso: string;
+  utc_offset: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface DiagnosticsData {
+  hostname: string;
+  os: string;
+  cpu: { percent: number; cores: number; per_core: number[]; freq_mhz?: number | null };
+  memory: { percent: number; used_gb: number; total_gb: number };
+  disk: { mount: string; percent: number; used_gb: number; total_gb: number };
+  battery?: { percent: number; plugged: boolean } | null;
+  uptime_s: number;
+  processes: number;
+  net?: { sent_mb: number; recv_mb: number } | null;
+}
+
+export interface TimerData {
+  id: string;
+  label: string;
+  duration_s?: number;
+  ends_at?: number;
+  status: 'running' | 'done';
+}
+
+export interface NoteData {
+  title: string;
+  content: string;
+}
+
+export interface EmailData {
+  status: 'draft' | 'sent' | 'cancelled';
+  to: string;
+  cc?: string | null;
+  subject?: string;
+  preview?: string;
+  code?: string;
+}
+
+export interface CardDataMap {
+  weather: WeatherData;
+  search: SearchData;
+  news: NewsData;
+  time: TimeData;
+  diagnostics: DiagnosticsData;
+  timer: TimerData;
+  note: NoteData;
+  email: EmailData;
+}
+
+export type HudCard = {
+  [K in CardKind]: { id: string; kind: K; data: CardDataMap[K]; createdAt: number };
+}[CardKind];
+
+export type ToolStatus = 'running' | 'done' | 'error';
+
+export type HudEvent =
+  | { type: 'tool'; name: string; status: ToolStatus; detail?: string | null; ts: number }
+  | { [K in CardKind]: { type: 'card'; kind: K; data: CardDataMap[K]; ts: number } }[CardKind];
+
+export type LogLevel = 'info' | 'tool' | 'ok' | 'warn' | 'error';
+
+export interface LogEntry {
+  id: string;
+  ts: number;
+  level: LogLevel;
+  text: string;
+}
+
+export interface ChatLine {
+  id: string;
+  role: 'user' | 'agent';
+  text: string;
+  ts: number;
+}
+
+export interface ServerStatus {
+  version: string;
+  ready: boolean;
+  backend?: string;
+  model?: string;
+  livekit_configured: boolean;
+  email_enabled?: boolean;
+  tools?: string[];
+  errors: string[];
+}
