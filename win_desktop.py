@@ -17,9 +17,12 @@ import psutil
 
 IS_WINDOWS = sys.platform == "win32"
 
+SW_SHOWNORMAL = 1
+SW_SHOWMINIMIZED = 2
 SW_MAXIMIZE = 3
 SW_MINIMIZE = 6
 SW_RESTORE = 9
+WPF_RESTORETOMAXIMIZED = 0x0002
 WM_CLOSE = 0x0010
 SWP_NOZORDER = 0x0004
 SWP_NOACTIVATE = 0x0010
@@ -62,6 +65,23 @@ class Window:
     pid: int
 
 
+@dataclass(frozen=True)
+class Placement:
+    """Where a window sits (Win32 WINDOWPLACEMENT), enough to put it back exactly."""
+
+    flags: int
+    show_cmd: int
+    min_pos: tuple[int, int]
+    max_pos: tuple[int, int]
+    normal: tuple[int, int, int, int]
+
+    @property
+    def maximized(self) -> bool:
+        if self.show_cmd == SW_SHOWMINIMIZED:
+            return bool(self.flags & WPF_RESTORETOMAXIMIZED)
+        return self.show_cmd == SW_MAXIMIZE
+
+
 @contextmanager
 def physical_pixels() -> Iterator[None]:
     """Run Win32 calls with per-monitor DPI awareness (real pixel coordinates)."""
@@ -90,6 +110,16 @@ if IS_WINDOWS:
             ("rcWork", _RECT),
             ("dwFlags", wintypes.DWORD),
             ("szDevice", ctypes.c_wchar * 32),
+        ]
+
+    class _WINDOWPLACEMENT(ctypes.Structure):
+        _fields_ = [
+            ("length", wintypes.UINT),
+            ("flags", wintypes.UINT),
+            ("showCmd", wintypes.UINT),
+            ("ptMinPosition", wintypes.POINT),
+            ("ptMaxPosition", wintypes.POINT),
+            ("rcNormalPosition", _RECT),
         ]
 
     _MONITOR_ENUM_PROC = ctypes.WINFUNCTYPE(
@@ -148,6 +178,21 @@ def describe_monitors(items: list[Monitor] | None = None) -> str:
     return "; ".join(parts)
 
 
+def monitor_for_rect(rect: tuple[int, int, int, int], items: list[Monitor]) -> Monitor | None:
+    """Monitor holding the rectangle's center, else the one it overlaps the most."""
+    left, top, right, bottom = rect
+    cx, cy = (left + right) // 2, (top + bottom) // 2
+    for m in items:
+        if m.left <= cx < m.right and m.top <= cy < m.bottom:
+            return m
+
+    def overlap(m: Monitor) -> int:
+        return max(0, min(right, m.right) - max(left, m.left)) * max(0, min(bottom, m.bottom) - max(top, m.top))
+
+    best = max(items, key=overlap, default=None)
+    return best if best is not None and overlap(best) > 0 else None
+
+
 def _process_name(pid: int) -> str:
     try:
         return psutil.Process(pid).name().lower()
@@ -191,15 +236,20 @@ def windows() -> list[Window]:
     return found
 
 
-def foreground_title() -> str:
+def window_title(hwnd: int) -> str:
     if not IS_WINDOWS:
         return ""
     user32 = ctypes.windll.user32
-    hwnd = user32.GetForegroundWindow()
     length = user32.GetWindowTextLengthW(hwnd)
     buffer = ctypes.create_unicode_buffer(length + 1)
     user32.GetWindowTextW(hwnd, buffer, length + 1)
     return buffer.value.replace("​", "").strip()
+
+
+def foreground_title() -> str:
+    if not IS_WINDOWS:
+        return ""
+    return window_title(ctypes.windll.user32.GetForegroundWindow())
 
 
 def bring_to_front(hwnd: int) -> bool:
@@ -231,6 +281,46 @@ def window_rect(hwnd: int) -> tuple[int, int, int, int]:
     with physical_pixels():
         ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
     return rect.left, rect.top, rect.right, rect.bottom
+
+
+def window_monitor(hwnd: int) -> Monitor | None:
+    """Monitor the window is on right now (None when minimized or gone)."""
+    if not ctypes.windll.user32.IsWindow(hwnd):
+        return None
+    return monitor_for_rect(window_rect(hwnd), monitors())
+
+
+def get_placement(hwnd: int) -> Placement | None:
+    placement = _WINDOWPLACEMENT()
+    placement.length = ctypes.sizeof(placement)
+    with physical_pixels():
+        if not ctypes.windll.user32.GetWindowPlacement(hwnd, ctypes.byref(placement)):
+            return None
+    normal = placement.rcNormalPosition
+    return Placement(
+        flags=placement.flags,
+        show_cmd=placement.showCmd,
+        min_pos=(placement.ptMinPosition.x, placement.ptMinPosition.y),
+        max_pos=(placement.ptMaxPosition.x, placement.ptMaxPosition.y),
+        normal=(normal.left, normal.top, normal.right, normal.bottom),
+    )
+
+
+def restore_placement(hwnd: int, saved: Placement) -> None:
+    """Put a window back where `saved` says (monitor, size, maximized), visible and focused."""
+    placement = _WINDOWPLACEMENT()
+    placement.length = ctypes.sizeof(placement)
+    placement.flags = 0
+    placement.showCmd = SW_MAXIMIZE if saved.maximized else SW_SHOWNORMAL
+    placement.ptMinPosition = wintypes.POINT(*saved.min_pos)
+    placement.ptMaxPosition = wintypes.POINT(*saved.max_pos)
+    placement.rcNormalPosition = _RECT(*saved.normal)
+    user32 = ctypes.windll.user32
+    with physical_pixels():
+        # Sai do maximizado no monitor atual antes, senão o Windows pode não trocar de tela.
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        user32.SetWindowPlacement(hwnd, ctypes.byref(placement))
+    bring_to_front(hwnd)
 
 
 def move_to_monitor(hwnd: int, monitor: Monitor, maximize: bool | None = None) -> None:
