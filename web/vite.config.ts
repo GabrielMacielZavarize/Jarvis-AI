@@ -6,7 +6,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
+      // JARVIS_API_URL lets a second dev copy talk to a server on another port.
+      '/api': process.env.JARVIS_API_URL ?? 'http://127.0.0.1:8000',
     },
   },
   build: {

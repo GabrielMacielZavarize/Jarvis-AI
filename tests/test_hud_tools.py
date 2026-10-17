@@ -7,12 +7,15 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from hud import HUD_TOPIC, publish_hud_event
+from livekit import rtc
+
+from hud import HUD_TOPIC, publish_hud_event, watch_user_voice
 from prompts import build_initial_reply_instruction, greeting_for
 from tools import (
     _TIMER_TASKS,
     _collect_diagnostics,
     _format_utc_offset,
+    close_hud_panels,
     get_current_time,
     get_weather,
     run_diagnostics,
@@ -60,6 +63,24 @@ class HudPublishTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(await publish_hud_event("tool", name="x", status="done"))
 
 
+class VoiceWatchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_logs_and_publishes_when_user_speaks(self) -> None:
+        session = rtc.EventEmitter()
+        watch_user_voice(session)
+        ctx, publish = fake_job_context()
+
+        with patch("hud.get_job_context", return_value=ctx), self.assertLogs("jarvis-hud", "INFO") as logs:
+            session.emit("user_state_changed", SimpleNamespace(new_state="speaking"))
+            session.emit("user_input_transcribed", SimpleNamespace(is_final=True, transcript="olá jarvis"))
+            session.emit("user_input_transcribed", SimpleNamespace(is_final=False, transcript="parcial"))
+            await asyncio.sleep(0)
+
+        self.assertEqual(published_events(publish)[0]["type"], "voice")
+        self.assertEqual(published_events(publish)[0]["state"], "speaking")
+        self.assertEqual(len(logs.output), 2)
+        self.assertIn("olá jarvis", logs.output[1])
+
+
 class WeatherCardTests(unittest.IsolatedAsyncioTestCase):
     @patch("tools.requests.get")
     async def test_weather_publishes_card_with_forecast(self, mock_get) -> None:
@@ -105,8 +126,9 @@ class WeatherCardTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Máx 21°C / Mín 14°C", result)
 
         events = published_events(publish)
-        self.assertEqual([e["type"] for e in events], ["tool", "card", "tool"])
-        card = events[1]
+        self.assertEqual([e["type"] for e in events], ["tool", "net", "card", "tool"])
+        self.assertIn("api.open-meteo.com", events[1]["hosts"])
+        card = events[2]
         self.assertEqual(card["kind"], "weather")
         self.assertEqual(card["data"]["location"], "Porto Alegre")
         self.assertEqual(len(card["data"]["daily"]), 2)
@@ -233,6 +255,29 @@ class ShowOnHudTests(unittest.IsolatedAsyncioTestCase):
         event = published_events(publish)[0]
         self.assertEqual(event["kind"], "note")
         self.assertEqual(event["data"]["content"], "a\nb")
+
+
+class HudPanelToolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_close_specific_panels(self) -> None:
+        ctx, publish = fake_job_context()
+        with patch("hud.get_job_context", return_value=ctx):
+            result = await close_hud_panels(FakeRunContext(), panels=["weather", "search", "bogus"])
+
+        event = published_events(publish)[0]
+        self.assertEqual((event["type"], event["action"], event["kinds"]), ("hud", "close", ["weather", "search"]))
+        self.assertEqual(result, "Painéis fechados: clima, pesquisa.")
+
+    async def test_close_all_panels(self) -> None:
+        ctx, publish = fake_job_context()
+        with patch("hud.get_job_context", return_value=ctx):
+            result = await close_hud_panels(FakeRunContext(), close_all=True)
+
+        self.assertEqual(published_events(publish)[0]["action"], "clear")
+        self.assertIn("Todos os painéis", result)
+
+    async def test_does_not_claim_success_without_hud(self) -> None:
+        result = await close_hud_panels(FakeRunContext(), panels=["weather"])
+        self.assertEqual(result, "O HUD não está conectado.")
 
 
 class PromptTests(unittest.TestCase):

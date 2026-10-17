@@ -11,6 +11,9 @@ Short English summary: real-time voice assistant built on LiveKit Agents (Gemini
 - **Novas ferramentas**: notícias, horário em qualquer cidade, diagnóstico do computador, timers que o Jarvis anuncia em voz alta e um painel livre (`show_on_hud`) para listas e resumos.
 - **Transcrição ao vivo e comandos por texto** direto no HUD.
 - **Modo simulação** para explorar a interface sem credenciais.
+- **Controle do computador** (opcional): abrir e fechar apps, sites, YouTube e streamings, abas do navegador, mídia, volume, pastas, captura e bloqueio de tela.
+- **Globo 3D com conexões**: enquanto pensa ou busca algo, o núcleo vira um globo holográfico que desenha arcos da sua cidade até os serviços consultados.
+- **Seletor de microfone** e diagnóstico de captação no HUD.
 - **Um comando para subir tudo**: `python jarvis.py`.
 - Ferramentas de rede agora rodam fora do event loop (`asyncio.to_thread`), então o áudio não engasga durante uma pesquisa.
 
@@ -49,7 +52,14 @@ flowchart LR
 | SYS-05 | `run_diagnostics` — CPU, RAM, disco, bateria, uptime | "Rode um diagnóstico do sistema." |
 | TMR-06 | `set_timer` — contagem regressiva com aviso falado | "Timer de 10 minutos pro café." |
 | HUD-07 | `show_on_hud` — painel com listas, passos, resumos | "Mostre os passos no painel." |
-| COM-08 | `draft_email` / `confirm_email_send` / `cancel_pending_email` | "Escreva um email para…" |
+| HUD-07 | `close_hud_panels` — fecha painéis do HUD | "Feche o clima e a pesquisa." |
+| MED-08 | `play_youtube` / `open_streaming` / `media_control` | "Toque lo-fi no YouTube." · "Pausa." |
+| PC-09 | `open_app` / `close_app` / `open_folder` / `lock_computer` / `take_screenshot` | "Abra o Spotify." · "Bloqueie a tela." |
+| WEB-10 | `open_website` / `browser_tab` | "Abra essa receita." · "Feche a aba do YouTube." |
+| AUD-11 | `set_volume` | "Volume em 30%." |
+| COM-12 | `draft_email` / `confirm_email_send` / `cancel_pending_email` | "Escreva um email para…" |
+
+Os protocolos MED, PC, WEB e AUD só existem com `JARVIS_ENABLE_PC_CONTROL=true`.
 
 ## Pré-requisitos
 
@@ -147,6 +157,15 @@ OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=ash
 ```
 
+### Controle do computador e globo 3D
+
+```env
+JARVIS_ENABLE_PC_CONTROL=true
+JARVIS_HOME_CITY=Criciúma
+```
+
+`JARVIS_HOME_CITY` define de onde saem as conexões no globo. Sem ela, o HUD usa uma cidade aproximada pelo fuso horário do navegador. Os destinos dos arcos são aproximados (sede ou região de datacenter conhecida, ou o país do domínio): é uma visualização, não um traceroute.
+
 Confira tudo com:
 
 ```bash
@@ -215,6 +234,19 @@ python generate_playground_token.py --room jarvis-demo --name Gabriel   # LiveKi
 
 ## Segurança
 
+### Controle do computador
+
+O Jarvis lê páginas, pesquisas e notícias, e um texto malicioso pode tentar dar ordens a ele (prompt injection). Por isso ele **não tem terminal nem execução de comandos livres**. Em vez disso, existe um conjunto fechado de ações visíveis e reversíveis:
+
+- Abre apps pelo Menu Iniciar e **ignora instaladores e desinstaladores**.
+- Fecha apps como o botão X (`taskkill` sem `/F`). Processos do sistema, o terminal e o Python que rodam o Jarvis, e o navegador onde o HUD está aberto são protegidos.
+- Só abre endereços `http`/`https`.
+- Nunca lê arquivos, senhas, área de transferência ou configurações de rede.
+- O prompt instrui a ignorar ordens vindas de conteúdo da internet; ações só acontecem a pedido seu.
+- Toda ação aparece no registro do HUD e no terminal.
+
+### Rede e credenciais
+
 - O servidor do HUD escuta apenas em `127.0.0.1` por padrão: o endpoint de token não tem autenticação, então não o exponha na rede sem colocar uma camada de acesso na frente.
 - O `.env` nunca é enviado ao navegador; `/api/status` só informa se cada item está configurado.
 - Email continua desligado por padrão. Para ativar:
@@ -237,7 +269,7 @@ Regras do email:
 
 ```bash
 python -m unittest discover -s tests -v
-cd web && npm run build
+cd web && npm test && npm run build
 ```
 
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email e o servidor de tokens (formato do endpoint e sanitização).
@@ -249,6 +281,7 @@ agent.py              Worker LiveKit (entrypoint do agente)
 backends.py           Gemini / OpenAI Realtime / pipeline compatível
 tools.py              Ferramentas do Jarvis
 hud.py                Ponte ferramentas → HUD (data channel "jarvis.hud")
+pc_control.py         Ações seguras no computador (apps, sites, abas, mídia, volume)
 prompts.py            Persona e saudação por horário
 server.py             FastAPI: serve web/dist e emite tokens LiveKit
 jarvis.py             Inicializador: HUD + agente em um comando
@@ -276,7 +309,11 @@ O worker precisa estar rodando (`python jarvis.py` já sobe, ou `python agent.py
 
 ### O microfone não funciona
 
-O navegador só libera o microfone em `localhost`/`127.0.0.1` ou HTTPS. Verifique também a permissão de microfone do site.
+O navegador só libera o microfone em `localhost`/`127.0.0.1` ou HTTPS. No painel **Sistema** do HUD, escolha o microfone certo e veja se o medidor "Entrada de voz" se mexe. Quando o agente detecta sua voz, o painel mostra "Ouvindo sua voz agora" e o terminal registra `Voz do usuário detectada.`
+
+### O Jarvis não consegue focar a janela do navegador
+
+O Windows às vezes impede que outro programa traga uma janela para frente. Se o comando de abas falhar, clique uma vez no navegador e peça de novo.
 
 ### `models/... is not found for API version v1beta`
 

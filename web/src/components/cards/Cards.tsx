@@ -4,6 +4,7 @@ import { formatDuration, formatUptime, hostnameOf, relativeTime, weekdayShort } 
 import type {
   DiagnosticsData,
   EmailData,
+  MediaData,
   NewsData,
   NoteData,
   SearchData,
@@ -190,6 +191,17 @@ export function DiagnosticsBody({ data }: { data: DiagnosticsData }) {
           <i key={index} style={{ height: `${Math.max(4, value)}%` }} />
         ))}
       </div>
+      {data.top && data.top.length > 0 && (
+        <ol className="procs" aria-label="Processos que mais pesam">
+          {data.top.map((proc) => (
+            <li key={proc.name}>
+              <span>{proc.name}</span>
+              <b>{proc.cpu}%</b>
+              <i>{proc.mem_mb >= 1024 ? `${(proc.mem_mb / 1024).toFixed(1)} GB` : `${proc.mem_mb} MB`}</i>
+            </li>
+          ))}
+        </ol>
+      )}
       <div className="diag-facts">
         <span>
           <b>UPTIME</b>
@@ -301,6 +313,24 @@ export function NoteBody({ data }: { data: NoteData }) {
     return <div className="note">{ordered ? <ol>{items}</ol> : <ul>{items}</ul>}</div>;
   }
   return <div className="note">{data.content}</div>;
+}
+
+export function MediaBody({ data }: { data: MediaData }) {
+  return (
+    <div className="media">
+      {data.thumbnail ? (
+        <a className="media__thumb" href={data.url} target="_blank" rel="noreferrer noopener">
+          <img src={data.thumbnail} alt="" loading="lazy" />
+          <span className="media__play" aria-hidden />
+        </a>
+      ) : null}
+      <div className="card__sub">{data.service}</div>
+      <a className="media__title" href={data.url} target="_blank" rel="noreferrer noopener">
+        {data.title}
+      </a>
+      {data.channel && <div className="media__channel">{data.channel}</div>}
+    </div>
+  );
 }
 
 const EMAIL_STATUS: Record<EmailData['status'], [string, string]> = {

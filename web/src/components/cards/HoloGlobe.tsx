@@ -1,44 +1,7 @@
-import { geoEquirectangular, geoPath } from 'd3-geo';
 import { useEffect, useRef } from 'react';
-import { feature } from 'topojson-client';
-import type { GeometryCollection, Topology } from 'topojson-specification';
-import land110m from 'world-atlas/land-110m.json';
+import { landDots } from '../../lib/landDots';
 
 const DEG = Math.PI / 180;
-
-/** Land dots (lon, lat in radians), sampled once from a rasterised world map. */
-let landDots: Float32Array | null = null;
-
-function buildLandDots(): Float32Array {
-  const width = 720;
-  const height = 360;
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return new Float32Array();
-
-  const topology = land110m as unknown as Topology<{ land: GeometryCollection }>;
-  const land = feature(topology, topology.objects.land);
-  const projection = geoEquirectangular().scale(width / (2 * Math.PI)).translate([width / 2, height / 2]);
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  geoPath(projection, ctx)(land);
-  ctx.fill();
-  const pixels = ctx.getImageData(0, 0, width, height).data;
-
-  const dots: number[] = [];
-  const step = 2.4;
-  for (let lat = -84; lat <= 84; lat += step) {
-    const lonStep = step / Math.max(0.2, Math.cos(lat * DEG));
-    for (let lon = -180; lon < 180; lon += lonStep) {
-      const x = Math.floor(((lon + 180) / 360) * width);
-      const y = Math.floor(((90 - lat) / 180) * height);
-      if (pixels[(y * width + x) * 4 + 3] > 128) dots.push(lon * DEG, lat * DEG);
-    }
-  }
-  return new Float32Array(dots);
-}
 
 interface HoloGlobeProps {
   latitude: number;
@@ -52,8 +15,7 @@ export function HoloGlobe({ latitude, longitude, size = 128 }: HoloGlobeProps) {
   const view = useRef({ lon: (longitude + 140) * DEG, lat: 0 });
 
   useEffect(() => {
-    landDots ??= buildLandDots();
-    const dots = landDots;
+    const dots = landDots(2.4);
     const el = canvas.current;
     const ctx = el?.getContext('2d');
     if (!el || !ctx) return;

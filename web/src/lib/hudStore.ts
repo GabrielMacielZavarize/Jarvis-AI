@@ -1,8 +1,12 @@
 import { create } from 'zustand';
-import type { CardDataMap, CardKind, HudCard, JarvisMode, LogEntry, LogLevel } from './types';
+import { DEFAULT_HOME, locateHost } from './geo';
+import type { CardDataMap, CardKind, GeoPoint, HudCard, JarvisMode, LinkKind, LogEntry, LogLevel, NetLink } from './types';
 
 const MAX_CARDS = 4;
 const MAX_LOG = 40;
+const MAX_LINKS = 14;
+const MAX_VOICE_STARTS = 60;
+const LINK_TTL: Record<LinkKind, number> = { request: 5200, source: 6500, model: 3800, link: 4200 };
 
 let counter = 0;
 const nextId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}`;
@@ -18,11 +22,24 @@ interface HudState {
   mode: JarvisMode;
   activeTool: string | null;
   demo: boolean;
+  /** Last time the agent reported hearing the user's voice. */
+  userHeardAt: number | null;
+  /** Client-side times at which the user started speaking (for transcript ordering). */
+  voiceStarts: number[];
+  home: GeoPoint;
+  links: NetLink[];
   cards: (HudCard & { key: string })[];
   log: LogEntry[];
   setMode: (mode: JarvisMode) => void;
   setActiveTool: (name: string | null) => void;
   setDemo: (demo: boolean) => void;
+  setUserHeardAt: (ts: number | null) => void;
+  addVoiceStart: (ts: number) => void;
+  resetVoice: () => void;
+  setHome: (home: GeoPoint) => void;
+  addLinks: (hosts: string[], kind: LinkKind) => void;
+  pruneLinks: () => void;
+  closeCards: (kinds: CardKind[]) => void;
   pushCard: <K extends CardKind>(kind: K, data: CardDataMap[K]) => void;
   dismissCard: (id: string) => void;
   clearCards: () => void;
@@ -34,11 +51,46 @@ export const useHud = create<HudState>((set) => ({
   mode: 'standby',
   activeTool: null,
   demo: false,
+  userHeardAt: null,
+  voiceStarts: [],
+  home: DEFAULT_HOME,
+  links: [],
   cards: [],
   log: [],
   setMode: (mode) => set((s) => (s.mode === mode ? s : { mode })),
   setActiveTool: (activeTool) => set({ activeTool }),
   setDemo: (demo) => set({ demo }),
+  setUserHeardAt: (userHeardAt) => set({ userHeardAt }),
+  addVoiceStart: (ts) => set((s) => ({ voiceStarts: [...s.voiceStarts, ts].slice(-MAX_VOICE_STARTS) })),
+  resetVoice: () => set({ voiceStarts: [], userHeardAt: null }),
+  setHome: (home) => set({ home }),
+  addLinks: (hosts, kind) =>
+    set((s) => {
+      const now = Date.now();
+      const fresh = hosts.map((host, index) => {
+        const place = locateHost(host);
+        return {
+          id: nextId('link'),
+          host,
+          label: place.name,
+          lat: place.lat,
+          lon: place.lon,
+          kind,
+          // Staggered so several connections fan out instead of firing at once.
+          createdAt: now + index * 140,
+          ttl: LINK_TTL[kind],
+        };
+      });
+      const alive = s.links.filter((link) => now - link.createdAt < link.ttl + 1500);
+      return { links: [...alive, ...fresh].slice(-MAX_LINKS) };
+    }),
+  pruneLinks: () =>
+    set((s) => {
+      const now = Date.now();
+      const alive = s.links.filter((link) => now - link.createdAt < link.ttl + 1500);
+      return alive.length === s.links.length ? s : { links: alive };
+    }),
+  closeCards: (kinds) => set((s) => ({ cards: s.cards.filter((card) => !kinds.includes(card.kind)) })),
   pushCard: (kind, data) =>
     set((s) => {
       const key = cardKey(kind, data);

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useHud } from '../../lib/hudStore';
 import type { HudCard } from '../../lib/types';
 import { ProtocolsPanel } from '../ProtocolsPanel';
-import { DiagnosticsBody, EmailBody, NewsBody, NoteBody, SearchBody, TimeBody, TimerBody, WeatherBody } from './Cards';
+import { DiagnosticsBody, EmailBody, MediaBody, NewsBody, NoteBody, SearchBody, TimeBody, TimerBody, WeatherBody } from './Cards';
 import { HoloCard } from './HoloCard';
 
 function describe(card: HudCard): { code: string; title: string; body: ReactNode } {
@@ -24,6 +24,8 @@ function describe(card: HudCard): { code: string; title: string; body: ReactNode
       return { code: 'HUD-07', title: card.data.title, body: <NoteBody data={card.data} /> };
     case 'email':
       return { code: 'COM-08', title: 'Email', body: <EmailBody data={card.data} /> };
+    case 'media':
+      return { code: 'MED-09', title: 'Reprodução', body: <MediaBody data={card.data} /> };
   }
 }
 

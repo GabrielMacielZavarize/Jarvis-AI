@@ -7,7 +7,7 @@ from unittest.mock import patch
 import jwt
 from fastapi.testclient import TestClient
 
-from server import EMAIL_TOOL_NAMES, TOOL_NAMES, create_app
+from server import EMAIL_TOOL_NAMES, PC_TOOL_NAMES, TOOL_NAMES, create_app
 from settings import load_settings
 from tools import build_tools
 
@@ -99,3 +99,12 @@ class ServerTests(unittest.TestCase):
             [tool.__name__ for tool in build_tools(settings)],
             TOOL_NAMES + EMAIL_TOOL_NAMES,
         )
+
+    def test_pc_control_tools_are_opt_in(self) -> None:
+        settings = load_settings({"GOOGLE_API_KEY": "test-key", "JARVIS_ENABLE_PC_CONTROL": "true"})
+
+        self.assertEqual([tool.__name__ for tool in build_tools(settings)], TOOL_NAMES + PC_TOOL_NAMES)
+        body = self.client({**LIVEKIT_ENV, "JARVIS_ENABLE_PC_CONTROL": "true"}).get("/api/status").json()
+        self.assertTrue(body["pc_control"])
+        self.assertEqual(body["tools"], TOOL_NAMES + PC_TOOL_NAMES)
+        self.assertIsNone(body["home"])

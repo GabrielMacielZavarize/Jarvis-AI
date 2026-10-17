@@ -12,6 +12,7 @@ import secrets
 from pathlib import Path
 from typing import Any
 
+import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -36,6 +37,20 @@ TOOL_NAMES = [
     "run_diagnostics",
     "set_timer",
     "show_on_hud",
+    "close_hud_panels",
+]
+PC_TOOL_NAMES = [
+    "open_website",
+    "play_youtube",
+    "open_streaming",
+    "open_app",
+    "close_app",
+    "browser_tab",
+    "media_control",
+    "set_volume",
+    "open_folder",
+    "lock_computer",
+    "take_screenshot",
 ]
 EMAIL_TOOL_NAMES = ["draft_email", "confirm_email_send", "cancel_pending_email"]
 
@@ -70,6 +85,31 @@ def _active_model(settings: Settings) -> str:
     return settings.openai_llm_model
 
 
+_HOME_CACHE: dict[str, dict[str, Any]] = {}
+
+
+def _geocode_home(city: str) -> dict[str, Any] | None:
+    """Locate JARVIS_HOME_CITY once, so the 3D globe can draw connections from it."""
+    if city in _HOME_CACHE:
+        return _HOME_CACHE[city]
+    try:
+        response = requests.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={"name": city, "count": 1, "language": "pt"},
+            timeout=8,
+        )
+        response.raise_for_status()
+        results = response.json().get("results") or []
+    except (requests.RequestException, ValueError):
+        return None
+    if not results:
+        return None
+    place = results[0]
+    home = {"name": place.get("name", city), "latitude": place["latitude"], "longitude": place["longitude"]}
+    _HOME_CACHE[city] = home
+    return home
+
+
 def _requested_agent_name(body: TokenRequest) -> str:
     agents = body.room_config.agents if body.room_config else None
     if agents and agents[0].agent_name:
@@ -101,7 +141,11 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
 
         backend_errors = [*settings.backend_validation_errors(), *settings.email_validation_errors()]
         livekit_errors = settings.livekit_validation_errors()
-        tools = TOOL_NAMES + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
+        tools = (
+            TOOL_NAMES
+            + (PC_TOOL_NAMES if settings.pc_control_enabled else [])
+            + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
+        )
         return {
             "version": APP_VERSION,
             "ready": not backend_errors and not livekit_errors,
@@ -110,6 +154,8 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
             "livekit_configured": not livekit_errors,
             "email_enabled": settings.email_tool_enabled,
             "tools": tools,
+            "pc_control": settings.pc_control_enabled,
+            "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "errors": backend_errors + livekit_errors,
         }
 

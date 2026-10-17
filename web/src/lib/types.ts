@@ -15,7 +15,8 @@ export type CardKind =
   | 'diagnostics'
   | 'timer'
   | 'note'
-  | 'email';
+  | 'email'
+  | 'media';
 
 export interface WeatherDay {
   date: string;
@@ -79,6 +80,7 @@ export interface DiagnosticsData {
   battery?: { percent: number; plugged: boolean } | null;
   uptime_s: number;
   processes: number;
+  top?: { name: string; cpu: number; mem_mb: number }[];
   net?: { sent_mb: number; recv_mb: number } | null;
 }
 
@@ -104,6 +106,14 @@ export interface EmailData {
   code?: string;
 }
 
+export interface MediaData {
+  service: string;
+  title: string;
+  url: string;
+  channel?: string;
+  thumbnail?: string;
+}
+
 export interface CardDataMap {
   weather: WeatherData;
   search: SearchData;
@@ -113,6 +123,7 @@ export interface CardDataMap {
   timer: TimerData;
   note: NoteData;
   email: EmailData;
+  media: MediaData;
 }
 
 export type HudCard = {
@@ -123,7 +134,30 @@ export type ToolStatus = 'running' | 'done' | 'error';
 
 export type HudEvent =
   | { type: 'tool'; name: string; status: ToolStatus; detail?: string | null; ts: number }
+  | { type: 'voice'; state: 'speaking'; ts: number }
+  | { type: 'net'; hosts: string[]; kind: LinkKind; ts: number }
+  | { type: 'hud'; action: 'close' | 'clear'; kinds: CardKind[]; ts: number }
   | { [K in CardKind]: { type: 'card'; kind: K; data: CardDataMap[K]; ts: number } }[CardKind];
+
+export type LinkKind = 'request' | 'source' | 'model' | 'link';
+
+/** A connection drawn on the 3D globe. */
+export interface NetLink {
+  id: string;
+  host: string;
+  label: string;
+  lat: number;
+  lon: number;
+  kind: LinkKind;
+  createdAt: number;
+  ttl: number;
+}
+
+export interface GeoPoint {
+  name: string;
+  lat: number;
+  lon: number;
+}
 
 export type LogLevel = 'info' | 'tool' | 'ok' | 'warn' | 'error';
 
@@ -139,6 +173,8 @@ export interface ChatLine {
   role: 'user' | 'agent';
   text: string;
   ts: number;
+  /** True for transcripts of the user's voice (they arrive late and get re-ordered). */
+  spoken?: boolean;
 }
 
 export interface ServerStatus {
@@ -149,5 +185,7 @@ export interface ServerStatus {
   livekit_configured: boolean;
   email_enabled?: boolean;
   tools?: string[];
+  pc_control?: boolean;
+  home?: { name: string; latitude: number; longitude: number } | null;
   errors: string[];
 }

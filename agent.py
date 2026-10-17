@@ -6,6 +6,7 @@ from livekit import agents
 from livekit.agents import AgentServer
 
 from backends import build_runtime
+from hud import watch_user_voice
 from settings import SettingsError, get_cli_command, load_settings, should_validate_runtime_command
 
 server = AgentServer()
@@ -15,6 +16,7 @@ server = AgentServer()
 async def jarvis_agent(ctx: agents.JobContext):
     settings = load_settings()
     runtime = build_runtime(settings)
+    watch_user_voice(runtime.session)
 
     await runtime.session.start(
         room=ctx.room,

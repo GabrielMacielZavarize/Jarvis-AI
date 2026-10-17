@@ -8,7 +8,7 @@ export type DemoBeat =
   | { kind: 'mode'; mode: JarvisMode; ms: number }
   | { kind: 'agent'; text: string }
   | { kind: 'user'; text: string }
-  | { kind: 'tool'; name: string; detail?: string; ms: number }
+  | { kind: 'tool'; name: string; detail?: string; ms: number; hosts?: string[]; sources?: string[] }
   | { kind: 'card'; card: { [K in CardKind]: { kind: K; data: () => CardDataMap[K] } }[CardKind] };
 
 const isoDay = (offset: number) => {
@@ -22,7 +22,7 @@ export const DEMO_SCRIPT: DemoBeat[] = [
   { kind: 'agent', text: 'Boa noite, senhor. Todos os sistemas estão online. Em que posso ajudar?' },
   { kind: 'mode', mode: 'listening', ms: 900 },
   { kind: 'user', text: 'Jarvis, como está o tempo em São Paulo?' },
-  { kind: 'tool', name: 'get_weather', detail: 'São Paulo', ms: 1400 },
+  { kind: 'tool', name: 'get_weather', detail: 'São Paulo', ms: 1900, hosts: ['geocoding-api.open-meteo.com', 'api.open-meteo.com'] },
   {
     kind: 'card',
     card: {
@@ -82,7 +82,14 @@ export const DEMO_SCRIPT: DemoBeat[] = [
   { kind: 'agent', text: 'Timer de cinco minutos iniciado. O café, ao contrário do senhor, será pontual.' },
   { kind: 'mode', mode: 'listening', ms: 900 },
   { kind: 'user', text: 'Quais as últimas notícias de tecnologia?' },
-  { kind: 'tool', name: 'search_news', detail: 'tecnologia', ms: 1500 },
+  {
+    kind: 'tool',
+    name: 'search_news',
+    detail: 'tecnologia',
+    ms: 2400,
+    hosts: ['duckduckgo.com'],
+    sources: ['starkindustries.news', 'dailybugle.tech', 'avengersweekly.com', 'shield.gov.uk'],
+  },
   {
     kind: 'card',
     card: {

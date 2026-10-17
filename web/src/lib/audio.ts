@@ -11,6 +11,7 @@ type AudioTrack = LocalAudioTrack | RemoteAudioTrack;
 
 interface Source {
   track: AudioTrack;
+  mediaStreamTrack: MediaStreamTrack;
   analyser: AnalyserNode;
   bins: Uint8Array<ArrayBuffer>;
   cleanup: () => Promise<void>;
@@ -33,7 +34,7 @@ let synthetic: ((time: number) => SyntheticLevels) | null = null;
 
 export function attachTrack(channel: Channel, track: AudioTrack | undefined) {
   const current = sources[channel];
-  if (current?.track === track) return;
+  if (current && current.track === track && current.mediaStreamTrack === track?.mediaStreamTrack) return;
   if (current) {
     void current.cleanup();
     delete sources[channel];
@@ -51,6 +52,7 @@ export function attachTrack(channel: Channel, track: AudioTrack | undefined) {
     if (context instanceof AudioContext && context.state === 'suspended') void context.resume();
     sources[channel] = {
       track,
+      mediaStreamTrack: track.mediaStreamTrack,
       analyser,
       bins: new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount)),
       cleanup,
@@ -104,6 +106,12 @@ export function sampleAudio(time: number) {
     syntheticBands(levels.agent, time, levels.agentBands, 0);
     syntheticBands(levels.user, time, levels.userBands, 2);
     return;
+  }
+
+  // Switching microphones restarts the track with a new MediaStreamTrack.
+  for (const channel of ['agent', 'user'] as const) {
+    const source = sources[channel];
+    if (source && source.track.mediaStreamTrack !== source.mediaStreamTrack) attachTrack(channel, source.track);
   }
 
   const agent = sources.agent;

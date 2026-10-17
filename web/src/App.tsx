@@ -11,6 +11,7 @@ import { TopBar } from './components/TopBar';
 import { useDemo } from './hooks/useDemo';
 import { type LiveJarvis, OFFLINE_LIVE, useLiveJarvis } from './hooks/useLiveJarvis';
 import { type StatusResult, useServerStatus } from './hooks/useServerStatus';
+import { homeFromTimezone } from './lib/geo';
 import { useHud } from './lib/hudStore';
 import type { JarvisMode } from './lib/types';
 
@@ -83,6 +84,18 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
   const lines = demo.running ? demo.lines : live.lines;
 
   useEffect(() => useHud.getState().setMode(mode), [mode]);
+
+  // The 3D globe draws connections from the user's city (JARVIS_HOME_CITY) or a timezone guess.
+  const home = server?.home;
+  useEffect(() => {
+    useHud.getState().setHome(home ? { name: home.name, lat: home.latitude, lon: home.longitude } : homeFromTimezone());
+  }, [home]);
+
+  // While the model thinks, show the round-trip to it on the globe.
+  const modelHost = server?.backend?.startsWith('openai') ? 'api.openai.com' : 'generativelanguage.googleapis.com';
+  useEffect(() => {
+    if (mode === 'thinking') useHud.getState().addLinks([modelHost], 'model');
+  }, [mode, modelHost]);
   useEffect(() => setSessionStart(connected ? Date.now() : null), [connected]);
 
   const start = async () => {
@@ -141,7 +154,14 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
         </div>
 
         <aside className="hud__left">
-          <SystemPanel mode={mode} status={status} demo={demo.running} />
+          <SystemPanel
+            mode={mode}
+            status={status}
+            demo={demo.running}
+            connected={live.connected}
+            micEnabled={live.micEnabled}
+            microphone={{ devices: live.micDevices, deviceId: live.micDeviceId, onSelect: (id) => void live.selectMic(id) }}
+          />
           <CardStage enabledTools={server?.tools ?? null} />
         </aside>
 

@@ -40,6 +40,8 @@ export const scene = {
   user: 0,
   /** 0 → 1 pulse fired whenever the mode changes. */
   surge: 0,
+  /** 0 → 1 while the globe shows network connections (driven by EarthGlobe). */
+  network: 0,
   mode: 'standby' as JarvisMode,
 };
 

@@ -11,3 +11,6 @@ tzdata
 fastapi
 uvicorn[standard]
 httpx
+pyautogui
+pycaw; sys_platform == "win32"
+comtypes; sys_platform == "win32"

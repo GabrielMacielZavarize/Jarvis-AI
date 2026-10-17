@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -49,6 +50,15 @@ def _ensure_web_build(force: bool) -> bool:
     return True
 
 
+def _port_is_free(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind((host, port))
+        except OSError:
+            return False
+    return True
+
+
 def _start_agent(mode: str) -> subprocess.Popen[bytes] | None:
     try:
         settings = load_settings()
@@ -81,6 +91,12 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
     _print_banner()
+    if not _port_is_free(args.host, args.port):
+        print(
+            f"[HUD] A porta {args.port} já está em uso — provavelmente outro Jarvis ou servidor "
+            f"ainda está aberto.\n[HUD] Feche-o ou escolha outra porta: python jarvis.py --port {args.port + 1}"
+        )
+        return 1
     if not _ensure_web_build(args.rebuild):
         return 1
 

@@ -108,6 +108,8 @@ class Settings:
     openai_tts_model: str = "gpt-4o-mini-tts"
     openai_tts_voice: str = "ash"
     email_tool_enabled: bool = False
+    pc_control_enabled: bool = False
+    home_city: str | None = None
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -154,6 +156,12 @@ class Settings:
                 default=False,
             ),
             allowed_emails=_parse_csv(env_map.get("JARVIS_ALLOWED_EMAILS")),
+            pc_control_enabled=_parse_bool(
+                env_map.get("JARVIS_ENABLE_PC_CONTROL"),
+                "JARVIS_ENABLE_PC_CONTROL",
+                default=False,
+            ),
+            home_city=_clean_optional(env_map.get("JARVIS_HOME_CITY")),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),

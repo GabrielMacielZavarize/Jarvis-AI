@@ -12,6 +12,7 @@ import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import psutil
@@ -19,7 +20,7 @@ import requests
 from ddgs import DDGS
 from livekit.agents import RunContext, function_tool
 
-from hud import show_card, tool_status
+from hud import hud_command, net_activity, show_card, tool_status
 from settings import Settings
 
 logger = logging.getLogger("jarvis-tools")
@@ -266,6 +267,7 @@ async def get_weather(
         city: The name of the city to get weather for.
     """
     await tool_status("get_weather", "running", city)
+    await net_activity(["geocoding-api.open-meteo.com", "api.open-meteo.com"])
     try:
         result, card = await asyncio.to_thread(_fetch_weather, city)
         await show_card("weather", card)
@@ -304,6 +306,7 @@ async def search_web(
         query: The search query to look up on the web.
     """
     await tool_status("search_web", "running", query)
+    await net_activity(["duckduckgo.com"])
     try:
         results = await asyncio.to_thread(DDGS().text, query, max_results=5)
         if not results:
@@ -322,6 +325,7 @@ async def search_web(
             card_results.append({"title": title, "url": href, "snippet": body})
 
         await show_card("search", {"query": query, "results": card_results})
+        await net_activity([_hostname(item["url"]) for item in card_results], "source")
         await tool_status("search_web", "done", query)
         logger.info("Pesquisa web concluída para '%s'.", query)
         return "\n\n".join(lines)
@@ -342,6 +346,7 @@ async def search_news(
         topic: The subject to look for news about, e.g. "tecnologia" or "Fórmula 1".
     """
     await tool_status("search_news", "running", topic)
+    await net_activity(["duckduckgo.com"])
     try:
         results = await asyncio.to_thread(
             DDGS().news,
@@ -372,6 +377,7 @@ async def search_news(
             )
 
         await show_card("news", {"topic": topic, "items": items})
+        await net_activity([_hostname(item["url"]) for item in items], "source")
         await tool_status("search_news", "done", topic)
         logger.info("Busca de notícias concluída para '%s'.", topic)
         return "\n".join(lines)
@@ -422,6 +428,8 @@ async def get_current_time(
         city: Optional city name. When omitted, the local time of this computer is used.
     """
     await tool_status("get_current_time", "running", city)
+    if city:
+        await net_activity(["geocoding-api.open-meteo.com"])
     try:
         summary, card = await asyncio.to_thread(_resolve_time, city)
         await show_card("time", card)
@@ -440,7 +448,29 @@ def _bytes_to_gb(value: float) -> float:
     return round(value / (1024**3), 1)
 
 
+def _top_processes(processes: list[psutil.Process], cores: int, limit: int = 5) -> list[dict[str, Any]]:
+    usage = []
+    for proc in processes:
+        try:
+            name = proc.info.get("name") or "?"
+            if name.lower() in {"system idle process", "idle"}:
+                continue
+            cpu = proc.cpu_percent(None) / max(cores, 1)
+            memory = proc.info["memory_info"].rss / (1024**2) if proc.info.get("memory_info") else 0.0
+        except (psutil.Error, KeyError):
+            continue
+        usage.append({"name": name, "cpu": round(cpu, 1), "mem_mb": round(memory)})
+    usage.sort(key=lambda item: (item["cpu"], item["mem_mb"]), reverse=True)
+    return usage[:limit]
+
+
 def _collect_diagnostics() -> dict[str, Any]:
+    processes = list(psutil.process_iter(["name", "memory_info"]))
+    for proc in processes:
+        try:
+            proc.cpu_percent(None)  # primeira leitura; a segunda vem depois do intervalo abaixo
+        except psutil.Error:
+            continue
     per_core = psutil.cpu_percent(interval=0.5, percpu=True)
     cpu_percent = round(sum(per_core) / len(per_core), 1) if per_core else 0.0
     frequency = psutil.cpu_freq()
@@ -477,6 +507,7 @@ def _collect_diagnostics() -> dict[str, Any]:
         ),
         "uptime_s": int(time.time() - psutil.boot_time()),
         "processes": len(psutil.pids()),
+        "top": _top_processes(processes, psutil.cpu_count(logical=True) or 1),
         "net": {
             "sent_mb": round(net.bytes_sent / (1024**2), 1),
             "recv_mb": round(net.bytes_recv / (1024**2), 1),
@@ -602,6 +633,50 @@ async def show_on_hud(
     if not shown:
         return "O HUD não está conectado; descreva o conteúdo em voz."
     return "Painel exibido no HUD."
+
+
+def _hostname(url: str) -> str:
+    return (urlparse(url).hostname or "").removeprefix("www.")
+
+
+HUD_PANEL_KINDS = {
+    "weather": "clima",
+    "search": "pesquisa",
+    "news": "notícias",
+    "time": "horário",
+    "diagnostics": "diagnóstico",
+    "timer": "timers",
+    "note": "notas",
+    "email": "email",
+    "media": "mídia",
+}
+
+
+@function_tool()
+async def close_hud_panels(
+    context: RunContext,
+    panels: list[str] | None = None,
+    close_all: bool = False,
+) -> str:
+    """Close panels on the user's holographic HUD. Always use this when asked to close/clear panels.
+
+    Args:
+        panels: Panel kinds to close: weather, search, news, time, diagnostics, timer, note, email, media.
+        close_all: Close every panel at once.
+    """
+    if close_all:
+        sent = await hud_command("clear")
+        return "Todos os painéis do HUD foram fechados." if sent else "O HUD não está conectado."
+
+    kinds = [kind for kind in (panels or []) if kind in HUD_PANEL_KINDS]
+    if not kinds:
+        options = ", ".join(HUD_PANEL_KINDS)
+        return f"Diga quais painéis fechar. Opções: {options}."
+    sent = await hud_command("close", kinds)
+    if not sent:
+        return "O HUD não está conectado."
+    names = ", ".join(HUD_PANEL_KINDS[kind] for kind in kinds)
+    return f"Painéis fechados: {names}."
 
 
 def build_email_tools(settings: Settings) -> list[Any]:
@@ -798,7 +873,12 @@ def build_tools(settings: Settings) -> list[Any]:
         run_diagnostics,
         set_timer,
         show_on_hud,
+        close_hud_panels,
     ]
+    if settings.pc_control_enabled:
+        from pc_control import build_pc_tools
+
+        tools.extend(build_pc_tools())
     if settings.email_tool_enabled:
         tools.extend(build_email_tools(settings))
     return tools

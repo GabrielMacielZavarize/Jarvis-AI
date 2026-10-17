@@ -130,15 +130,15 @@ export function ReactorCore() {
       u.uPhase.value = scene.phase;
       u.uEnergy.value = energy;
       u.uSurge.value = scene.surge;
-      (u.uColor.value as Color).copy(scene.primary).multiplyScalar(scene.glow);
-      (u.uColor2.value as Color).copy(scene.secondary);
+      (u.uColor.value as Color).copy(scene.primary).multiplyScalar(scene.glow * (1 - scene.network * 0.65));
+      (u.uColor2.value as Color).copy(scene.secondary).multiplyScalar(1 - scene.network * 0.75);
     }
     if (halo.current) {
       (halo.current.uniforms.uColor.value as Color).copy(scene.primary);
-      halo.current.uniforms.uStrength.value = 0.32 * scene.glow + energy * 0.55 + scene.surge * 0.3;
+      halo.current.uniforms.uStrength.value = (0.32 * scene.glow + energy * 0.55 + scene.surge * 0.3) * (1 - scene.network * 0.4);
     }
     if (heart.current && heartMat.current) {
-      const pulse = 1 + Math.sin(t * 2.4) * 0.04 + energy * 0.5;
+      const pulse = (1 + Math.sin(t * 2.4) * 0.04 + energy * 0.5) * (1 - scene.network * 0.45);
       heart.current.scale.setScalar(pulse);
       const u = heartMat.current.uniforms;
       (u.uColor.value as Color).copy(scene.primary).multiplyScalar(scene.glow);
@@ -147,7 +147,7 @@ export function ReactorCore() {
     }
     if (shellMat.current) {
       shellMat.current.color.copy(scene.primary).multiplyScalar(0.9 * scene.glow);
-      shellMat.current.opacity = 0.16 + energy * 0.35;
+      shellMat.current.opacity = (0.16 + energy * 0.35) * (1 - scene.network * 0.5);
     }
     if (innerShellMat.current) {
       innerShellMat.current.color.copy(scene.accent).multiplyScalar(scene.glow);

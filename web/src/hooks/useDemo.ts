@@ -94,6 +94,7 @@ export function useDemo(): DemoState {
           case 'user': {
             const ms = speakingMs(beat.text) * 0.8;
             setMode('listening');
+            hud.addVoiceStart(Date.now());
             voice.userUntil = performance.now() + ms;
             await wait(ms);
             addLine('user', beat.text);
@@ -103,7 +104,14 @@ export function useDemo(): DemoState {
             setMode('thinking');
             hud.setActiveTool(beat.name);
             hud.addLog('tool', `${TOOL_LABELS[beat.name] ?? beat.name}${beat.detail ? ` · ${beat.detail}` : ''}`);
-            await wait(beat.ms);
+            if (beat.hosts) hud.addLinks(beat.hosts, 'request');
+            if (beat.sources) {
+              await wait(beat.ms / 2);
+              hud.addLinks(beat.sources, 'source');
+              await wait(beat.ms / 2);
+            } else {
+              await wait(beat.ms);
+            }
             break;
           case 'card':
             hud.pushCard(beat.card.kind, beat.card.data() as never);

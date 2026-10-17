@@ -4,6 +4,7 @@ import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@re
 import { BlendFunction } from 'postprocessing';
 import { useMemo, useRef } from 'react';
 import { type Group, Vector2 } from 'three';
+import { EarthGlobe } from './EarthGlobe';
 import { GridFloor } from './GridFloor';
 import { HudRings } from './HudRings';
 import { Orbits } from './Orbits';
@@ -54,6 +55,7 @@ function Hologram({ visible }: { visible: boolean }) {
   return (
     <group ref={group} scale={0.001}>
       <ReactorCore />
+      <EarthGlobe />
       <HudRings />
       <Spectrum />
       <Orbits />

@@ -16,7 +16,11 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'run_diagnostics', code: 'SYS-05', label: 'Diagnóstico', hint: '“Rode um diagnóstico do sistema.”' },
   { id: 'set_timer', code: 'TMR-06', label: 'Timers', hint: '“Timer de 10 minutos pro café.”' },
   { id: 'show_on_hud', code: 'HUD-07', label: 'Painéis no HUD', hint: '“Mostre os passos no painel.”' },
-  { id: 'draft_email', code: 'COM-08', label: 'Email seguro', hint: '“Escreva um email para…”' },
+  { id: 'play_youtube', code: 'MED-08', label: 'YouTube & streaming', hint: '“Toque lo-fi no YouTube.”' },
+  { id: 'open_app', code: 'PC-09', label: 'Apps do computador', hint: '“Abra o Spotify.” · “Feche o Discord.”' },
+  { id: 'browser_tab', code: 'WEB-10', label: 'Sites & abas', hint: '“Feche a aba do YouTube.”' },
+  { id: 'set_volume', code: 'AUD-11', label: 'Volume & mídia', hint: '“Volume em 30%.” · “Pausa.”' },
+  { id: 'draft_email', code: 'COM-12', label: 'Email seguro', hint: '“Escreva um email para…”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -30,6 +34,18 @@ export const TOOL_LABELS: Record<string, string> = {
   draft_email: 'Rascunho de email',
   confirm_email_send: 'Transmissão de email',
   cancel_pending_email: 'Cancelamento de email',
+  close_hud_panels: 'Limpeza do HUD',
+  open_website: 'Abrindo site',
+  play_youtube: 'YouTube',
+  open_streaming: 'Streaming',
+  open_app: 'Abrindo app',
+  close_app: 'Fechando app',
+  browser_tab: 'Abas do navegador',
+  media_control: 'Controle de mídia',
+  set_volume: 'Volume',
+  open_folder: 'Pasta',
+  lock_computer: 'Bloqueio de tela',
+  take_screenshot: 'Captura de tela',
 };
 
 export const MODE_LABELS: Record<JarvisMode, string> = {
