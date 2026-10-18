@@ -39,6 +39,7 @@ POSES = {
     "thumb_down": (set(), "out"),
     "thumb_up": (set(), "out"),
     "pinch": ({"middle", "ring", "pinky"}, "pinch"),
+    "loose_fist": (set(), "pinch"),  # punho frouxo, polegar encostado na ponta do indicador
 }
 # Giro que deixa o polegar esticado apontando para baixo / para cima no quadro.
 THUMB_ANGLE = math.degrees(math.atan2(THUMB_OUT[1], THUMB_OUT[0]))
@@ -84,6 +85,8 @@ def hand_space(pose: str) -> np.ndarray:
     for name, start in starts.items():
         if pose == "pinch" and name == "index":
             curls = (30, 40, 20)
+        elif pose == "loose_fist":
+            curls = (50, 45, 30) if name == "pinky" else (70, 80, 45)
         else:
             curls = STRAIGHT if name in straight else CURLED
         for offset, point in enumerate(_finger(name, curls)):

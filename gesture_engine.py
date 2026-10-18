@@ -170,8 +170,10 @@ def classify(hand: Hand) -> Shape:
     for name, (mcp, pip, dip, tip) in FINGERS.items():
         bend = _angle(s[pip] - s[mcp], s[tip] - s[dip])
         reach = float(np.linalg.norm(s[tip] - s[WRIST])) / max(float(np.linalg.norm(s[pip] - s[WRIST])), 1e-6)
-        extended[name] = bend < 55 and reach > 1.15
-        folded[name] = bend > 95 or reach < 0.95
+        # Calibrado com a mão real: palma aberta tem dedos com até ~65° de curva; num punho
+        # frouxo o mindinho fica em ~60–75° com a ponta quase na altura da junta do meio.
+        extended[name] = bend < 70 and reach > 1.12
+        folded[name] = bend > 80 or reach < 1.0
         metrics[f"{name}_bend"], metrics[f"{name}_reach"] = bend, reach
 
     cmc, mcp, ip, tip = THUMB
@@ -191,7 +193,9 @@ def classify(hand: Hand) -> Shape:
 
     four = ("index", "middle", "ring", "pinky")
     pose = Pose.NONE
-    if all(folded[f] for f in four):
+    # Punho: nenhum dedo esticado e pelo menos três dobrados. Vem antes da pinça porque, no punho,
+    # o polegar por cima do indicador encosta na ponta dele.
+    if not any(extended[f] for f in four) and sum(folded[f] for f in four) >= 3:
         pose = Pose.FIST
         if extended["thumb"]:
             direction = flat[tip] - flat[mcp]

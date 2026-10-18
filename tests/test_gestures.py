@@ -91,9 +91,16 @@ def armed_machine() -> tuple[GestureMachine, float]:
 class ClassifierTests(unittest.TestCase):
     def test_every_synthetic_pose_is_recognized(self) -> None:
         for pose in POSES:
+            expected = Pose.FIST if pose == "loose_fist" else Pose(pose)
             for options in ({}, {"world": False}, {"size": 0.1}):
                 with self.subTest(pose=pose, **options):
-                    self.assertEqual(classify(make_hand(pose, **options)).pose, Pose(pose))
+                    self.assertEqual(classify(make_hand(pose, **options)).pose, expected)
+
+    def test_loose_fist_with_thumb_on_the_index_is_not_a_pinch(self) -> None:
+        # Visto na webcam: punho com o polegar por cima do indicador saía como pinça.
+        shape = classify(make_hand("loose_fist"))
+        self.assertLess(shape.pinch, 0.3)
+        self.assertEqual(shape.pose, Pose.FIST)
 
     def test_tilted_hand_keeps_its_pose(self) -> None:
         for pose in ("open", "fist", "point", "two", "pinch"):
