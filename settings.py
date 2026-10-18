@@ -121,6 +121,7 @@ class Settings:
     gestures_enabled: bool = False
     computer_use_enabled: bool = False
     computer_use_model: str = DEFAULT_COMPUTER_USE_MODEL
+    memory_enabled: bool = True
     home_city: str | None = None
     transcription_hints: bool = False
     allowed_emails: tuple[str, ...] = ()
@@ -198,6 +199,11 @@ class Settings:
             ),
             computer_use_model=(
                 _clean_optional(env_map.get("JARVIS_COMPUTER_USE_MODEL")) or DEFAULT_COMPUTER_USE_MODEL
+            ),
+            memory_enabled=_parse_bool(
+                env_map.get("JARVIS_ENABLE_MEMORY"),
+                "JARVIS_ENABLE_MEMORY",
+                default=True,
             ),
             home_city=_clean_optional(env_map.get("JARVIS_HOME_CITY")),
             transcription_hints=_parse_bool(

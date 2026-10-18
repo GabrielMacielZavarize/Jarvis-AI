@@ -23,6 +23,11 @@ async def jarvis_agent(ctx: agents.JobContext):
         agent=runtime.agent,
         room_options=runtime.room_options,
     )
+    if settings.memory_enabled:
+        # Depois do start: o participante local só existe com a sala conectada.
+        from memory import serve_memory_panel
+
+        serve_memory_panel(ctx.room)
 
     if settings.gestures_enabled:
         from gestures import autostart_requested, start_for_session

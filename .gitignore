@@ -15,3 +15,6 @@ telas.json
 layouts.json
 # Modelos baixados na primeira execução (MediaPipe)
 .cache/
+# Memórias pessoais do Jarvis (lembra que...), cópias de segurança e temporários
+memoria*.json
+memoria.json.tmp

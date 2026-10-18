@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useClock } from '../../hooks/useClock';
-import { formatDuration, formatUptime, groupCode, hostnameOf, relativeTime, weekdayShort } from '../../lib/format';
+import { formatDuration, formatUptime, groupCode, hostnameOf, relativeTime, savedDate, weekdayShort } from '../../lib/format';
+import { useHud } from '../../lib/hudStore';
+import { forgetMemory, MemoryOfflineError } from '../../lib/memoryLink';
 import type {
   DiagnosticsData,
   EmailData,
@@ -8,6 +10,9 @@ import type {
   InstallPackage,
   MediaData,
   PointerData,
+  MemoryCategory,
+  MemoryData,
+  MemoryItem,
   ScreenData,
   NewsData,
   NoteData,
@@ -521,6 +526,127 @@ export function PointerBody({ data }: { data: PointerData }) {
             </li>
           ))}
         </ol>
+      )}
+    </div>
+  );
+}
+
+const MEMORY_GROUPS: { key: MemoryCategory; label: string }[] = [
+  { key: 'perfil', label: 'Perfil' },
+  { key: 'preferencia', label: 'Preferências' },
+  { key: 'pessoas', label: 'Pessoas' },
+  { key: 'trabalho', label: 'Trabalho' },
+  { key: 'agenda', label: 'Agenda' },
+  { key: 'outro', label: 'Outros' },
+];
+
+const MEMORY_STATUS: Record<MemoryData['status'], [string, string]> = {
+  list: ['Memória de longo prazo', 'status-chip--off'],
+  saved: ['Memória gravada', 'status-chip--ok'],
+  forgotten: ['Esquecido', 'status-chip--off'],
+  refused: ['Recusado por segurança', 'status-chip--danger'],
+};
+
+// The delete button asks "Apagar?" first; the second click within this window deletes.
+const MEMORY_CONFIRM_MS = 4000;
+
+function TrashIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden>
+      <path d="M1.5 3h9M4.5 3V1.5h3V3M2.8 3l.6 7.5h5.2l.6-7.5M5 5v3.8M7 5v3.8" />
+    </svg>
+  );
+}
+
+/** MEM-23: what Jarvis remembers about the user, grouped by category, each with a delete button. */
+export function MemoryBody({ id, data }: { id: string; data: MemoryData }) {
+  const updateCard = useHud((s) => s.updateCard);
+  const addLog = useHud((s) => s.addLog);
+  const [armed, setArmed] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!armed) return;
+    const timer = window.setTimeout(() => setArmed(null), MEMORY_CONFIRM_MS);
+    return () => window.clearTimeout(timer);
+  }, [armed]);
+
+  const remove = async (item: MemoryItem) => {
+    if (armed !== item.id) {
+      setArmed(item.id);
+      setError(null);
+      return;
+    }
+    setArmed(null);
+    setBusy(item.id);
+    try {
+      const { ok, ...next } = await forgetMemory(data, item.id);
+      updateCard(id, 'memory', next);
+      addLog(ok ? 'ok' : 'warn', ok ? 'Memória apagada pelo painel' : 'Essa memória já não existia');
+    } catch (err) {
+      setError(err instanceof MemoryOfflineError ? err.message : 'O Jarvis não respondeu; a memória continua salva.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const [label, tone] = MEMORY_STATUS[data.status];
+  const groups = MEMORY_GROUPS.map((group) => ({ ...group, items: data.items.filter((item) => item.category === group.key) }));
+  const known = new Set(MEMORY_GROUPS.map((group) => group.key));
+  groups[groups.length - 1].items.push(...data.items.filter((item) => !known.has(item.category)));
+  const visible = groups.filter((group) => group.items.length > 0);
+  const hidden = data.query ? 0 : data.total - data.items.length;
+
+  return (
+    <div className="mem">
+      <div className="mem__head">
+        <span className={`status-chip ${tone}`}>{label}</span>
+        <span className="card__sub">
+          {data.query ? `Busca: “${data.query}” · ` : ''}
+          {data.total} {data.total === 1 ? 'item' : 'itens'}
+        </span>
+      </div>
+      {data.message && <div className="mem__message">{data.message}</div>}
+      {visible.length === 0 ? (
+        <div className="mem__empty">
+          {data.query ? 'Nada sobre isso na memória.' : 'Nada guardado ainda. Diga “Jarvis, lembra que…”.'}
+        </div>
+      ) : (
+        visible.map((group) => (
+          <section key={group.key} className="mem__group" aria-label={group.label}>
+            <h3 className="mem__label">{group.label}</h3>
+            <ul className="mem__list">
+              {group.items.map((item) => {
+                const confirming = armed === item.id;
+                return (
+                  <li key={item.id} className={`mem__item${item.id === data.highlight ? ' mem__item--new' : ''}`}>
+                    <div className="mem__text">
+                      <span className="mem__fact">{item.fact}</span>
+                      <span className="mem__date">salvo em {savedDate(item.created_at) || '—'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`mem__del${confirming ? ' mem__del--armed' : ''}`}
+                      disabled={busy !== null}
+                      onClick={() => void remove(item)}
+                      aria-label={confirming ? `Confirmar: apagar “${item.fact}”` : `Apagar “${item.fact}”`}
+                      title={confirming ? 'Clique de novo para apagar' : 'Apagar esta memória'}
+                    >
+                      {busy === item.id ? '…' : confirming ? 'Apagar?' : <TrashIcon />}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))
+      )}
+      {hidden > 0 && <div className="card__sub">+{hidden} mais antigas · pergunte “o que você sabe sobre…?”</div>}
+      {error && (
+        <div className="mem__error" role="alert">
+          {error}
+        </div>
       )}
     </div>
   );

@@ -20,7 +20,8 @@ export type CardKind =
   | 'screen'
   | 'install'
   | 'camera'
-  | 'pointer';
+  | 'pointer'
+  | 'memory';
 
 export interface WeatherDay {
   date: string;
@@ -129,6 +130,30 @@ export interface InstallData {
   package?: InstallPackage;
   code?: string;
   message?: string;
+}
+
+export type MemoryCategory = 'perfil' | 'preferencia' | 'agenda' | 'trabalho' | 'pessoas' | 'outro';
+
+/** One fact the user asked Jarvis to remember (memoria.json). */
+export interface MemoryItem {
+  id: string;
+  fact: string;
+  category: MemoryCategory;
+  /** ISO date-time of when it was saved. */
+  created_at: string;
+}
+
+export interface MemoryData {
+  /** list = recall/panel refresh; saved = remember; forgotten = forget or the panel's delete button. */
+  status: 'list' | 'saved' | 'forgotten' | 'refused';
+  /** Newest first; at most 30 (``total`` counts all of them). */
+  items: MemoryItem[];
+  total: number;
+  /** Words recall filtered by. */
+  query?: string | null;
+  /** Id of the memory just saved. */
+  highlight?: string | null;
+  message?: string | null;
 }
 
 export interface MediaData {
@@ -248,6 +273,7 @@ export interface CardDataMap {
   install: InstallData;
   camera: CameraData;
   pointer: PointerData;
+  memory: MemoryData;
 }
 
 export type HudCard = {
@@ -313,6 +339,7 @@ export interface ServerStatus {
   app_install?: boolean;
   camera?: boolean;
   computer_use?: boolean;
+  memory?: boolean;
   home?: { name: string; latitude: number; longitude: number } | null;
   errors: string[];
 }

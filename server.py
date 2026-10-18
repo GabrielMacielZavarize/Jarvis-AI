@@ -66,6 +66,7 @@ PC_TOOL_NAMES = [
     "look_at_screen",
     "save_shortcut",
 ]
+MEMORY_TOOL_NAMES = ["remember", "recall", "forget"]
 EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", "cancel_pending_email"]
 GESTURE_TOOL_NAMES = ["gesture_control"]
 INSTALL_TOOL_NAMES = ["search_apps", "prepare_app_install", "confirm_app_install", "cancel_app_install"]
@@ -225,6 +226,7 @@ def create_app(*, reload_env: bool = True, camera_hub: CameraHub | None = None) 
         livekit_errors = settings.livekit_validation_errors()
         tools = (
             TOOL_NAMES
+            + (MEMORY_TOOL_NAMES if settings.memory_enabled else [])
             + (PC_TOOL_NAMES if settings.pc_control_enabled else [])
             + (GESTURE_TOOL_NAMES if settings.gestures_enabled else [])
             + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
@@ -245,6 +247,7 @@ def create_app(*, reload_env: bool = True, camera_hub: CameraHub | None = None) 
             "camera": settings.camera_enabled,
             "gestures": settings.gestures_enabled,
             "computer_use": settings.computer_use_enabled,
+            "memory": settings.memory_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "errors": backend_errors + livekit_errors,
         }

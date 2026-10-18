@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { attachTrack, lastUserSignalAt } from '../lib/audio';
 import { TOOL_LABELS } from '../lib/catalog';
 import { useHud } from '../lib/hudStore';
+import { MEMORY_RPC_METHOD, setMemoryTransport } from '../lib/memoryLink';
 import { describeMicrophone } from '../lib/microphone';
 import { parseHudRequest } from '../lib/panels';
 import { PointerImages, withPointerImage } from '../lib/pointer';
@@ -266,12 +267,20 @@ export function useLiveJarvis(): LiveJarvis {
       }
     });
 
+    // The Memória panel's "apagar" button asks the agent, which owns memoria.json.
+    setMemoryTransport(async (payload) => {
+      const agentIdentity = [...room.remoteParticipants.values()].find((p) => p.isAgent || p.identity.startsWith('agent-'))?.identity;
+      if (!agentIdentity) throw new Error('O Jarvis não está na sala.');
+      return room.localParticipant.performRpc({ destinationIdentity: agentIdentity, method: MEMORY_RPC_METHOD, payload, responseTimeout: 8000 });
+    });
+
     return () => {
       room.off(RoomEvent.DataReceived, onData);
       room.unregisterRpcMethod(HUD_RPC_METHOD);
       room.unregisterByteStreamHandler(SCREEN_TOPIC);
       room.unregisterByteStreamHandler(CAMERA_TOPIC);
       room.unregisterByteStreamHandler(POINTER_TOPIC);
+      setMemoryTransport(null);
     };
   }, [room]);
 

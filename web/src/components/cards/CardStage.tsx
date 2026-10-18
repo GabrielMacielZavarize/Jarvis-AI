@@ -11,6 +11,7 @@ import {
   EmailBody,
   InstallBody,
   MediaBody,
+  MemoryBody,
   NewsBody,
   NoteBody,
   PointerBody,
@@ -50,6 +51,8 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <CameraBody data={card.data} />;
     case 'pointer':
       return <PointerBody data={card.data} />;
+    case 'memory':
+      return <MemoryBody id={card.id} data={card.data} />;
   }
 }
 

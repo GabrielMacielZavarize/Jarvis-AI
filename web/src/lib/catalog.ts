@@ -28,6 +28,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'end_session', code: 'PWR-17', label: 'Encerrar sessão', hint: '“Tchau, Jarvis.” · “Pode desligar.”' },
   { id: 'look_at_camera', code: 'CAM-19', label: 'Câmera', hint: '“O que você está vendo?” · “Mostra a câmera.”' },
   { id: 'click_on_screen', code: 'MOU-20', label: 'Mouse & teclado', hint: '“Clica no botão de play.” · “Rola a página.”' },
+  { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -40,6 +41,9 @@ export const TOOL_LABELS: Record<string, string> = {
   get_timers: 'Consulta de timers',
   check_microphone: 'Microfone',
   end_session: 'Encerrando sessão',
+  remember: 'Gravando memória',
+  recall: 'Consulta de memória',
+  forget: 'Apagando memória',
   show_on_hud: 'Projeção no HUD',
   check_email_address: 'Conferência de endereço',
   draft_email: 'Rascunho de email',
