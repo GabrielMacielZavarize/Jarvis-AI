@@ -1263,6 +1263,8 @@ def undo_batch() -> str:
         if window is None:
             gone += 1
             continue
+        if not any(entry is saved for entry in MEMORY.positions.get(hwnd, [])):
+            continue  # já voltou sozinha (manage_window 'back')
         stack = [entry for entry in MEMORY.positions.get(hwnd, []) if entry is not saved]
         if stack:
             MEMORY.positions[hwnd] = stack
