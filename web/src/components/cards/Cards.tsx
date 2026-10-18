@@ -7,6 +7,7 @@ import type {
   InstallData,
   InstallPackage,
   MediaData,
+  PointerData,
   ScreenData,
   NewsData,
   NoteData,
@@ -473,5 +474,54 @@ export function InstallBody({ data }: { data: InstallData }) {
         <ConfirmCode action="Para instalar, diga “confirmar instalação” e o código" code={data.code} />
       )}
     </dl>
+  );
+}
+
+const POINTER_STATUS: Record<PointerData['status'], [string, string]> = {
+  done: ['Feito', 'status-chip--ok'],
+  running: ['Em andamento', 'status-chip--warn'],
+  pending: ['Aguardando confirmação', 'status-chip--warn'],
+  refused: ['Recusado', 'status-chip--danger'],
+  notfound: ['Não encontrado', 'status-chip--off'],
+  stopped: ['Parado', 'status-chip--off'],
+  error: ['Falhou', 'status-chip--danger'],
+  cancelled: ['Cancelado', 'status-chip--off'],
+};
+
+export function PointerBody({ data }: { data: PointerData }) {
+  const [label, tone] = POINTER_STATUS[data.status] ?? ['—', 'status-chip--off'];
+  const step = data.step && data.steps ? ` · passo ${data.step}/${data.steps}` : '';
+  return (
+    <div className="pointer">
+      <div className="pointer__head">
+        <span className={`status-chip ${tone}`}>{label}</span>
+        <span className="card__sub">
+          {data.action}
+          {data.screen ? ` · ${data.screen}` : ''}
+          {step}
+        </span>
+      </div>
+      {data.image && (
+        <figure className="screen">
+          <a href={data.image} target="_blank" rel="noreferrer noopener" title="Abrir o print em tamanho real">
+            <img src={data.image} alt={`Alvo: ${data.label || data.target || data.action}`} />
+          </a>
+        </figure>
+      )}
+      <div className="pointer__message">{data.message}</div>
+      {data.status === 'pending' && data.code && (
+        <ConfirmCode action="Para clicar, diga “confirmar clique” e o código" code={data.code} />
+      )}
+      {data.log.length > 1 && (
+        <ol className="pointer__log" aria-label="Últimas ações de mouse e teclado">
+          {[...data.log].reverse().map((entry) => (
+            <li key={`${entry.ts}-${entry.text}`} className={`pointer__log--${entry.level}`}>
+              <time>{new Date(entry.ts * 1000).toLocaleTimeString('pt-BR')}</time>
+              <span>{entry.text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }

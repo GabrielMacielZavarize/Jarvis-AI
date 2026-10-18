@@ -73,6 +73,16 @@ CAMERA_TOOL_NAMES = ["look_at_camera", "camera_view"]
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 NO_STORE = {"Cache-Control": "no-store"}
 MJPEG_BOUNDARY = "frame"
+COMPUTER_USE_TOOL_NAMES = [
+    "click_on_screen",
+    "move_mouse",
+    "type_text",
+    "press_keys",
+    "scroll",
+    "do_on_screen",
+    "confirm_screen_action",
+    "cancel_screen_action",
+]
 
 
 class AgentDispatchRequest(BaseModel):
@@ -220,6 +230,7 @@ def create_app(*, reload_env: bool = True, camera_hub: CameraHub | None = None) 
             + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
             + (INSTALL_TOOL_NAMES if settings.app_install_enabled else [])
             + (CAMERA_TOOL_NAMES if settings.camera_enabled else [])
+            + (COMPUTER_USE_TOOL_NAMES if settings.computer_use_enabled else [])
         )
         return {
             "version": APP_VERSION,
@@ -233,6 +244,7 @@ def create_app(*, reload_env: bool = True, camera_hub: CameraHub | None = None) 
             "app_install": settings.app_install_enabled,
             "camera": settings.camera_enabled,
             "gestures": settings.gestures_enabled,
+            "computer_use": settings.computer_use_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "errors": backend_errors + livekit_errors,
         }

@@ -49,6 +49,10 @@ def main() -> int:
     )
     if settings.app_install_enabled and not shutil.which("winget"):
         print("Aviso: winget não encontrado; instale o 'App Installer' pela Microsoft Store.")
+    print(
+        "Mouse e teclado (MOU-20): "
+        f"{'ativado, visão com ' + settings.computer_use_model if settings.computer_use_enabled else 'desativado'}"
+    )
 
     _print_section("Backend")
     if problems:

@@ -77,6 +77,7 @@ async def net_activity(hosts: list[str], kind: str = "request") -> bool:
 HUD_RPC_METHOD = "jarvis.hud"
 SCREEN_TOPIC = "jarvis.screen"
 CAMERA_TOPIC = "jarvis.camera"
+POINTER_TOPIC = "jarvis.pointer"
 
 
 def _hud_participant() -> tuple[Any, str] | None:
@@ -121,10 +122,16 @@ async def hud_request(action: str, payload: dict[str, Any] | None = None) -> dic
 
 
 async def send_screenshot(
-    image: Any, label: str, *, topic: str = SCREEN_TOPIC, attributes: dict[str, str] | None = None
+    image: Any,
+    label: str,
+    topic: str = SCREEN_TOPIC,
+    attributes: dict[str, str] | None = None,
 ) -> bool:
-    """Stream a downscaled JPEG of what Jarvis looked at (a screenshot, or a webcam frame on
-    CAMERA_TOPIC) to the HUD, so the user sees exactly what was analysed."""
+    """Stream a downscaled JPEG of what Jarvis looked at to the HUD so the user sees what it saw.
+
+    ``topic`` jarvis.screen opens a "Leitura de tela" panel; jarvis.camera opens the webcam panel; jarvis.pointer attaches the
+    print (with the click target drawn) to the MOU-20 panel whose ``action_id`` matches.
+    """
     target = _hud_participant()
     if target is None:
         return False

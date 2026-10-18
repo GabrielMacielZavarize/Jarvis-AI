@@ -27,6 +27,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'check_microphone', code: 'MIC-16', label: 'Microfone', hint: '“Qual microfone está conectado?”' },
   { id: 'end_session', code: 'PWR-17', label: 'Encerrar sessão', hint: '“Tchau, Jarvis.” · “Pode desligar.”' },
   { id: 'look_at_camera', code: 'CAM-19', label: 'Câmera', hint: '“O que você está vendo?” · “Mostra a câmera.”' },
+  { id: 'click_on_screen', code: 'MOU-20', label: 'Mouse & teclado', hint: '“Clica no botão de play.” · “Rola a página.”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -65,6 +66,14 @@ export const TOOL_LABELS: Record<string, string> = {
   take_screenshot: 'Captura de tela',
   look_at_camera: 'Visão pela câmera',
   camera_view: 'Câmera',
+  click_on_screen: 'Clique na tela',
+  move_mouse: 'Movendo o cursor',
+  type_text: 'Digitação',
+  press_keys: 'Atalho de teclado',
+  scroll: 'Rolagem',
+  do_on_screen: 'Tarefa na tela',
+  confirm_screen_action: 'Clique confirmado',
+  cancel_screen_action: 'Clique cancelado',
 };
 
 export const MODE_LABELS: Record<JarvisMode, string> = {

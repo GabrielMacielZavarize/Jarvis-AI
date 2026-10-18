@@ -27,10 +27,11 @@ const nextId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(coun
 
 type StoredCard = HudCard & { key: string };
 
-/** Cards that must not scroll away: an email waiting for "confirmar <código>", running timers and the live camera. */
+/** Cards that must not scroll away: anything waiting for a spoken code, running timers and the live camera. */
 function isPinned(card: HudCard, now: number): boolean {
   if (card.kind === 'camera') return true;
   if (card.kind === 'email') return card.data.status === 'draft';
+  if (card.kind === 'pointer') return card.data.status === 'pending';
   if (card.kind === 'timer') return card.data.status === 'running' && (card.data.ends_at == null || card.data.ends_at > now);
   return false;
 }

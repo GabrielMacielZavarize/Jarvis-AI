@@ -1,4 +1,4 @@
-"""Confirmação por código para ações sensíveis (enviar email, instalar app).
+"""Confirmação por código para ações sensíveis (enviar email, instalar app, clique arriscado).
 
 A barreira de segurança: a ação só roda quando a ÚLTIMA fala do próprio usuário
 contém a frase de confirmação com o código de 6 dígitos. Texto de páginas, emails
@@ -20,7 +20,7 @@ import secrets
 import unicodedata
 from typing import Any, Literal
 
-ConfirmAction = Literal["email", "install"]
+ConfirmAction = Literal["email", "install", "screen"]
 
 # Quanto tempo esperar a transcrição da fala do usuário chegar ao histórico. O Gemini
 # Live às vezes entrega a chamada de ferramenta antes do texto final da fala.
@@ -33,6 +33,8 @@ FILLER_WORDS = {"o", "a", "do", "da", "de", "codigo", "numero"}
 ACTION_WORDS: dict[ConfirmAction, set[str]] = {
     "email": {"envio", "email"},
     "install": {"instalacao", "instalar"},
+    # Mouse e teclado (computer_use.py): "confirmar clique 482913".
+    "screen": {"clique", "click", "acao", "tecla"},
 }
 LEADING_WORDS = {"jarvis", "ok"}
 TRAILING_WORDS = {"jarvis", "por", "favor"}
@@ -219,6 +221,7 @@ def parse_confirmation(text: str | None, action: ConfirmAction) -> str | None:
 
     email:   "confirmar <código>" (aceita "confirma", "confirmar o envio", "confirmar código").
     install: "confirmar instalação <código>" (a palavra instalação é obrigatória).
+    screen:  "confirmar clique <código>" (a palavra clique é obrigatória).
     """
     if not text:
         return None
@@ -236,13 +239,17 @@ def parse_confirmation(text: str | None, action: ConfirmAction) -> str | None:
     while index < len(tokens) and (tokens[index] in FILLER_WORDS or tokens[index] in action_words):
         saw_action = saw_action or tokens[index] in action_words
         index += 1
-    if action == "install" and not saw_action:
+    if action in {"install", "screen"} and not saw_action:
         return None
     return digits_from_tokens(tokens[index:])
 
 
 def confirmation_phrase(action: ConfirmAction, code: str) -> str:
-    return f"confirmar instalação {code}" if action == "install" else f"confirmar {code}"
+    if action == "install":
+        return f"confirmar instalação {code}"
+    if action == "screen":
+        return f"confirmar clique {code}"
+    return f"confirmar {code}"
 
 
 def new_code() -> str:

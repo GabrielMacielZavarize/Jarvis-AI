@@ -19,7 +19,8 @@ export type CardKind =
   | 'media'
   | 'screen'
   | 'install'
-  | 'camera';
+  | 'camera'
+  | 'pointer';
 
 export interface WeatherDay {
   date: string;
@@ -170,6 +171,30 @@ export interface CameraState {
   error: string | null;
 }
 
+export interface PointerLogEntry {
+  ts: number;
+  text: string;
+  level: 'ok' | 'info' | 'warn' | 'error';
+}
+
+/** A mouse/keyboard action (MOU-20): what Jarvis clicked/typed, with the print and the target drawn. */
+export interface PointerData {
+  action_id: string;
+  /** pending = waiting for "confirmar clique <código>"; running = a step of do_on_screen. */
+  status: 'done' | 'running' | 'pending' | 'refused' | 'notfound' | 'stopped' | 'error' | 'cancelled';
+  action: string;
+  message: string;
+  target?: string | null;
+  label?: string | null;
+  screen?: string | null;
+  code?: string | null;
+  step?: number | null;
+  steps?: number | null;
+  log: PointerLogEntry[];
+  /** Blob URL of the annotated print, attached in the browser from the jarvis.pointer stream. */
+  image?: string | null;
+}
+
 export type HudPanelAction = 'list' | 'close' | 'close_all' | 'expand' | 'collapse';
 
 /** What the agent can ask the HUD over the `jarvis.hud` RPC. */
@@ -222,6 +247,7 @@ export interface CardDataMap {
   screen: ScreenData;
   install: InstallData;
   camera: CameraData;
+  pointer: PointerData;
 }
 
 export type HudCard = {
@@ -286,6 +312,7 @@ export interface ServerStatus {
   pc_control?: boolean;
   app_install?: boolean;
   camera?: boolean;
+  computer_use?: boolean;
   home?: { name: string; latitude: number; longitude: number } | null;
   errors: string[];
 }

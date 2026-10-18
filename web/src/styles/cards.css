@@ -752,3 +752,45 @@
 .card--expanded .cam__tag {
   font-size: 12px;
 }
+
+/* Mouse e teclado (MOU-20) */
+.pointer {
+  display: grid;
+  gap: 8px;
+}
+.pointer__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pointer__message {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.pointer__log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  max-height: 9.5em;
+  overflow-y: auto;
+}
+.pointer__log li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+}
+.pointer__log time {
+  opacity: 0.7;
+}
+.pointer__log--warn span {
+  color: var(--c-accent);
+}
+.pointer__log--error span {
+  color: var(--c-danger);
+}

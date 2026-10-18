@@ -18,6 +18,7 @@ export const PANEL_META: Record<CardKind, { code: string; title: string; aliases
   screen: { code: 'VIS-14', title: 'Leitura de tela', aliases: ['print', 'captura', 'screenshot'] },
   install: { code: 'APP-15', title: 'Instalação de app', aliases: ['instalacao', 'instalar', 'aplicativo', 'winget', 'download'] },
   camera: { code: 'CAM-19', title: 'Câmera', aliases: ['webcam', 'camara', 'cam', 'feed', 'visao', 'olho'] },
+  pointer: { code: 'MOU-20', title: 'Mouse e teclado', aliases: ['mouse', 'teclado', 'clique', 'cursor', 'digitacao', 'atalho'] },
 };
 
 const PANEL_ACTIONS: HudPanelAction[] = ['list', 'close', 'close_all', 'expand', 'collapse'];
@@ -67,6 +68,8 @@ export function panelDetail(card: HudCard, now = Date.now()): string {
       return [card.data.package?.name ?? card.data.query, card.data.status].filter(Boolean).join(' · ');
     case 'camera':
       return card.data.takenAt ? `ao vivo · quadro analisado ${new Date(card.data.takenAt).toLocaleTimeString('pt-BR')}` : 'ao vivo';
+    case 'pointer':
+      return [card.data.action, card.data.label || card.data.target].filter(Boolean).join(' · ');
   }
 }
 

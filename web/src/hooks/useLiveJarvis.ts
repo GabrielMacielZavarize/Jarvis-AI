@@ -14,6 +14,7 @@ import { TOOL_LABELS } from '../lib/catalog';
 import { useHud } from '../lib/hudStore';
 import { describeMicrophone } from '../lib/microphone';
 import { parseHudRequest } from '../lib/panels';
+import { PointerImages, withPointerImage } from '../lib/pointer';
 import { orderLines } from '../lib/transcript';
 import type { ChatLine, HudEvent, JarvisMode, MicReport } from '../lib/types';
 
@@ -23,6 +24,8 @@ const SCREEN_TOPIC = 'jarvis.screen';
 const CAMERA_TOPIC = 'jarvis.camera';
 let lastScreenUrl: string | null = null;
 let lastCameraUrl: string | null = null;
+const POINTER_TOPIC = 'jarvis.pointer';
+const pointerImages = new PointerImages();
 
 const decoder = new TextDecoder();
 const MIC_STORAGE_KEY = 'jarvis.microphone';
@@ -142,6 +145,10 @@ function handleHudEvent(event: HudEvent) {
       hud.addLog('warn', `Timer “${event.data.label}” finalizado`);
       return;
     }
+    if (event.kind === 'pointer') {
+      hud.pushCard('pointer', withPointerImage(event.data, pointerImages));
+      return;
+    }
     hud.pushCard(event.kind, event.data as never);
   }
 }
@@ -245,11 +252,26 @@ export function useLiveJarvis(): LiveJarvis {
       useHud.getState().addLog('info', question ? `Quadro da câmera analisado · ${question}` : 'Quadro da câmera analisado');
     });
 
+    // Print of each mouse/keyboard action with the target drawn, for the MOU-20 panel.
+    room.registerByteStreamHandler(POINTER_TOPIC, async (reader) => {
+      const chunks = await reader.readAll();
+      const actionId = reader.info.attributes?.action_id;
+      if (!actionId) return;
+      const blob = new Blob(chunks as BlobPart[], { type: reader.info.mimeType || 'image/jpeg' });
+      pointerImages.remember(actionId, URL.createObjectURL(blob));
+      const hud = useHud.getState();
+      const card = hud.cards.find((item) => item.kind === 'pointer');
+      if (card?.kind === 'pointer' && card.data.action_id === actionId) {
+        hud.pushCard('pointer', withPointerImage(card.data, pointerImages));
+      }
+    });
+
     return () => {
       room.off(RoomEvent.DataReceived, onData);
       room.unregisterRpcMethod(HUD_RPC_METHOD);
       room.unregisterByteStreamHandler(SCREEN_TOPIC);
       room.unregisterByteStreamHandler(CAMERA_TOPIC);
+      room.unregisterByteStreamHandler(POINTER_TOPIC);
     };
   }, [room]);
 
