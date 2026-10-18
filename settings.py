@@ -116,6 +116,7 @@ class Settings:
     camera_enabled: bool = False
     camera_device: str | None = None
     hud_url: str = DEFAULT_HUD_URL
+    gestures_enabled: bool = False
     home_city: str | None = None
     transcription_hints: bool = False
     allowed_emails: tuple[str, ...] = ()
@@ -181,6 +182,11 @@ class Settings:
             ),
             camera_device=_clean_optional(env_map.get("JARVIS_CAMERA")),
             hud_url=(_clean_optional(env_map.get("JARVIS_HUD_URL")) or DEFAULT_HUD_URL).rstrip("/"),
+            gestures_enabled=_parse_bool(
+                env_map.get("JARVIS_ENABLE_GESTURES"),
+                "JARVIS_ENABLE_GESTURES",
+                default=False,
+            ),
             home_city=_clean_optional(env_map.get("JARVIS_HOME_CITY")),
             transcription_hints=_parse_bool(
                 env_map.get("JARVIS_TRANSCRIPTION_HINTS"),

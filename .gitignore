@@ -13,3 +13,5 @@ atalhos.json
 # Numeração confirmada, apelidos das telas e layouts de janelas salvos pelo Jarvis
 telas.json
 layouts.json
+# Modelos baixados na primeira execução (MediaPipe)
+.cache/

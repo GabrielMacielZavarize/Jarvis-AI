@@ -1319,6 +1319,10 @@ def build_tools(settings: Settings) -> list[Any]:
         from pc_control import build_pc_tools
 
         tools.extend(build_pc_tools())
+    if settings.gestures_enabled:
+        from gestures import build_gesture_tools
+
+        tools.extend(build_gesture_tools())
     if settings.email_tool_enabled:
         tools.extend(build_email_tools(settings))
     if settings.app_install_enabled:

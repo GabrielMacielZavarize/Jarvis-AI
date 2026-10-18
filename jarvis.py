@@ -3,6 +3,7 @@
 Uso:
     python jarvis.py                 # agente (modo dev) + HUD em http://127.0.0.1:8000
     python jarvis.py --no-agent      # apenas o HUD (útil para o modo demonstração)
+    python jarvis.py --gestures      # liga também o controle de janelas por gestos (webcam)
     python jarvis.py --port 8080 --no-browser
 """
 
@@ -90,6 +91,11 @@ def main() -> int:
     parser.add_argument("--no-browser", action="store_true", help="Não abre o navegador.")
     parser.add_argument("--rebuild", action="store_true", help="Recompila a interface web.")
     parser.add_argument(
+        "--gestures",
+        action="store_true",
+        help="Liga o controle de janelas por gestos das mãos (webcam) junto com o Jarvis.",
+    )
+    parser.add_argument(
         "--agent-mode",
         choices=("dev", "start"),
         default="dev",
@@ -109,8 +115,19 @@ def main() -> int:
     if not _ensure_web_build(args.rebuild):
         return 1
 
+    if args.gestures:
+        # O agente herda estas variáveis: a ferramenta gesture_control fica disponível e os
+        # gestos ligam junto com a sessão de voz.
+        os.environ["JARVIS_ENABLE_GESTURES"] = "true"
+        os.environ["JARVIS_GESTURES_AUTOSTART"] = "true"
     url = _local_url(args.host, args.port)
     agent_process = None if args.no_agent else _start_agent(args.agent_mode, url)
+    gestures_here = args.gestures and agent_process is None
+    if gestures_here:
+        # Sem agente de voz, os gestos rodam aqui mesmo, só com o overlay.
+        from gestures import SERVICE
+
+        print(f"[GESTOS] {SERVICE.start()}")
 
     print(f"[HUD] Interface disponível em {url}")
     if not args.no_browser:
@@ -125,6 +142,10 @@ def main() -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        if gestures_here:
+            from gestures import SERVICE
+
+            print(f"[GESTOS] {SERVICE.stop()}")
         if agent_process is not None:
             _stop_agent(agent_process)
 
