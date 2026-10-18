@@ -84,6 +84,16 @@ class FakeDesktop:
         self.replies: list[Any] = []
         self.prompts: list[tuple[str, list[str]]] = []
         self.clamp = False
+        self.landed: bool | None = True
+
+    @staticmethod
+    def stroke_for(char: str, layout: int) -> cu.KeyStroke | None:
+        """Layout ABNT2 simplificado: letras, dígitos e espaço têm tecla; acentos vão por Unicode."""
+        if char.isascii() and char.isalpha():
+            return cu.KeyStroke(vk=ord(char.upper()), scan=0, shift=char.isupper())
+        if char.isdigit() or char == " ":
+            return cu.KeyStroke(vk=ord(char), scan=0, shift=False)
+        return None
 
     def get_cursor(self) -> tuple[int, int]:
         return self.cursor
@@ -122,6 +132,9 @@ class FakeDesktop:
             patch.object(cu, "window_at", side_effect=lambda x, y: self.under_point),
             patch.object(cu, "foreground_window", side_effect=lambda: self.foreground),
             patch.object(cu, "focused_field", side_effect=lambda: self.focus),
+            patch.object(cu, "_foreground_layout", return_value=0),
+            patch.object(cu, "_stroke_for", side_effect=self.stroke_for),
+            patch.object(cu, "typed_text_landed", side_effect=lambda text: self.landed),
             patch.object(cu, "ask_vision", side_effect=self.ask_vision),
             patch.object(cu, "REQUEST_WAIT_SECONDS", 0.05),
             patch.object(cu, "STEP_SETTLE_SECONDS", 0),
@@ -355,6 +368,16 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(len(cu.text_events("😀")), 4)
         self.assertEqual(cu.text_events("\n")[0].vk, 0x0D)
 
+    def test_text_events_press_the_real_key_with_shift(self) -> None:
+        self.assertEqual(
+            cu.text_events("G", cu.KeyStroke(vk=0x47, scan=0x22, shift=True)),
+            [KeyEvent(vk=0x10), KeyEvent(vk=0x47, scan=0x22), KeyEvent(vk=0x47, scan=0x22, flags=2), KeyEvent(vk=0x10, flags=2)],
+        )
+        self.assertEqual(
+            cu.text_events(" ", cu.KeyStroke(vk=0x20, scan=0x39, shift=False)),
+            [KeyEvent(vk=0x20, scan=0x39), KeyEvent(vk=0x20, scan=0x39, flags=2)],
+        )
+
     def test_blocked_windows(self) -> None:
         self.assertIn("UAC", cu.blocked_reason(UAC))
         self.assertEqual(cu.blocked_reason(TERMINAL), "um terminal")
@@ -582,11 +605,27 @@ class KeyboardToolTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.desk = FakeDesktop().install(self)
 
-    async def test_types_dictated_text_as_unicode(self) -> None:
-        result = await cu.type_text(context("digita olá no bloco de notas"), text="olá")
-        self.assertIn('Digitei 3 caractere(s)', result)
-        self.assertEqual(len(self.desk.keys), 6)
-        self.assertTrue(all(event.flags & cu.KEYEVENTF_UNICODE for event in self.desk.keys))
+    async def test_types_like_a_keyboard_and_checks_the_field(self) -> None:
+        result = await cu.type_text(context("digita Olá no bloco de notas"), text="Olá")
+        self.assertIn("Digitei 3 caractere(s)", result)
+        self.assertIn("conferi no campo", result)
+        # "O" com Shift pela tecla real, "l" pela tecla real, "á" por Unicode.
+        self.assertEqual(
+            self.desk.keys,
+            [
+                KeyEvent(vk=0x10), KeyEvent(vk=0x4F), KeyEvent(vk=0x4F, flags=2), KeyEvent(vk=0x10, flags=2),
+                KeyEvent(vk=0x4C), KeyEvent(vk=0x4C, flags=2),
+                KeyEvent(scan=0xE1, flags=4), KeyEvent(scan=0xE1, flags=6),
+            ],
+        )
+
+    async def test_reports_when_the_app_lost_keys(self) -> None:
+        self.desk.landed = False
+        result = await cu.type_text(context("digita olá"), text="olá")
+        self.assertIn("o campo não mostra o texto como deveria", result)
+        self.desk.landed = None
+        result = await cu.type_text(context("digita olá de novo"), text="olá")
+        self.assertIn("não deixa conferir", result)
 
     async def test_refuses_card_numbers_and_password_fields(self) -> None:
         result = await cu.type_text(context("digita meu cartão"), text="4111 1111 1111 1111")
@@ -618,6 +657,13 @@ class KeyboardToolTests(unittest.IsolatedAsyncioTestCase):
         result = await cu.press_keys(context("aperta enter e manda"), keys="enter")
         self.assertIn("Apertei enter", result)
         self.assertEqual(self.desk.keys, cu.combo_events("enter"))
+
+    async def test_start_menu_only_accepts_escape(self) -> None:
+        self.desk.foreground = START_SEARCH
+        self.assertIn("Menu Iniciar", await cu.press_keys(context("aperta enter"), keys="enter"))
+        self.assertEqual(self.desk.events, [])
+        self.assertIn("Apertei esc", await cu.press_keys(context("aperta esc"), keys="esc"))
+        self.assertEqual(self.desk.keys, cu.combo_events("esc"))
 
     async def test_allowed_shortcut_and_repeat(self) -> None:
         result = await cu.press_keys(context("aperta ctrl s"), keys="ctrl+s")
@@ -680,7 +726,7 @@ class LoopTests(unittest.IsolatedAsyncioTestCase):
         result = await cu.do_on_screen(context("digita olá Jarvis no bloco de notas"), goal="digita olá Jarvis no bloco de notas", monitor=1)
         self.assertIn("Concluído em 2 passo(s)", result)
         self.assertEqual(len(self.desk.mouse), 2)
-        self.assertEqual(len(self.desk.keys), len("olá Jarvis") * 2)
+        self.assertEqual(len(self.desk.keys), 2 * 10 + 2)  # 9 teclas reais + "á" Unicode + Shift do J
 
     async def test_loop_never_types_what_the_user_did_not_dictate(self) -> None:
         self.desk.replies.append(plan(status="act", action="type", text="rm -rf tudo"))

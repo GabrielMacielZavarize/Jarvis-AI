@@ -81,7 +81,8 @@ REQUEST_POLL_SECONDS = 0.2
 GLIDE_SECONDS = 0.45
 GLIDE_STEPS = 28
 TAKEOVER_TOLERANCE_PX = 12
-TYPE_DELAY_SECONDS = 0.012
+TYPE_DELAY_SECONDS = 0.02
+KEY_GAP_SECONDS = 0.004
 STEP_SETTLE_SECONDS = 0.8
 LOG_LIMIT = 8
 HUD_CROP = (1200, 750)
@@ -895,11 +896,28 @@ def combo_events(combo: str) -> list[KeyEvent]:
     return [_key(vk) for vk in vks] + [_key(vk, up=True) for vk in reversed(vks)]
 
 
-def text_events(char: str) -> list[KeyEvent]:
+@dataclass(frozen=True)
+class KeyStroke:
+    """How a character is typed on the active keyboard layout: virtual key, scan code, Shift."""
+
+    vk: int
+    scan: int
+    shift: bool
+
+
+def text_events(char: str, stroke: KeyStroke | None = None) -> list[KeyEvent]:
+    """Events for one character: a real key press when the layout has one, else Unicode.
+
+    Apps with text services (the Windows 11 Notepad, for one) garble fast streams of pure
+    Unicode events, so plain letters, digits and punctuation go as the physical key would.
+    """
     if char == "\n":
         return [_key(0x0D), _key(0x0D, up=True)]
     if char == "\t":
         return [_key(0x09), _key(0x09, up=True)]
+    if stroke is not None:
+        press = [KeyEvent(vk=stroke.vk, scan=stroke.scan), KeyEvent(vk=stroke.vk, scan=stroke.scan, flags=KEYEVENTF_KEYUP)]
+        return [_key(0x10), *press, _key(0x10, up=True)] if stroke.shift else press
     raw = char.encode("utf-16-le")
     units = [int.from_bytes(raw[i : i + 2], "little") for i in range(0, len(raw), 2)]
     return [KeyEvent(scan=unit, flags=KEYEVENTF_UNICODE) for unit in units] + [
@@ -907,13 +925,99 @@ def text_events(char: str) -> list[KeyEvent]:
     ]
 
 
+VK_CAPITAL = 0x14
+MAPVK_VK_TO_VSC = 0
+MAPVK_VK_TO_CHAR = 2
+
+
+def _foreground_layout() -> int:
+    """Keyboard layout (HKL) of the window that will receive the keys."""
+    user32 = ctypes.windll.user32
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetKeyboardLayout.restype = ctypes.c_void_p
+    thread = user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), None)
+    return user32.GetKeyboardLayout(thread) or 0
+
+
+def _stroke_for(char: str, layout: int) -> KeyStroke | None:
+    """Real key for `char` on `layout`, or None (needs AltGr, is a dead key or has no key)."""
+    if len(char) != 1 or char in "\n\t":
+        return None
+    user32 = ctypes.windll.user32
+    user32.VkKeyScanExW.restype = ctypes.c_short
+    user32.VkKeyScanExW.argtypes = [ctypes.c_wchar, ctypes.c_void_p]
+    user32.MapVirtualKeyExW.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p]
+    result = user32.VkKeyScanExW(char, layout)
+    if result == -1:
+        return None
+    vk, modifiers = result & 0xFF, (result >> 8) & 0xFF
+    if modifiers & ~1:  # Ctrl/Alt (AltGr): Unicode é mais seguro
+        return None
+    if user32.MapVirtualKeyExW(vk, MAPVK_VK_TO_CHAR, layout) & 0x80000000:  # tecla morta (´ ~ ^)
+        return None
+    shift = bool(modifiers & 1)
+    if 0x41 <= vk <= 0x5A and user32.GetKeyState(VK_CAPITAL) & 1:
+        shift = not shift  # Caps Lock ligado inverte maiúsculas
+    return KeyStroke(vk=vk, scan=user32.MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, layout), shift=shift)
+
+
 def type_unicode(text: str) -> None:
-    """Type any text (accents, emoji) as Unicode key events, ESC aborts."""
+    """Type any text key by key, like a person would (ESC aborts)."""
+    layout = _foreground_layout()
     for index, char in enumerate(text):
         if index % 8 == 0 and _escape_down():
             raise UserTookOver(f"ESC pressionado: parei depois de {index} caracteres.")
-        _send_input(text_events(char))
+        for event in text_events(char, _stroke_for(char, layout)):
+            _send_input([event])
+            time.sleep(KEY_GAP_SECONDS)
         time.sleep(TYPE_DELAY_SECONDS)
+
+
+def _uia_text_before_caret(length: int) -> str | None:
+    """The last `length` characters before the caret in the focused field (None: unreadable)."""
+    import comtypes
+    import comtypes.client
+
+    comtypes.CoInitialize()
+    try:
+
+        def read() -> str | None:
+            comtypes.client.GetModule("UIAutomationCore.dll")
+            from comtypes.gen import UIAutomationClient as uia  # type: ignore[import-not-found]
+
+            automation = comtypes.client.CreateObject(uia.CUIAutomation, interface=uia.IUIAutomation)
+            element = automation.GetFocusedElement()
+            pattern = element.GetCurrentPattern(10014)  # TextPattern
+            if pattern:
+                selection = pattern.QueryInterface(uia.IUIAutomationTextPattern).GetSelection()
+                if selection and selection.Length > 0:
+                    caret = selection.GetElement(0).Clone()
+                    caret.MoveEndpointByUnit(0, 0, -(length + 4))  # início volta N caracteres
+                    return str(caret.GetText(length + 16))
+            pattern = element.GetCurrentPattern(10002)  # ValuePattern (campos de uma linha)
+            if pattern:
+                return str(pattern.QueryInterface(uia.IUIAutomationValuePattern).CurrentValue)[-(length + 16):]
+            return None
+
+        return read()
+    finally:
+        comtypes.CoUninitialize()
+
+
+def _squash(text: str) -> str:
+    return " ".join(text.replace("\r", "\n").split())
+
+
+def typed_text_landed(text: str) -> bool | None:
+    """Did the focused field really receive `text`? None when the app does not tell."""
+    try:
+        field_text = _uia_text_before_caret(len(text))
+    except Exception:
+        logger.debug("Não consegui ler o campo para conferir a digitação.", exc_info=True)
+        return None
+    if field_text is None:
+        return None
+    return _squash(text) in _squash(field_text)
 
 
 class TakeoverWatch:
@@ -1535,10 +1639,14 @@ def _check_typing(text: str) -> WindowInfo | None:
     return window
 
 
+# Fechar o Menu Iniciar/busca com Esc é inofensivo; Enter ou letras ali lançariam programas.
+SAFE_IN_LAUNCHER = {"esc"}
+
+
 def _check_keys(combo: str) -> WindowInfo | None:
     check_combo(combo)
     window = foreground_window()
-    reason = blocked_reason(window, typing=True)
+    reason = blocked_reason(window, typing=combo not in SAFE_IN_LAUNCHER)
     if reason:
         raise ComputerUseError(f"Recusado: não aperto teclas em {reason}.")
     if combo == "enter" and focused_field().is_password:
@@ -1558,9 +1666,20 @@ async def _type(context: RunContext, text: str, heard: str, step: int | None = N
     await asyncio.to_thread(type_unicode, text)
     preview = _truncate(text, 60)
     where = f"'{_truncate(window.title, 40)}'" if window else "na janela ativa"
-    message = f"Digitei {len(text)} caractere(s) em {where}: \"{preview}\"."
+    landed = await asyncio.to_thread(typed_text_landed, text)
+    status = "running" if step else "done"
+    if landed is True:
+        message = f"Digitei {len(text)} caractere(s) em {where} e conferi no campo: \"{preview}\"."
+    elif landed is False:
+        status = "error"
+        message = (
+            f"Digitei {len(text)} caractere(s) em {where}, mas o campo não mostra o texto como deveria "
+            "(o app pode ter perdido teclas). Diga isso ao usuário e peça para conferir."
+        )
+    else:
+        message = f"Digitei {len(text)} caractere(s) em {where}: \"{preview}\" (o app não deixa conferir o campo)."
     shot = await asyncio.to_thread(capture_window, window)
-    await _report(context, status="running" if step else "done", action="type", target=preview, shot=shot, step=step, message=message)
+    await _report(context, status=status, action="type", target=preview, shot=shot, step=step, message=message)
     return message
 
 
