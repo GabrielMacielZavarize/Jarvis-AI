@@ -92,7 +92,7 @@ def armed_machine() -> tuple[GestureMachine, float]:
 class ClassifierTests(unittest.TestCase):
     def test_every_synthetic_pose_is_recognized(self) -> None:
         for pose in POSES:
-            expected = Pose.FIST if pose == "loose_fist" else Pose(pose)
+            expected = {"loose_fist": Pose.FIST, "thumb_down_relaxed": Pose.THUMB_DOWN}.get(pose) or Pose(pose)
             for options in ({}, {"world": False}, {"size": 0.1}):
                 with self.subTest(pose=pose, **options):
                     self.assertEqual(classify(make_hand(pose, **options)).pose, expected)
@@ -111,6 +111,15 @@ class ClassifierTests(unittest.TestCase):
 
     def test_fist_with_thumb_sideways_is_not_thumb_down(self) -> None:
         self.assertEqual(classify(make_hand("thumb_down", roll=0)).pose, Pose.FIST)
+
+    def test_thumb_down_as_seen_on_the_webcam(self) -> None:
+        # Visto na webcam: dedos semidobrados (~50°) e polegar ~20° abaixo da horizontal.
+        shape = classify(make_hand("thumb_down_relaxed"))
+        self.assertEqual(shape.pose, Pose.THUMB_DOWN)
+        self.assertAlmostEqual(shape.metrics["curl"], 50, delta=5)
+        # A mão aberta girada do mesmo jeito (polegar no mesmo ângulo) não fecha nada.
+        self.assertEqual(classify(make_hand("open", roll=200 - 143.13)).pose, Pose.OPEN)
+        self.assertEqual(classify(make_hand("open", roll=180)).pose, Pose.OPEN)
 
     def test_center_and_pointer_follow_the_hand(self) -> None:
         shape = classify(make_hand("point", center=(0.3, 0.6)))
@@ -239,6 +248,11 @@ class MachineTests(unittest.TestCase):
         self.assertEqual(kinds(commands), ["grab", "close"])
         self.assertEqual(machine.state, State.ARMED)
 
+    def test_relaxed_thumb_down_closes_too(self) -> None:
+        machine, t = armed_machine()
+        commands = play(machine, hold("thumb_down_relaxed", t, 1.6))
+        self.assertEqual(kinds(commands), ["grab", "close"])
+
     def test_close_needs_the_full_countdown(self) -> None:
         machine, t = armed_machine()
         down = hold("thumb_down", t, 0.7)
@@ -289,6 +303,19 @@ class MachineTests(unittest.TestCase):
         commands = play(machine, later, left)
         self.assertEqual([command.step for command in commands if command.kind == "tab"], [-1])
 
+    def test_tab_swipe_at_the_speed_seen_on_the_webcam(self) -> None:
+        # Visto na webcam: 0,3 de quadro em ~0,4 s com dois dedos (0,79/s) não passava.
+        machine, t = armed_machine()
+        settle = hold("two", t, 0.3, center=(0.34, 0.5))
+        right = move("two", end_of(settle), 0.4, (0.34, 0.5), (0.52, 0.5))
+        commands = play(machine, settle, right, hold("two", end_of(right), 0.3, center=(0.52, 0.5)))
+        self.assertEqual([command.step for command in commands if command.kind == "tab"], [1])
+
+    def test_slow_wipe_still_undoes(self) -> None:
+        machine, t = armed_machine()
+        wipe = move("open", t, 1.8, (0.4, 0.5), (0.6, 0.5), path=lambda k: 0.5 - 0.5 * np.cos(k * 3 * np.pi))
+        self.assertEqual(kinds(play(machine, wipe)), ["undo"])
+
     def test_side_to_side_wipe_undoes(self) -> None:
         machine, t = armed_machine()
         wipe = move("open", t, 1.0, (0.4, 0.5), (0.6, 0.5), path=lambda k: 0.5 - 0.5 * np.cos(k * 3 * np.pi))
@@ -332,6 +359,21 @@ class MachineTests(unittest.TestCase):
         leave = hold("open", end_of(drop), 1.5, center=(0.3, 0.3))
         self.assertEqual(kinds(play(machine, leave)), ["mouse_off"])
         self.assertEqual(machine.state, State.ARMED)
+
+    def test_air_mouse_clicks_by_closing_the_hand(self) -> None:
+        # Visto na webcam: no mouse no ar o Gabriel clicou fechando a mão, não com pinça.
+        machine, t = armed_machine()
+        point = hold("point", t, 1.2)
+        play(machine, point)
+        tap = hold("fist", end_of(point), 0.25)
+        after = hold("point", end_of(tap), 0.4)
+        commands = play(machine, tap, after)
+        self.assertEqual(kinds(commands), ["click"])
+
+        drag = hold("fist", end_of(after), 0.9)
+        drop = hold("point", end_of(drag), 0.4)
+        self.assertEqual(kinds(play(machine, drag, drop)), ["mouse_down", "mouse_up"])
+        self.assertEqual(machine.state, State.MOUSE)
 
     def test_voice_mouse_from_idle_and_disarm_releases_the_button(self) -> None:
         machine = GestureMachine()

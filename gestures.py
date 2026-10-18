@@ -60,7 +60,7 @@ ACTION_LABELS = {
 }
 HINT_ARMED = "punho: pegar janela · polegar ↓: fechar · 2 dedos: abas · indicador parado: mouse"
 HINT_GRAB = "mova e abra a mão: outro monitor · abra parado: estender"
-HINT_MOUSE = "pinça: clique · pinça segurada: arrastar · palma parada: sair"
+HINT_MOUSE = "pinça ou fechar a mão: clique · segurar: arrastar · palma parada: sair"
 
 
 class CameraError(RuntimeError):
@@ -381,6 +381,9 @@ class GestureEngine:
             row["raw"] = shape.pose.value
             row["center"] = [round(value, 3) for value in shape.center]
             row.update({key: round(value, 3) for key, value in shape.metrics.items()})
+            row["points"] = np.round(self.hand.points, 3).tolist()
+            if self.hand.world is not None:
+                row["world"] = np.round(self.hand.world, 4).tolist()
         if commands:
             row["commands"] = [command.kind for command in commands if command.kind != "mouse_move"]
         print(json.dumps(row), file=self.trace, flush=True)

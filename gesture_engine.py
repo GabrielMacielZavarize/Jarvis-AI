@@ -100,13 +100,13 @@ class Tuning:
     maximize_max_move: float = 0.07
     maximize_palms: float = 0.35
     close_hold_s: float = 1.2
-    swipe_distance: float = 0.2
+    swipe_distance: float = 0.16
     swipe_max_s: float = 0.5
-    swipe_min_speed: float = 0.8
+    swipe_min_speed: float = 0.55  # no teste real o swipe de aba saiu a ~0,8/s
     swipe_settle_s: float = 0.45  # o swipe para baixo só vale se a mão parar ainda no quadro
     tab_cooldown_s: float = 0.35
     return_block_s: float = 0.8  # ignora o movimento de volta depois de um swipe de aba
-    wipe_window_s: float = 1.4
+    wipe_window_s: float = 2.0
     wipe_amplitude: float = 0.07
     wipe_segments: int = 3
     mouse_enter_s: float = 0.9
@@ -114,6 +114,7 @@ class Tuning:
     mouse_lost_s: float = 8.0
     pinch_on: float = 0.3
     pinch_off: float = 0.45
+    closing_pinch: float = 0.38  # polegar chegando no indicador: segura o cursor para o clique não escorregar
     drag_after_s: float = 0.35
     click_freeze_s: float = 0.12
     mouse_box: tuple[float, float, float, float] = (0.2, 0.15, 0.8, 0.7)  # região do quadro → todas as telas
@@ -186,28 +187,36 @@ def classify(hand: Hand) -> Shape:
     folded["thumb"] = thumb_out < 0.45
     pinch = float(np.linalg.norm(s[tip] - s[FINGERS["index"][3]])) / palm3d
     thumb_dir = flat[tip] - flat[mcp]
+    thumb_down = float(thumb_dir[1] / max(float(np.linalg.norm(thumb_dir)), 1e-6))
+    if hand.world is not None:  # em 3D o polegar apontado para baixo e para a câmera aparece melhor
+        world = np.asarray(hand.world, dtype=float)
+        vector = world[tip] - world[mcp]
+        thumb_down = max(thumb_down, float(vector[1] / max(float(np.linalg.norm(vector)), 1e-6)))
+    four = ("index", "middle", "ring", "pinky")
+    curl = sum(metrics[f"{f}_bend"] for f in four) / 4
+    clearly_open = any(metrics[f"{f}_bend"] < 30 and metrics[f"{f}_reach"] > 1.25 for f in four)
     metrics.update(
         thumb_bend=thumb_bend,
         thumb_out=thumb_out,
         thumb_dir_y=float(thumb_dir[1] / max(float(np.linalg.norm(thumb_dir)), 1e-6)),
+        thumb_down=thumb_down,
+        curl=curl,
         pinch=pinch,
         palm=palm,
     )
 
-    four = ("index", "middle", "ring", "pinky")
     pose = Pose.NONE
+    if extended["thumb"] and thumb_down >= 0.25 and curl >= 42 and not clearly_open:
+        # Polegar para baixo como sai de verdade na webcam: dedos semidobrados (~50°, vistos de
+        # lado) e o polegar esticado, uns 20° abaixo da horizontal. Segurar 1,2 s fecha a janela.
+        pose = Pose.THUMB_DOWN
     # Punho: nenhum dedo esticado e pelo menos três dobrados. Vem antes da pinça porque, no punho,
     # o polegar por cima do indicador encosta na ponta dele.
-    if not any(extended[f] for f in four) and sum(folded[f] for f in four) >= 3:
+    elif not any(extended[f] for f in four) and sum(folded[f] for f in four) >= 3:
         pose = Pose.FIST
         if extended["thumb"]:
-            direction = flat[tip] - flat[mcp]
-            direction = direction / max(float(np.linalg.norm(direction)), 1e-6)
             others = [i for i in range(21) if i not in (ip, tip)]
-            margin = 0.1 * palm
-            if direction[1] > 0.7 and flat[tip][1] > flat[others, 1].max() + margin:
-                pose = Pose.THUMB_DOWN
-            elif direction[1] < -0.7 and flat[tip][1] < flat[others, 1].min() - margin:
+            if metrics["thumb_dir_y"] < -0.7 and flat[tip][1] < flat[others, 1].min() - 0.1 * palm:
                 pose = Pose.THUMB_UP
     elif pinch < 0.3:
         pose = Pose.PINCH
@@ -564,17 +573,22 @@ class GestureMachine:
         x0, y0, x1, y1 = tuning.mouse_box
         point = (min(1.0, max(0.0, (px - x0) / (x1 - x0))), min(1.0, max(0.0, (py - y0) / (y1 - y0))))
 
-        if not self._pinching and shape.pinch < tuning.pinch_on:
+        # Clique: pinça ou fechar a mão (no teste real o Gabriel clicou fechando a mão).
+        pressing = shape.pinch < tuning.pinch_on or self.pose == Pose.FIST
+        closing = shape.pose == Pose.FIST or shape.pinch < tuning.closing_pinch
+        if not self._pinching and pressing:
             self._pinching = True
             self._pinch_t = t
             self._freeze_until = t + tuning.click_freeze_s
-        if t >= self._freeze_until and (
+        frozen = t < self._freeze_until or (closing and not self._pinching)
+        if not frozen and (
             self._last_point is None
             or abs(point[0] - self._last_point[0]) + abs(point[1] - self._last_point[1]) > tuning.mouse_epsilon
         ):
             self._last_point = point
             out.append(Command("mouse_move", point=point))
-        if self._pinching and shape.pinch > tuning.pinch_off:
+        released = shape.pinch > tuning.pinch_off and self.pose != Pose.FIST and shape.pose != Pose.FIST
+        if self._pinching and released:
             self._pinching = False
             out.append(Command("mouse_up" if self._dragging else "click"))
             self._dragging = False
