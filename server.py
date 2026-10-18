@@ -60,6 +60,16 @@ PC_TOOL_NAMES = [
 ]
 EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", "cancel_pending_email"]
 INSTALL_TOOL_NAMES = ["search_apps", "prepare_app_install", "confirm_app_install", "cancel_app_install"]
+COMPUTER_USE_TOOL_NAMES = [
+    "click_on_screen",
+    "move_mouse",
+    "type_text",
+    "press_keys",
+    "scroll",
+    "do_on_screen",
+    "confirm_screen_action",
+    "cancel_screen_action",
+]
 
 
 class AgentDispatchRequest(BaseModel):
@@ -153,6 +163,7 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
             + (PC_TOOL_NAMES if settings.pc_control_enabled else [])
             + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
             + (INSTALL_TOOL_NAMES if settings.app_install_enabled else [])
+            + (COMPUTER_USE_TOOL_NAMES if settings.computer_use_enabled else [])
         )
         return {
             "version": APP_VERSION,
@@ -164,6 +175,7 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
             "tools": tools,
             "pc_control": settings.pc_control_enabled,
             "app_install": settings.app_install_enabled,
+            "computer_use": settings.computer_use_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "errors": backend_errors + livekit_errors,
         }

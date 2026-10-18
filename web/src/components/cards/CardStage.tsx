@@ -12,6 +12,7 @@ import {
   MediaBody,
   NewsBody,
   NoteBody,
+  PointerBody,
   ScreenBody,
   SearchBody,
   TimeBody,
@@ -44,6 +45,8 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <ScreenBody data={card.data} />;
     case 'install':
       return <InstallBody data={card.data} />;
+    case 'pointer':
+      return <PointerBody data={card.data} />;
   }
 }
 

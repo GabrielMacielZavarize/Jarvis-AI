@@ -17,6 +17,7 @@ export const PANEL_META: Record<CardKind, { code: string; title: string; aliases
   media: { code: 'MED-08', title: 'Reprodução', aliases: ['midia', 'video', 'musica', 'player', 'tocando'] },
   screen: { code: 'VIS-14', title: 'Leitura de tela', aliases: ['print', 'captura', 'screenshot'] },
   install: { code: 'APP-15', title: 'Instalação de app', aliases: ['instalacao', 'instalar', 'aplicativo', 'winget', 'download'] },
+  pointer: { code: 'MOU-20', title: 'Mouse e teclado', aliases: ['mouse', 'teclado', 'clique', 'cursor', 'digitacao', 'atalho'] },
 };
 
 const PANEL_ACTIONS: HudPanelAction[] = ['list', 'close', 'close_all', 'expand', 'collapse'];
@@ -64,6 +65,8 @@ export function panelDetail(card: HudCard, now = Date.now()): string {
       return card.data.label;
     case 'install':
       return [card.data.package?.name ?? card.data.query, card.data.status].filter(Boolean).join(' · ');
+    case 'pointer':
+      return [card.data.action, card.data.label || card.data.target].filter(Boolean).join(' · ');
   }
 }
 

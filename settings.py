@@ -15,6 +15,8 @@ SUPPORTED_BACKENDS = (
     "openai-compatible-pipeline",
 )
 DEFAULT_GOOGLE_MODEL = "gemini-3.8-live"
+# Modelo de visão (API normal, não Live) que acha na tela o que o Jarvis vai clicar.
+DEFAULT_COMPUTER_USE_MODEL = "gemini-3.8-flash"
 # "gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-live-2.5-flash-native-audio",
 # "gemini-2.5-flash-native-audio-preview-12-2025"...
 GOOGLE_LIVE_MODEL_PATTERN = re.compile(r"(^|-)live(-|$)|-native-audio")
@@ -110,6 +112,8 @@ class Settings:
     email_tool_enabled: bool = False
     pc_control_enabled: bool = False
     app_install_enabled: bool = False
+    computer_use_enabled: bool = False
+    computer_use_model: str = DEFAULT_COMPUTER_USE_MODEL
     home_city: str | None = None
     transcription_hints: bool = False
     allowed_emails: tuple[str, ...] = ()
@@ -168,6 +172,14 @@ class Settings:
                 "JARVIS_ENABLE_APP_INSTALL",
                 default=False,
             ),
+            computer_use_enabled=_parse_bool(
+                env_map.get("JARVIS_ENABLE_COMPUTER_USE"),
+                "JARVIS_ENABLE_COMPUTER_USE",
+                default=False,
+            ),
+            computer_use_model=(
+                _clean_optional(env_map.get("JARVIS_COMPUTER_USE_MODEL")) or DEFAULT_COMPUTER_USE_MODEL
+            ),
             home_city=_clean_optional(env_map.get("JARVIS_HOME_CITY")),
             transcription_hints=_parse_bool(
                 env_map.get("JARVIS_TRANSCRIPTION_HINTS"),
@@ -201,6 +213,12 @@ class Settings:
                 "GOOGLE_MODEL precisa ser um modelo compatível com Gemini Live API. "
                 f"Use '{DEFAULT_GOOGLE_MODEL}' ou outro modelo com 'live' ou "
                 "'-native-audio' no nome."
+            )
+
+        if self.computer_use_enabled and not self.google_api_key:
+            errors.append(
+                "GOOGLE_API_KEY é obrigatório quando JARVIS_ENABLE_COMPUTER_USE=true "
+                "(o Gemini enxerga a tela para achar onde clicar)."
             )
 
         if self.backend in {"openai-realtime", "openai-compatible-pipeline"}:

@@ -158,7 +158,7 @@ def build_runtime(settings: Settings, *, load_vad: bool = True) -> JarvisRuntime
     agent = JarvisAgent(
         build_agent_instructions(
             home_city=settings.home_city,
-            monitors=_monitor_layout() if settings.pc_control_enabled else None,
+            monitors=_monitor_layout() if settings.pc_control_enabled or settings.computer_use_enabled else None,
         )
     )
     room_options = room_io.RoomOptions(
