@@ -14,3 +14,6 @@ httpx
 pyautogui
 pycaw; sys_platform == "win32"
 comtypes; sys_platform == "win32"
+# Palavra de ativação "Jarvis" (WAK-22). No Linux o openwakeword exige tflite-runtime, sem wheel para o Python 3.12.
+openwakeword; sys_platform != "linux"
+sounddevice

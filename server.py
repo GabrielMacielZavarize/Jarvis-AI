@@ -7,10 +7,12 @@ no formato padrão de endpoint usado pelo ``TokenSource.endpoint`` do livekit-cl
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import secrets
+import webbrowser
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import requests
 from dotenv import load_dotenv
@@ -21,10 +23,14 @@ from pydantic import BaseModel
 
 from generate_playground_token import create_token
 from settings import Settings, SettingsError, load_settings
+from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
+from wake_hub import WakeHub, build_wake_router
 
 APP_VERSION = "2.0.0"
 DEFAULT_AGENT_NAME = "jarvis"
 TOKEN_TTL_MINUTES = 30
+# Safety net for requests still running when Ctrl+C arrives.
+GRACEFUL_SHUTDOWN_S = 2
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
 WEB_DIST = ROOT / "web" / "dist"
@@ -124,9 +130,10 @@ def _requested_agent_name(body: TokenRequest) -> str:
     return DEFAULT_AGENT_NAME
 
 
-def create_app(*, reload_env: bool = True) -> FastAPI:
+def create_app(*, reload_env: bool = True, open_browser: Callable[[str], Any] = webbrowser.open) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
-    so credentials added while the server is running are picked up without a restart."""
+    so credentials added while the server is running are picked up without a restart.
+    ``open_browser`` opens the HUD when "Jarvis" is heard and no tab is open."""
     app = FastAPI(title="Jarvis HUD", version=APP_VERSION)
 
     def current_settings() -> Settings:
@@ -165,6 +172,7 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
             "pc_control": settings.pc_control_enabled,
             "app_install": settings.app_install_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
+            "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "errors": backend_errors + livekit_errors,
         }
 
@@ -187,6 +195,16 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
         )
         return {"server_url": settings.livekit_url or "", "participant_token": token}
 
+    app.state.wake_hub = WakeHub()
+    app.include_router(
+        build_wake_router(
+            app.state.wake_hub,
+            current_settings,
+            secret=os.environ.get(WAKE_SECRET_ENV),
+            open_browser=open_browser,
+        )
+    )
+
     if (WEB_DIST / "index.html").exists():
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="hud")
     else:
@@ -205,15 +223,32 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
 app = create_app()
 
 
-def main() -> int:
+def serve(hud_app: FastAPI, *, host: str, port: int, log_level: str) -> None:
+    """``uvicorn.run`` that first ends the SSE streams of open HUD tabs, which would otherwise
+    keep Ctrl+C waiting until every tab is closed."""
     import uvicorn
 
+    class HudServer(uvicorn.Server):
+        async def shutdown(self, sockets: Any = None) -> None:
+            hud_app.state.wake_hub.close()
+            await super().shutdown(sockets)
+
+    config = uvicorn.Config(
+        hud_app, host=host, port=port, log_level=log_level, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_S
+    )
+    try:
+        HudServer(config).run()
+    except KeyboardInterrupt:
+        pass
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description="Servidor do HUD do Jarvis.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    serve(app, host=args.host, port=args.port, log_level="info")
     return 0
 
 

@@ -5,6 +5,7 @@ import { levels, SIGNAL_FLOOR } from '../lib/audio';
 import { BACKEND_LABELS, MODE_LABELS } from '../lib/catalog';
 import { useHud } from '../lib/hudStore';
 import type { JarvisMode } from '../lib/types';
+import type { WakeWord } from '../hooks/useWakeWord';
 import { Panel } from './Panel';
 
 /** Voice level meter updated through a ref — no React renders per audio frame. */
@@ -69,9 +70,17 @@ interface SystemPanelProps {
   connected: boolean;
   micEnabled: boolean;
   microphone: MicrophoneProps;
+  /** WAK-22, when JARVIS_WAKE_WORD=true. */
+  wake?: WakeWord | null;
 }
 
-export function SystemPanel({ mode, status, demo, connected, micEnabled, microphone }: SystemPanelProps) {
+function wakeLabel(wake: WakeWord, connected: boolean): { text: string; ok: boolean } {
+  if (!wake.detector) return { text: 'Detector offline · veja o terminal', ok: false };
+  if (wake.listening) return { text: 'Aguardando “Jarvis”', ok: true };
+  return { text: connected ? 'Pausada durante o link' : 'Retomando escuta…', ok: false };
+}
+
+export function SystemPanel({ mode, status, demo, connected, micEnabled, microphone, wake }: SystemPanelProps) {
   const server = status.state === 'ok' ? status.status : null;
   const backend = server?.backend ? (BACKEND_LABELS[server.backend] ?? server.backend) : '—';
   const live = connected && !demo;
@@ -117,6 +126,12 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
                 ))}
               </select>
             </dd>
+          </div>
+        )}
+        {wake && !demo && (
+          <div className="stat" style={{ gridColumn: '1 / -1' }}>
+            <dt>Ativação por voz · WAK-22</dt>
+            <dd className={wakeLabel(wake, connected).ok ? 'ok-text' : undefined}>{wakeLabel(wake, connected).text}</dd>
           </div>
         )}
         {live && (

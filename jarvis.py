@@ -4,12 +4,15 @@ Uso:
     python jarvis.py                 # agente (modo dev) + HUD em http://127.0.0.1:8000
     python jarvis.py --no-agent      # apenas o HUD (útil para o modo demonstração)
     python jarvis.py --port 8080 --no-browser
+
+Com JARVIS_WAKE_WORD=true também sobe o detector local da palavra "Jarvis" (wake_word.py).
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -73,6 +76,23 @@ def _start_agent(mode: str) -> subprocess.Popen[bytes] | None:
     return subprocess.Popen([sys.executable, str(ROOT / "agent.py"), mode], cwd=ROOT)
 
 
+def _start_wake_word(url: str) -> subprocess.Popen[bytes] | None:
+    """Local detector of "Jarvis"; must start before the server is imported (it reads the secret)."""
+    try:
+        settings = load_settings()
+    except SettingsError as exc:
+        print(f"[ATIVAÇÃO] Palavra de ativação desligada: {exc}")
+        return None
+    if not settings.wake_word_enabled:
+        return None
+
+    from wake_hub import SECRET_ENV
+
+    os.environ[SECRET_ENV] = secrets.token_urlsafe(24)
+    print("[ATIVAÇÃO] Iniciando o detector local da palavra “Jarvis” (o áudio não sai do PC)...")
+    return subprocess.Popen([sys.executable, str(ROOT / "wake_word.py"), "--server", url], cwd=ROOT)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Inicia o Jarvis com o HUD holográfico.")
     parser.add_argument("--host", default="127.0.0.1")
@@ -103,23 +123,35 @@ def main() -> int:
     agent_process = None if args.no_agent else _start_agent(args.agent_mode)
 
     url = f"http://{args.host}:{args.port}"
+    wake_process = _start_wake_word(url)
     print(f"[HUD] Interface disponível em {url}")
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
 
-    import uvicorn
-
-    from server import app
+    from server import app, serve
 
     try:
-        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+        serve(app, host=args.host, port=args.port, log_level="warning")
     except KeyboardInterrupt:
         pass
     finally:
+        if wake_process is not None:
+            _stop_wake_word(wake_process)
         if agent_process is not None:
             _stop_agent(agent_process)
 
     return 0
+
+
+def _stop_wake_word(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=3)
 
 
 def _stop_agent(process: subprocess.Popen[bytes]) -> None:

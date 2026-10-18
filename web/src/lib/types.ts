@@ -258,5 +258,7 @@ export interface ServerStatus {
   pc_control?: boolean;
   app_install?: boolean;
   home?: { name: string; latitude: number; longitude: number } | null;
+  /** WAK-22: "Jarvis" opens the link; silence_s of quiet closes it (0 = never). */
+  wake_word?: { enabled: boolean; silence_s: number };
   errors: string[];
 }

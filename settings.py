@@ -26,6 +26,8 @@ LIVEKIT_COMMANDS = {"dev", "start", "connect"}
 HELP_FLAGS = {"-h", "--help"}
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
 FALSY_VALUES = {"0", "false", "no", "off"}
+DEFAULT_WAKE_THRESHOLD = 0.5
+DEFAULT_WAKE_SILENCE_SECONDS = 30
 
 
 class SettingsError(ValueError):
@@ -56,6 +58,30 @@ def _parse_bool(raw_value: str | None, env_name: str, default: bool = False) -> 
         f"Valor inválido em {env_name}: {raw_value!r}. "
         "Use true/false, yes/no, on/off ou 1/0."
     )
+
+
+def _parse_number(
+    raw_value: str | None, env_name: str, default: float, minimum: float, maximum: float
+) -> float:
+    cleaned = _clean_optional(raw_value)
+    if cleaned is None:
+        return default
+    try:
+        value = float(cleaned.replace(",", "."))
+    except ValueError:
+        raise SettingsError(f"Valor inválido em {env_name}: {raw_value!r}. Use um número.") from None
+    if not minimum <= value <= maximum:
+        raise SettingsError(f"{env_name} precisa estar entre {minimum:g} e {maximum:g} (veio {value:g}).")
+    return value
+
+
+def _parse_wake_silence(raw_value: str | None) -> int:
+    """0 keeps the link open until "tchau, Jarvis" or the button, as without the wake word."""
+    env_name = "JARVIS_WAKE_SILENCE_SECONDS"
+    seconds = int(_parse_number(raw_value, env_name, DEFAULT_WAKE_SILENCE_SECONDS, 0, 3600))
+    if 0 < seconds < 10:
+        raise SettingsError(f"{env_name} precisa ser 0 (nunca encerrar) ou pelo menos 10 segundos.")
+    return seconds
 
 
 def _parse_csv(raw_value: str | None) -> tuple[str, ...]:
@@ -112,6 +138,10 @@ class Settings:
     app_install_enabled: bool = False
     home_city: str | None = None
     transcription_hints: bool = False
+    wake_word_enabled: bool = False
+    wake_threshold: float = DEFAULT_WAKE_THRESHOLD
+    wake_silence_seconds: int = DEFAULT_WAKE_SILENCE_SECONDS
+    wake_mic: str | None = None
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -174,6 +204,12 @@ class Settings:
                 "JARVIS_TRANSCRIPTION_HINTS",
                 default=False,
             ),
+            wake_word_enabled=_parse_bool(env_map.get("JARVIS_WAKE_WORD"), "JARVIS_WAKE_WORD", default=False),
+            wake_threshold=_parse_number(
+                env_map.get("JARVIS_WAKE_THRESHOLD"), "JARVIS_WAKE_THRESHOLD", DEFAULT_WAKE_THRESHOLD, 0.05, 0.99
+            ),
+            wake_silence_seconds=_parse_wake_silence(env_map.get("JARVIS_WAKE_SILENCE_SECONDS")),
+            wake_mic=_clean_optional(env_map.get("JARVIS_WAKE_MIC")),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),
