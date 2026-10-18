@@ -92,7 +92,7 @@ Controle as janelas só com a mão na frente da webcam (MediaPipe Hands, tudo lo
 | --- | --- |
 | 🖐 Mão aberta parada ~1 s | **Arma** os gestos (nada acontece desarmado). Sem uso por ~12 s, ou sem a mão no quadro por ~5 s, desarma sozinho. |
 | ✊ Fechar a mão | **Pega** a janela em foco. |
-| ✊ → mover para um lado → 🖐 abrir | **Joga** a janela para o monitor que está fisicamente naquele lado do monitor atual dela (cima → monitor de cima, baixo → notebook, esquerda → vertical). O aviso mostra "→ monitor de cima" antes de soltar. |
+| ✊ → mover para um lado → 🖐 abrir | **Joga** a janela para o monitor que está fisicamente naquele lado do monitor atual dela (cima → monitor de cima, baixo → notebook, esquerda → vertical). Do vertical, "baixo" vai ao notebook e "direita" ao monitor da altura da janela. O aviso mostra "→ monitor de cima" antes de soltar; abrir a mão já solta, mesmo com o polegar ainda encostado. |
 | ✊ → 🖐 abrir sem mover | **Estende** (maximiza); se já estava maximizada, restaura. |
 | 🖐 Palma descendo rápido e parando no quadro | **Minimiza** a janela em foco (baixar a mão até sair do quadro não conta). |
 | 🖐 "Apagar o quadro" (lado a lado, 3 traços) | **Desfaz** o último movimento: a janela volta para onde estava, com a mesma memória de "volta pra onde estava" da voz. |

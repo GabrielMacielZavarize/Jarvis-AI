@@ -18,6 +18,7 @@ from gesture_actions import (
     GestureActionError,
     Target,
     describe_direction,
+    monitor_label,
     neighbor_monitor,
     throw_bias,
 )
@@ -171,6 +172,37 @@ class MachineTests(unittest.TestCase):
                 self.assertEqual(commands[-1].kind, "throw")
                 self.assertEqual(commands[-1].direction, expected)
 
+    def test_opening_hand_releases_during_the_pinch_phase(self) -> None:
+        # Visto na webcam: ao abrir, o polegar desencosta do indicador por último; a mão às vezes
+        # sai do quadro antes de ficar aberta. A fase de pinça já conta como soltar.
+        machine, t = armed_machine()
+        grab = hold("fist", t, 0.5)
+        lift = move("fist", end_of(grab), 0.3, (0.5, 0.5), (0.5, 0.25))
+        opening = hold("pinch", end_of(lift), 0.3, center=(0.5, 0.25))
+        commands = play(machine, grab, lift, opening, absent(end_of(opening), 0.5))
+        self.assertEqual(kinds(commands), ["grab", "aim", "throw"])
+        self.assertEqual(commands[-1].direction, "up")
+
+    def test_hand_closing_right_after_a_throw_does_not_grab_again(self) -> None:
+        # Visto na webcam: depois de soltar, a mão relaxa e fecha sozinha em ~0,6 s.
+        machine, t = armed_machine()
+        grab = hold("fist", t, 0.5)
+        lift = move("fist", end_of(grab), 0.3, (0.5, 0.5), (0.5, 0.25))
+        release = hold("open", end_of(lift), 0.3, center=(0.5, 0.25))
+        relaxed = hold("fist", end_of(release), 2.0, center=(0.5, 0.25))
+        commands = play(machine, grab, lift, release, relaxed)
+        self.assertEqual(kinds(commands), ["grab", "aim", "throw"])
+        reopen = hold("open", end_of(relaxed), 0.3, center=(0.5, 0.25))
+        again = hold("fist", end_of(reopen), 0.5, center=(0.5, 0.25))
+        self.assertEqual(kinds(play(machine, reopen, again)), ["grab"])
+
+    def test_throw_distance_grows_with_a_hand_close_to_the_camera(self) -> None:
+        machine, t = armed_machine()
+        grab = hold("fist", t, 0.5, size=0.3)
+        nudge = move("fist", end_of(grab), 0.3, (0.5, 0.5), (0.5, 0.36), size=0.3)
+        commands = play(machine, grab, nudge)
+        self.assertEqual(kinds(commands), ["grab"])  # 0,14 de quadro é pouco para uma mão desse tamanho
+
     def test_release_in_place_maximizes(self) -> None:
         machine, t = armed_machine()
         grab = hold("fist", t, 0.5)
@@ -321,7 +353,7 @@ class NeighborMonitorTests(unittest.TestCase):
             (NOTEBOOK, "right", None),
             (NOTEBOOK, "down", None),
             (VERTICAL, "up", None),
-            (VERTICAL, "down", None),
+            (VERTICAL, "down", NOTEBOOK),  # mais à direita, mas é o que fica embaixo (pedido no teste real)
             (VERTICAL, "left", None),
         ]
         for source, direction, expected in cases:
@@ -348,7 +380,14 @@ class NeighborMonitorTests(unittest.TestCase):
         self.assertEqual(neighbor_monitor(right, "left", [left, right]), left)
         self.assertIsNone(neighbor_monitor(left, "down", [left, right]))
         self.assertEqual(neighbor_monitor(right, "right", [left, right, diagonal]), diagonal)
-        self.assertIsNone(neighbor_monitor(right, "down", [left, right, diagonal]))
+        self.assertEqual(neighbor_monitor(right, "down", [left, right, diagonal]), diagonal)
+        self.assertEqual(neighbor_monitor(diagonal, "up", [left, right, diagonal]), right)
+        self.assertIsNone(neighbor_monitor(left, "up", [left, right, diagonal]))
+
+    def test_monitor_names_come_from_the_physical_layout(self) -> None:
+        self.assertEqual(monitor_label(TOP, SCREENS), "monitor de cima")
+        self.assertEqual(monitor_label(NOTEBOOK, SCREENS), "monitor de baixo")
+        self.assertEqual(monitor_label(VERTICAL, SCREENS), "monitor vertical")
 
     def test_throw_bias(self) -> None:
         self.assertAlmostEqual(throw_bias("right", (0.2, 0.1)), 0.5)
@@ -427,6 +466,15 @@ class ActionsTests(unittest.TestCase):
         self.mocks["remember"].assert_called_once_with(10)
         self.assertIn("monitor de baixo", result)
 
+    def test_down_from_the_vertical_monitor_goes_to_the_notebook(self) -> None:
+        with (
+            patch("win_desktop.window_rect", return_value=(-1300, 1800, -200, 2500)),
+            patch("win_desktop.move_to_monitor") as move_to,
+            patch("win_desktop.window_monitor", return_value=NOTEBOOK),
+        ):
+            self.actions.throw(self.target(monitor=VERTICAL), "down", (0.05, 0.3))
+        move_to.assert_called_once_with(10, NOTEBOOK)
+
     def test_throw_without_a_monitor_there_changes_nothing(self) -> None:
         with (
             patch("win_desktop.window_rect", return_value=(200, 200, 1200, 900)),
@@ -449,7 +497,8 @@ class ActionsTests(unittest.TestCase):
 
     def test_aim_names_the_destination(self) -> None:
         with patch("win_desktop.window_rect", return_value=(200, 200, 1200, 900)):
-            self.assertEqual(self.actions.aim(self.target(), "left", (-0.2, 0)), "monitor da esquerda")
+            self.assertEqual(self.actions.aim(self.target(), "left", (-0.2, 0)), "monitor vertical")
+            self.assertEqual(self.actions.aim(self.target(), "down", (0, 0.2)), "monitor de baixo")
             self.assertIsNone(self.actions.aim(self.target(), "right", (0.2, 0)))
 
     def test_maximize_toggles(self) -> None:

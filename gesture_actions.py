@@ -28,8 +28,11 @@ IS_WINDOWS = sys.platform == "win32"
 
 DIRECTION_VECTORS = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 DIRECTION_LABELS = {"up": "de cima", "down": "de baixo", "left": "da esquerda", "right": "da direita"}
-# Um monitor sem sobreposição com o atual só conta se estiver até este ângulo da direção pedida.
+# Um monitor sem sobreposição com o atual só conta se estiver até este ângulo da direção pedida;
+# não havendo nenhum, aceita uma diagonal mais aberta (o notebook fica "embaixo" do vertical,
+# embora mais à direita).
 MAX_DIAGONAL_DEGREES = 50.0
+LOOSE_DIAGONAL_DEGREES = 72.0
 
 VK_TAB = 0x09
 VK_SHIFT = 0x10
@@ -105,6 +108,7 @@ def neighbor_monitor(
         px = ax + bias * source.width / 2
 
     candidates: list[tuple[float, float, win_desktop.Monitor]] = []
+    loose: list[tuple[float, float, win_desktop.Monitor]] = []
     for screen in screens:
         if same_monitor(screen, source):
             continue
@@ -117,15 +121,39 @@ def neighbor_monitor(
             overlap = min(screen.bottom, source.bottom) - max(screen.top, source.top)
         else:
             overlap = min(screen.right, source.right) - max(screen.left, source.left)
+        item = (_distance_to_rect(px, py, _bounds(screen)), -max(overlap, 0), screen)
         if overlap <= 0:
             cx, cy = _center(_bounds(screen))
             angle = math.degrees(math.atan2(abs((cy - sy) * dx - (cx - sx) * dy), (cx - sx) * dx + (cy - sy) * dy))
             if angle > MAX_DIAGONAL_DEGREES:
+                if angle <= LOOSE_DIAGONAL_DEGREES:
+                    loose.append(item)
                 continue
-        candidates.append((_distance_to_rect(px, py, _bounds(screen)), -max(overlap, 0), screen))
-    if not candidates:
+        candidates.append(item)
+    best = candidates or loose
+    if not best:
         return None
-    return min(candidates, key=lambda item: (item[0], item[1]))[2]
+    return min(best, key=lambda item: (item[0], item[1]))[2]
+
+
+def monitor_label(screen: win_desktop.Monitor, screens: list[win_desktop.Monitor]) -> str:
+    """Name of a monitor by where it physically is: 'monitor de cima', 'monitor vertical'..."""
+    if screen.height > screen.width:
+        return "monitor vertical"
+    others = [other for other in screens if not same_monitor(other, screen) and other.width >= other.height]
+    for other in others:
+        overlap = min(other.right, screen.right) - max(other.left, screen.left)
+        if overlap > 0 and other.top >= screen.bottom - 64:
+            return "monitor de cima"
+        if overlap > 0 and other.bottom <= screen.top + 64:
+            return "monitor de baixo"
+    for other in others:
+        overlap = min(other.bottom, screen.bottom) - max(other.top, screen.top)
+        if overlap > 0 and other.left >= screen.right - 64:
+            return "monitor da esquerda"
+        if overlap > 0 and other.right <= screen.left + 64:
+            return "monitor da direita"
+    return "monitor principal" if screen.primary else f"monitor {screen.number}"
 
 
 def describe_direction(direction: str) -> str:
@@ -306,7 +334,8 @@ class DesktopActions:
 
     def aim(self, target: Target, direction: str, vector: tuple[float, float]) -> str | None:
         """Label of the monitor a release would send the window to (None when there is none)."""
-        return describe_direction(direction) if self.destination(target, direction, vector) else None
+        screen = self.destination(target, direction, vector)
+        return monitor_label(screen, win_desktop.monitors()) if screen else None
 
     # ── ações ──
 
@@ -321,7 +350,7 @@ class DesktopActions:
         landed = win_desktop.window_monitor(target.window.hwnd)
         if not same_monitor(landed, screen):
             raise GestureActionError(f"Tentei levar '{target.title}', mas ela não saiu do lugar.")
-        return f"'{target.title}' → {describe_direction(direction)}."
+        return f"'{target.title}' → {monitor_label(screen, win_desktop.monitors())}."
 
     def maximize(self, target: Target) -> str:
         """'Estender': maximize the window, or restore it when it already is maximized."""
@@ -434,7 +463,7 @@ class DryRunActions(DesktopActions):
         screen = self.destination(target, direction, vector)
         if screen is None:
             raise GestureActionError(f"Não há {describe_direction(direction)}.")
-        return f"(simulação) '{target.title}' → {describe_direction(direction)}."
+        return f"(simulação) '{target.title}' → {monitor_label(screen, win_desktop.monitors())}."
 
     def maximize(self, target: Target) -> str:
         return f"(simulação) estender '{target.title}'."

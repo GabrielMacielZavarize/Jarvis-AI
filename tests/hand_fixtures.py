@@ -135,6 +135,7 @@ def move(
     origin: tuple[float, float],
     end: tuple[float, float],
     path: Callable[[float], float] = lambda k: k,
+    **kwargs: object,
 ) -> Timeline:
     """Hand moving in a straight line from `origin` to `end` (frame coordinates 0..1)."""
     frames = max(2, round(seconds * FPS))
@@ -142,7 +143,7 @@ def move(
     for i in range(frames):
         k = path(i / (frames - 1))
         point = (origin[0] + (end[0] - origin[0]) * k, origin[1] + (end[1] - origin[1]) * k)
-        timeline.append((start + i / FPS, make_hand(pose, point)))
+        timeline.append((start + i / FPS, make_hand(pose, point, **kwargs)))
     return timeline
 
 

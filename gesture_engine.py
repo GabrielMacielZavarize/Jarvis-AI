@@ -91,11 +91,14 @@ class Tuning:
     lost_disarm_s: float = 5.0
     lost_grace_s: float = 0.3  # quadros sem mão tolerados antes de cancelar um gesto
     cooldown_s: float = 0.8
-    grab_confirm_s: float = 0.2  # punho segurado antes de pegar a janela
+    window_cooldown_s: float = 1.2  # depois de soltar uma janela a mão relaxa e fecha sozinha
+    grab_confirm_s: float = 0.3  # punho segurado antes de pegar a janela
     grab_cancel_s: float = 4.0  # punho parado por tanto tempo sem direção cancela
-    release_none_s: float = 1.0  # pose ambígua por tanto tempo enquanto segura cancela
-    throw_distance: float = 0.12
+    release_none_s: float = 0.4  # pose ambígua por tanto tempo enquanto segura = soltou
+    throw_distance: float = 0.12  # mínimo; com a mão perto da câmera vale throw_palms palmas
+    throw_palms: float = 0.6
     maximize_max_move: float = 0.07
+    maximize_palms: float = 0.35
     close_hold_s: float = 1.2
     swipe_distance: float = 0.2
     swipe_max_s: float = 0.5
@@ -315,7 +318,7 @@ class GestureMachine:
         self._grab_t = 0.0
         self._direction: str | None = None
         self._vector = (0.0, 0.0)
-        self._none_since: float | None = None
+        self._grab_palm = 0.0
         self._close_t = 0.0
         self._pending_swipe: float | None = None
         self._tab_until = 0.0
@@ -459,11 +462,14 @@ class GestureMachine:
             return
         if t < self._cooldown_until:
             return
+        if self.pose in (Pose.FIST, Pose.THUMB_DOWN) and self._pose_since < self._cooldown_until:
+            self._need_release = True  # fechou durante o intervalo: é a mão relaxando, não um gesto
 
         if self.pose == Pose.FIST and not self._need_release and t - self._pose_since >= tuning.grab_confirm_s:
             self._enter(State.GRAB, t)
             self._origin = center
             self._grab_t = t
+            self._grab_palm = shape.palm
             out.append(Command("grab"))
         elif self.pose == Pose.THUMB_DOWN and not self._need_release:
             self._enter(State.CLOSE, t)
@@ -509,9 +515,11 @@ class GestureMachine:
             self._close_t = t
             return
 
-        if distance >= tuning.throw_distance:
+        # Distâncias proporcionais à mão: perto da câmera ela atravessa o quadro com pouco movimento.
+        throw = max(tuning.throw_distance, tuning.throw_palms * self._grab_palm)
+        if distance >= throw:
             direction: str | None = dominant_direction(dx, dy, self._direction)
-        elif distance < tuning.throw_distance * 0.7:
+        elif distance < throw * 0.7:
             direction = None
         else:
             direction = self._direction
@@ -519,29 +527,25 @@ class GestureMachine:
             self._direction = direction
             out.append(Command("aim", direction=direction, vector=(dx, dy)))
 
-        if self.pose in (Pose.OPEN, Pose.TWO, Pose.POINT, Pose.THUMB_UP):
+        # Ao abrir a mão o polegar desencosta do indicador por último (fase de "pinça"): já é soltar.
+        released = self.pose in (Pose.OPEN, Pose.TWO, Pose.POINT, Pose.THUMB_UP, Pose.PINCH) or (
+            self.pose == Pose.NONE and t - self._pose_since >= tuning.release_none_s
+        )
+        if released:
             if self._direction:
                 out.append(Command("throw", direction=self._direction, vector=(dx, dy)))
-            elif distance <= tuning.maximize_max_move:
+            elif distance <= max(tuning.maximize_max_move, tuning.maximize_palms * self._grab_palm):
                 out.append(Command("maximize"))
             else:
                 out.append(Command("cancel"))
-            self._after_action(t)
+            self._after_action(t, cooldown=tuning.window_cooldown_s)
             return
 
-        if self.pose == Pose.NONE:
-            self._none_since = self._none_since if self._none_since is not None else t
-            if t - self._none_since >= tuning.release_none_s:
-                out.append(Command("cancel"))
-                self._need_release = True
-                self._after_action(t)
-            return
-        self._none_since = None
-
-        if self._direction is None and t - self._grab_t >= tuning.grab_cancel_s and self._still_for(t) >= 1.0:
+        stuck = t - self._grab_t >= tuning.grab_cancel_s and self._still_for(t) >= 1.0
+        if self.pose == Pose.FIST and self._direction is None and stuck:
             out.append(Command("cancel"))
             self._need_release = True
-            self._after_action(t)
+            self._after_action(t, cooldown=tuning.window_cooldown_s)
 
     def _close(self, t: float, shape: Shape, center: tuple[float, float], out: list[Command]) -> None:
         if self.pose != Pose.THUMB_DOWN:
@@ -617,7 +621,6 @@ class GestureMachine:
         self.state = state
         self._direction = None
         self._vector = (0.0, 0.0)
-        self._none_since = None
         self._pending_swipe = None
         self._touch(t)
         if state != State.MOUSE:
