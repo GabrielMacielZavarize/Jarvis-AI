@@ -123,16 +123,22 @@ class HudEventsTests(unittest.TestCase):
         events = asyncio.run(scenario())
 
         self.assertEqual(events[0], {"type": "config", "enabled": True, "silence_s": 45})
-        self.assertEqual(events[1], {"type": "status", "detector": True, "listening": True})
+        self.assertEqual(events[1], {"type": "status", "detector": True, "listening": True, "mic_silent": False})
         self.assertEqual(events[2], {"type": "wake", "score": 0.77})
-        self.assertEqual(events[3], {"type": "status", "detector": True, "listening": False})
+        self.assertEqual(events[3], {"type": "status", "detector": True, "listening": False, "mic_silent": False})
         self.assertEqual(len(events), 4)
         self.assertEqual(hub.clients, {})
 
     def test_status_never_says_listening_without_the_detector(self) -> None:
         hub = WakeHub()
 
-        self.assertEqual(hub.status(), {"type": "status", "detector": False, "listening": False})
+        self.assertEqual(hub.status(), {"type": "status", "detector": False, "listening": False, "mic_silent": False})
+
+    def test_status_tells_the_hud_the_detector_hears_only_silence(self) -> None:
+        hub = WakeHub()
+        hub.detector_state(mic_silent=True)
+
+        self.assertTrue(hub.status()["mic_silent"])
 
 
 class WakeEndpointTests(unittest.TestCase):
@@ -155,6 +161,8 @@ class WakeEndpointTests(unittest.TestCase):
         self.assertEqual(client.get("/api/wake/detector", headers={"X-Jarvis-Wake": "chute"}).status_code, 403)
         self.assertEqual(client.post("/api/wake/trigger", json={"score": 0.9}).status_code, 403)
         self.assertEqual(client.get("/api/wake/detector", headers=DETECTOR).json(), {"listen": True, "mic_label": None})
+        client.get("/api/wake/detector?silent=1", headers=DETECTOR)
+        self.assertTrue(client.app.state.wake_hub.status()["mic_silent"])
 
     def test_other_sites_cannot_drive_the_hud_endpoints(self) -> None:
         client, _ = self.client(WAKE_ENV)

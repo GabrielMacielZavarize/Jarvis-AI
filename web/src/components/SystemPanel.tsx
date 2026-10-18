@@ -76,6 +76,7 @@ interface SystemPanelProps {
 
 function wakeLabel(wake: WakeWord, connected: boolean): { text: string; ok: boolean } {
   if (!wake.detector) return { text: 'Detector offline · veja o terminal', ok: false };
+  if (wake.listening && wake.micSilent) return { text: 'Sem sinal no microfone · mudo no Windows?', ok: false };
   if (wake.listening) return { text: 'Aguardando “Jarvis”', ok: true };
   return { text: connected ? 'Pausada durante o link' : 'Retomando escuta…', ok: false };
 }

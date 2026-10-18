@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sys
 import unittest
+
+import numpy as np
 from collections import deque
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +14,7 @@ import wake_word
 from wake_word import (
     REARM_DELAY_S,
     RETRY_DELAY_S,
+    SILENT_AFTER_S,
     DetectorState,
     InputDevice,
     ServerLink,
@@ -60,14 +63,17 @@ class Clock:
 class FakeStream:
     description = "Microfone de teste"
 
-    def __init__(self, clock: Clock, label: str | None) -> None:
+    def __init__(self, clock: Clock, label: str | None, amplitude: int) -> None:
         self.clock = clock
         self.label = label
+        self.amplitude = amplitude
         self.closed = False
 
-    def read(self, timeout: float) -> object:
+    def read(self, timeout: float) -> np.ndarray:
         self.clock.now += 0.08
-        return object()
+        frame = np.zeros(1280, dtype=np.int16)
+        frame[::2] = self.amplitude
+        return frame
 
     def close(self) -> None:
         self.closed = True
@@ -80,8 +86,10 @@ class FakeLink:
         self.clock = clock
         self.script = script
         self.triggers: list[float] = []
+        self.silent_reports: list[bool] = []
 
-    def state(self) -> DetectorState | None:
+    def state(self, mic_silent: bool = False) -> DetectorState | None:
+        self.silent_reports.append(mic_silent)
         for until, state in self.script:
             if self.clock.now < until:
                 return state
@@ -101,12 +109,13 @@ class Harness:
         self.streams: list[FakeStream] = []
         self.until = until
         self.open_error: Exception | None = None
+        self.amplitude = 120
 
     def open_mic(self, label: str | None) -> FakeStream:
         if self.open_error is not None:
             error, self.open_error = self.open_error, None
             raise error
-        stream = FakeStream(self.clock, label)
+        stream = FakeStream(self.clock, label, self.amplitude)
         self.streams.append(stream)
         return stream
 
@@ -207,6 +216,7 @@ class ServerLinkTests(unittest.TestCase):
         self.assertEqual(state, DetectorState(listen=True, mic_label="Headset"))
         url = http.get.call_args.args[0]
         self.assertEqual(url, "http://127.0.0.1:8000/api/wake/detector")
+        self.assertEqual(http.get.call_args.kwargs["params"], {"silent": 0})
         self.assertEqual(http.get.call_args.kwargs["headers"], {"X-Jarvis-Wake": "s3cret"})
 
     def test_server_down_means_do_not_listen(self) -> None:
@@ -289,6 +299,22 @@ class RunLoopTests(unittest.TestCase):
         harness.run()
 
         self.assertEqual(len(harness.streams), 1)
+
+    def test_reports_a_muted_microphone(self) -> None:
+        harness = Harness([(30.0, LISTEN)], scores=[], until=REARM_DELAY_S + SILENT_AFTER_S + 1.5)
+        harness.amplitude = 1  # mudo no Windows: zeros e ±1
+
+        harness.run()
+
+        self.assertFalse(harness.link.silent_reports[0])
+        self.assertTrue(harness.link.silent_reports[-1])
+
+    def test_room_noise_is_not_silence(self) -> None:
+        harness = Harness([(30.0, LISTEN)], scores=[], until=REARM_DELAY_S + SILENT_AFTER_S + 1.5)
+
+        harness.run()
+
+        self.assertFalse(any(harness.link.silent_reports))
 
     def test_server_down_releases_the_mic(self) -> None:
         harness = Harness([(3.0, LISTEN), (10.0, None)], scores=[], until=5.0)

@@ -57,6 +57,8 @@ class WakeHub:
         # Score of a wake waiting for the browser that was just opened.
         self.undelivered_score: float | None = None
         self.detector_seen_at: float | None = None
+        # The detector's open microphone has delivered only silence (muted in Windows?).
+        self.mic_silent = False
 
     # --- HUD -------------------------------------------------------------------------------------
 
@@ -94,8 +96,9 @@ class WakeHub:
     def listening(self) -> bool:
         return not self._pending() and not any(client.session_active for client in self.clients.values())
 
-    def detector_state(self) -> dict[str, Any]:
+    def detector_state(self, *, mic_silent: bool = False) -> dict[str, Any]:
         self.detector_seen_at = self._clock()
+        self.mic_silent = mic_silent
         return {"listen": self.listening(), "mic_label": self.mic_label}
 
     def detector_online(self) -> bool:
@@ -114,8 +117,13 @@ class WakeHub:
         return {"accepted": True, "opened_browser": True}
 
     def status(self) -> dict[str, Any]:
-        online = self.detector_online()
-        return {"type": "status", "detector": online, "listening": online and self.listening()}
+        listening = self.detector_online() and self.listening()
+        return {
+            "type": "status",
+            "detector": self.detector_online(),
+            "listening": listening,
+            "mic_silent": listening and self.mic_silent,
+        }
 
     # --- Internos --------------------------------------------------------------------------------
 
@@ -240,11 +248,11 @@ def build_wake_router(
         return {"listening": hub.listening()}
 
     @router.get("/detector")
-    async def detector(request: Request) -> dict[str, Any]:
+    async def detector(request: Request, silent: int = 0) -> dict[str, Any]:
         require_detector(request)
         if not current_settings().wake_word_enabled:
             return {"listen": False, "mic_label": None}
-        return hub.detector_state()
+        return hub.detector_state(mic_silent=bool(silent))
 
     @router.post("/trigger")
     async def trigger(body: TriggerRequest, request: Request) -> dict[str, Any]:

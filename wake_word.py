@@ -37,6 +37,9 @@ POLL_INTERVAL_S = 0.5
 REARM_DELAY_S = 1.5
 RETRY_DELAY_S = 5.0
 REFRACTORY_S = 2.0
+# Microfone mudo no Windows entrega zeros e ±1; voz e até o ruído de uma sala passam disso.
+SILENT_PEAK = 2
+SILENT_AFTER_S = 5.0
 SECRET_ENV = "JARVIS_WAKE_SECRET"
 SECRET_HEADER = "X-Jarvis-Wake"
 LOG_PREFIX = "[ATIVAÇÃO]"
@@ -119,11 +122,18 @@ class AudioSource(Protocol):
     def close(self) -> None: ...
 
 
+def _default_input_name(sd: Any) -> str:
+    try:
+        return sd.query_devices(kind="input")["name"]
+    except Exception:
+        return "sem nome"
+
+
 class MicStream:
     """16 kHz mono capture; frames go to a queue so polling the server never drops audio."""
 
     def __init__(self, sd: Any, device: InputDevice | None) -> None:
-        self.description = device.name if device else "padrão do Windows"
+        self.description = device.name if device else f"padrão do Windows ({_default_input_name(sd)})"
         self._queue: queue.Queue[Any] = queue.Queue(maxsize=64)
         extra = sd.WasapiSettings(auto_convert=True) if device and device.host_api == WASAPI else None
         self._stream = sd.InputStream(
@@ -266,9 +276,15 @@ class ServerLink:
                 log("Servidor do HUD fora do ar; microfone liberado até ele voltar.")
         self.reachable = reachable
 
-    def state(self) -> DetectorState | None:
+    def state(self, mic_silent: bool = False) -> DetectorState | None:
+        """What the server wants; ``mic_silent`` tells the HUD the open mic only delivers silence."""
         try:
-            response = self.http.get(f"{self.base_url}/api/wake/detector", headers=self.headers, timeout=self.timeout)
+            response = self.http.get(
+                f"{self.base_url}/api/wake/detector",
+                params={"silent": int(mic_silent)},
+                headers=self.headers,
+                timeout=self.timeout,
+            )
             response.raise_for_status()
             body = response.json()
         except (requests.RequestException, ValueError):
@@ -292,6 +308,10 @@ class ServerLink:
             return None
 
 
+def _peak(frame: Any) -> int:
+    return max(int(frame.max()), -int(frame.min()))
+
+
 def run(
     link: ServerLink,
     detector: WakeDetector,
@@ -308,9 +328,12 @@ def run(
     listening = False
     open_at = 0.0
     next_poll = 0.0
+    signal_at = 0.0
+    mic_silent = False
 
     def close_stream(reason: str) -> None:
-        nonlocal stream
+        nonlocal stream, mic_silent
+        mic_silent = False
         if stream is not None:
             stream.close()
             stream = None
@@ -321,7 +344,7 @@ def run(
             now = clock()
             if now >= next_poll:
                 next_poll = now + POLL_INTERVAL_S
-                state = link.state()
+                state = link.state(mic_silent=mic_silent)
                 label = mic_override or (state.mic_label if state else None)
                 if state is None or not state.listen:
                     close_stream("Microfone liberado para o link." if state else "Microfone liberado.")
@@ -337,6 +360,7 @@ def run(
                         try:
                             stream = open_mic(label)
                             stream_label = label
+                            signal_at = now
                             detector.reset()
                             log(f"Ouvindo “Jarvis” em: {stream.description}.")
                         except Exception as exc:  # dispositivo ocupado, desconectado ou sem permissão
@@ -349,6 +373,16 @@ def run(
             frame = stream.read(timeout=0.1)
             if frame is None:
                 continue
+            if _peak(frame) > SILENT_PEAK:
+                signal_at = clock()
+            silent = clock() - signal_at >= SILENT_AFTER_S
+            if silent != mic_silent:
+                mic_silent = silent
+                log(
+                    f"Sem sinal em {stream.description}: o microfone está mudo no Windows?"
+                    if silent
+                    else "O microfone voltou a captar som."
+                )
             score = detector.process(frame)
             if score is None:
                 continue

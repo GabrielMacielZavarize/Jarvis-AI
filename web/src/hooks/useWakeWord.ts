@@ -17,6 +17,8 @@ export interface WakeWord {
   detector: boolean;
   /** The detector has the microphone open, waiting for "Jarvis". */
   listening: boolean;
+  /** ...but that microphone delivers only silence (muted in Windows?). */
+  micSilent: boolean;
   /** Seconds left before the link closes for silence, only in the last few seconds. */
   closingIn: number | null;
 }
@@ -58,7 +60,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const [clientId] = useState(() => crypto.randomUUID());
   const [subscribed, setSubscribed] = useState(false);
   const [reports, setReports] = useState(0);
-  const [detector, setDetector] = useState({ online: false, listening: false });
+  const [detector, setDetector] = useState({ online: false, listening: false, micSilent: false });
   const [silenceS, setSilenceS] = useState(0);
   const [wakeAt, setWakeAt] = useState<number | null>(null);
   const [closingIn, setClosingIn] = useState<number | null>(null);
@@ -107,12 +109,12 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         // The server knows this tab now: (re)send its state, also after a server restart.
         setReports((count) => count + 1);
       } else if (event.type === 'status') {
-        setDetector({ online: event.detector, listening: event.listening });
+        setDetector({ online: event.detector, listening: event.listening, micSilent: event.mic_silent ?? false });
       } else {
         onWake(event.score);
       }
     };
-    source.onerror = () => setDetector({ online: false, listening: false });
+    source.onerror = () => setDetector({ online: false, listening: false, micSilent: false });
     return () => {
       source.close();
       setSubscribed(false);
@@ -198,5 +200,11 @@ export function useWakeWord(options: WakeOptions): WakeWord {
     return () => window.clearInterval(timer);
   }, [subscribed, silenceS, connected, demo]);
 
-  return { enabled: subscribed, detector: detector.online, listening: detector.listening, closingIn };
+  return {
+    enabled: subscribed,
+    detector: detector.online,
+    listening: detector.listening,
+    micSilent: detector.micSilent,
+    closingIn,
+  };
 }

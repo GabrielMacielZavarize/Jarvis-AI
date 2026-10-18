@@ -3,7 +3,7 @@ import type { HudCard, JarvisMode } from './types';
 /** Events of /api/wake/events (WAK-22). */
 export type WakeEvent =
   | { type: 'config'; enabled: boolean; silence_s: number }
-  | { type: 'status'; detector: boolean; listening: boolean }
+  | { type: 'status'; detector: boolean; listening: boolean; mic_silent?: boolean }
   | { type: 'wake'; score: number };
 
 export function parseWakeEvent(raw: string): WakeEvent | null {
