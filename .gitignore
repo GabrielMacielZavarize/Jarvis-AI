@@ -10,3 +10,6 @@ web/node_modules/
 web/dist/
 # Atalhos pessoais de sites salvos pelo Jarvis
 atalhos.json
+# Memórias pessoais do Jarvis (lembra que...), cópias de segurança e temporários
+memoria*.json
+memoria.json.tmp

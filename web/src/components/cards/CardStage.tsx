@@ -10,6 +10,7 @@ import {
   EmailBody,
   InstallBody,
   MediaBody,
+  MemoryBody,
   NewsBody,
   NoteBody,
   ScreenBody,
@@ -44,6 +45,8 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <ScreenBody data={card.data} />;
     case 'install':
       return <InstallBody data={card.data} />;
+    case 'memory':
+      return <MemoryBody id={card.id} data={card.data} />;
   }
 }
 

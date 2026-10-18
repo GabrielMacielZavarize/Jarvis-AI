@@ -7,9 +7,12 @@ from unittest.mock import patch
 import jwt
 from fastapi.testclient import TestClient
 
-from server import EMAIL_TOOL_NAMES, INSTALL_TOOL_NAMES, PC_TOOL_NAMES, TOOL_NAMES, create_app
+from server import EMAIL_TOOL_NAMES, INSTALL_TOOL_NAMES, MEMORY_TOOL_NAMES, PC_TOOL_NAMES, TOOL_NAMES, create_app
 from settings import load_settings
 from tools import build_tools
+
+# A memória vem ligada por padrão (JARVIS_ENABLE_MEMORY=true).
+DEFAULT_TOOLS = TOOL_NAMES + MEMORY_TOOL_NAMES
 
 LIVEKIT_ENV = {
     "GOOGLE_API_KEY": "test-key",
@@ -40,7 +43,8 @@ class ServerTests(unittest.TestCase):
         body = self.client(LIVEKIT_ENV).get("/api/status").json()
 
         self.assertTrue(body["ready"])
-        self.assertEqual(body["tools"], TOOL_NAMES)
+        self.assertEqual(body["tools"], DEFAULT_TOOLS)
+        self.assertTrue(body["memory"])
         self.assertNotIn(LIVEKIT_ENV["LIVEKIT_API_SECRET"], str(body))
 
     def test_token_requires_livekit(self) -> None:
@@ -97,23 +101,23 @@ class ServerTests(unittest.TestCase):
 
         self.assertEqual(
             [tool.__name__ for tool in build_tools(settings)],
-            TOOL_NAMES + EMAIL_TOOL_NAMES,
+            DEFAULT_TOOLS + EMAIL_TOOL_NAMES,
         )
 
     def test_pc_control_tools_are_opt_in(self) -> None:
         settings = load_settings({"GOOGLE_API_KEY": "test-key", "JARVIS_ENABLE_PC_CONTROL": "true"})
 
-        self.assertEqual([tool.__name__ for tool in build_tools(settings)], TOOL_NAMES + PC_TOOL_NAMES)
+        self.assertEqual([tool.__name__ for tool in build_tools(settings)], DEFAULT_TOOLS + PC_TOOL_NAMES)
         body = self.client({**LIVEKIT_ENV, "JARVIS_ENABLE_PC_CONTROL": "true"}).get("/api/status").json()
         self.assertTrue(body["pc_control"])
-        self.assertEqual(body["tools"], TOOL_NAMES + PC_TOOL_NAMES)
+        self.assertEqual(body["tools"], DEFAULT_TOOLS + PC_TOOL_NAMES)
         self.assertIsNone(body["home"])
 
     def test_app_install_tools_are_opt_in(self) -> None:
         settings = load_settings({"GOOGLE_API_KEY": "test-key", "JARVIS_ENABLE_APP_INSTALL": "true"})
 
-        self.assertEqual([tool.__name__ for tool in build_tools(settings)], TOOL_NAMES + INSTALL_TOOL_NAMES)
+        self.assertEqual([tool.__name__ for tool in build_tools(settings)], DEFAULT_TOOLS + INSTALL_TOOL_NAMES)
         body = self.client({**LIVEKIT_ENV, "JARVIS_ENABLE_APP_INSTALL": "true"}).get("/api/status").json()
         self.assertTrue(body["app_install"])
-        self.assertEqual(body["tools"], TOOL_NAMES + INSTALL_TOOL_NAMES)
+        self.assertEqual(body["tools"], DEFAULT_TOOLS + INSTALL_TOOL_NAMES)
         self.assertFalse(self.client(LIVEKIT_ENV).get("/api/status").json()["app_install"])

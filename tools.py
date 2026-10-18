@@ -780,6 +780,7 @@ HUD_PANEL_KINDS = {
     "media": "Reprodução",
     "screen": "Leitura de tela",
     "install": "Instalação de app",
+    "memory": "Memória",
 }
 LAST_PANEL = "last"
 MAX_PANEL_TARGETS = 6
@@ -823,7 +824,7 @@ async def manage_hud_panels(
         action: list (what is open, newest first, with the title shown on each panel), close,
             close_all, expand (enlarge one panel in the center of the HUD) or collapse.
         panels: Which panels. Each item is a kind (weather, search, news, time, diagnostics,
-            timer, note, email, media, screen, install), words of the title/subject shown on the panel
+            timer, note, email, media, screen, install, memory), words of the title/subject shown on the panel
             ("Leitura de tela", "Reprodução", "lista de compras estrogonofe") or "last" for the
             most recent panel. Without panels, close and expand act on the most recent panel.
     """
@@ -1314,6 +1315,10 @@ def build_tools(settings: Settings) -> list[Any]:
         check_microphone,
         end_session,
     ]
+    if settings.memory_enabled:
+        from memory import build_memory_tools
+
+        tools.extend(build_memory_tools())
     if settings.pc_control_enabled:
         from pc_control import build_pc_tools
 

@@ -10,13 +10,14 @@ export const PANEL_META: Record<CardKind, { code: string; title: string; aliases
   search: { code: 'NET-02', title: 'Pesquisa', aliases: ['busca', 'resultados'] },
   news: { code: 'NWS-03', title: 'Notícias', aliases: ['noticia', 'manchetes'] },
   time: { code: 'CHR-04', title: 'Cronometria', aliases: ['horario', 'hora', 'relogio', 'fuso'] },
-  diagnostics: { code: 'SYS-05', title: 'Diagnóstico', aliases: ['sistema', 'cpu', 'memoria', 'desempenho'] },
+  diagnostics: { code: 'SYS-05', title: 'Diagnóstico', aliases: ['sistema', 'cpu', 'ram', 'desempenho'] },
   timer: { code: 'TMR-06', title: 'Timer', aliases: ['cronometro', 'temporizador', 'contagem', 'alarme'] },
   note: { code: 'HUD-07', title: 'Nota', aliases: ['notas', 'anotacao', 'lista', 'rascunho'] },
   email: { code: 'COM-12', title: 'Email', aliases: ['e-mail', 'rascunho', 'mensagem'] },
   media: { code: 'MED-08', title: 'Reprodução', aliases: ['midia', 'video', 'musica', 'player', 'tocando'] },
   screen: { code: 'VIS-14', title: 'Leitura de tela', aliases: ['print', 'captura', 'screenshot'] },
   install: { code: 'APP-15', title: 'Instalação de app', aliases: ['instalacao', 'instalar', 'aplicativo', 'winget', 'download'] },
+  memory: { code: 'MEM-23', title: 'Memória', aliases: ['memorias', 'lembranca', 'lembrancas', 'perfil', 'sobre mim'] },
 };
 
 const PANEL_ACTIONS: HudPanelAction[] = ['list', 'close', 'close_all', 'expand', 'collapse'];
@@ -64,6 +65,11 @@ export function panelDetail(card: HudCard, now = Date.now()): string {
       return card.data.label;
     case 'install':
       return [card.data.package?.name ?? card.data.query, card.data.status].filter(Boolean).join(' · ');
+    case 'memory': {
+      const { query, total } = card.data;
+      const count = `${total} ${total === 1 ? 'memória' : 'memórias'}`;
+      return query ? `"${query}" · ${count}` : count;
+    }
   }
 }
 

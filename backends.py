@@ -55,6 +55,16 @@ def _monitor_layout() -> str | None:
         return None
 
 
+def _memory_summary() -> str | None:
+    """What the user asked Jarvis to remember in earlier conversations (memoria.json)."""
+    try:
+        from memory import summary_for_prompt
+
+        return summary_for_prompt()
+    except Exception:
+        return None
+
+
 class JarvisAgent(Agent):
     def __init__(self, instructions: str | None = None) -> None:
         super().__init__(instructions=instructions or build_agent_instructions())
@@ -159,6 +169,7 @@ def build_runtime(settings: Settings, *, load_vad: bool = True) -> JarvisRuntime
         build_agent_instructions(
             home_city=settings.home_city,
             monitors=_monitor_layout() if settings.pc_control_enabled else None,
+            memories=_memory_summary() if settings.memory_enabled else None,
         )
     )
     room_options = room_io.RoomOptions(

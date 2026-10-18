@@ -58,6 +58,7 @@ PC_TOOL_NAMES = [
     "look_at_screen",
     "save_shortcut",
 ]
+MEMORY_TOOL_NAMES = ["remember", "recall", "forget"]
 EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", "cancel_pending_email"]
 INSTALL_TOOL_NAMES = ["search_apps", "prepare_app_install", "confirm_app_install", "cancel_app_install"]
 
@@ -150,6 +151,7 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
         livekit_errors = settings.livekit_validation_errors()
         tools = (
             TOOL_NAMES
+            + (MEMORY_TOOL_NAMES if settings.memory_enabled else [])
             + (PC_TOOL_NAMES if settings.pc_control_enabled else [])
             + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
             + (INSTALL_TOOL_NAMES if settings.app_install_enabled else [])
@@ -164,6 +166,7 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
             "tools": tools,
             "pc_control": settings.pc_control_enabled,
             "app_install": settings.app_install_enabled,
+            "memory": settings.memory_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "errors": backend_errors + livekit_errors,
         }

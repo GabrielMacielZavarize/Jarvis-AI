@@ -105,6 +105,29 @@ export const DEMO_SCRIPT: DemoBeat[] = [
     },
   },
   { kind: 'agent', text: 'Separei três manchetes no painel, senhor. A do reator arc parece promissora.' },
+  { kind: 'mode', mode: 'listening', ms: 1000 },
+  { kind: 'user', text: 'Jarvis, lembra que eu prefiro lo-fi pra programar.' },
+  { kind: 'tool', name: 'remember', detail: 'Preferências', ms: 600 },
+  {
+    kind: 'card',
+    card: {
+      kind: 'memory',
+      data: () => {
+        const day = new Date().toISOString().slice(0, 10);
+        return {
+          status: 'saved',
+          total: 3,
+          highlight: 'demo-lofi',
+          items: [
+            { id: 'demo-lofi', fact: 'Prefere lo-fi para programar', category: 'preferencia', created_at: `${day}T21:04:00-03:00` },
+            { id: 'demo-reuniao', fact: 'Reunião de segunda-feira às 9h', category: 'agenda', created_at: `${day}T20:41:00-03:00` },
+            { id: 'demo-cidade', fact: 'Mora em Malibu', category: 'perfil', created_at: `${day}T20:12:00-03:00` },
+          ],
+        };
+      },
+    },
+  },
+  { kind: 'agent', text: 'Anotado, senhor. Lo-fi para programar; lembrarei disso nas próximas conversas.' },
   { kind: 'mode', mode: 'listening', ms: 0 },
 ];
 

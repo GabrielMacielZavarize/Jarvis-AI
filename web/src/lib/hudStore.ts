@@ -75,6 +75,8 @@ interface HudState {
   closeCards: (kinds: CardKind[]) => void;
   pushCard: <K extends CardKind>(kind: K, data: CardDataMap[K]) => void;
   dismissCard: (id: string) => void;
+  /** New data for a card that stays where it is (the Memória panel after its delete button). */
+  updateCard: <K extends CardKind>(id: string, kind: K, data: CardDataMap[K]) => void;
   clearCards: () => void;
   setExpanded: (id: string | null) => void;
   /**
@@ -148,6 +150,10 @@ export const useHud = create<HudState>((set, get) => ({
     }),
   dismissCard: (id) =>
     set((s) => ({ cards: s.cards.filter((c) => c.id !== id), expandedId: s.expandedId === id ? null : s.expandedId })),
+  updateCard: (id, kind, data) =>
+    set((s) => ({
+      cards: s.cards.map((card) => (card.id === id && card.kind === kind ? ({ ...card, data } as StoredCard) : card)),
+    })),
   clearCards: () => set({ cards: [], expandedId: null }),
   setExpanded: (expandedId) => set({ expandedId }),
   runPanelCommand: (action, targets) => {

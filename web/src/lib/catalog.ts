@@ -26,6 +26,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'search_apps', code: 'APP-15', label: 'Instalar apps', hint: '“Instala o VLC pra mim.”' },
   { id: 'check_microphone', code: 'MIC-16', label: 'Microfone', hint: '“Qual microfone está conectado?”' },
   { id: 'end_session', code: 'PWR-17', label: 'Encerrar sessão', hint: '“Tchau, Jarvis.” · “Pode desligar.”' },
+  { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -38,6 +39,9 @@ export const TOOL_LABELS: Record<string, string> = {
   get_timers: 'Consulta de timers',
   check_microphone: 'Microfone',
   end_session: 'Encerrando sessão',
+  remember: 'Gravando memória',
+  recall: 'Consulta de memória',
+  forget: 'Apagando memória',
   show_on_hud: 'Projeção no HUD',
   check_email_address: 'Conferência de endereço',
   draft_email: 'Rascunho de email',

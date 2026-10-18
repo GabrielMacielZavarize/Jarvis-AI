@@ -67,3 +67,9 @@ export function weatherGlyph(code: number, isDay = 1): 'sun' | 'moon' | 'cloud' 
   if (code >= 95) return 'storm';
   return 'rain';
 }
+
+/** "2026-10-18T10:31:00-03:00" → "18/10/2026" (the day it was saved, in the agent's timezone). */
+export function savedDate(iso?: string | null) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '');
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
