@@ -255,10 +255,6 @@ def build_agent_instructions(
             "- Telas do usuário quando o Jarvis iniciou (números do 'Identificar' das Configurações "
             f"do Windows, com os nomes aceitos): {monitors}. Para a situação atual, use manage_screens(list)."
         )
-    if not context:
-        return AGENT_INSTRUCTION
-    return AGENT_INSTRUCTION + "\n# Contexto do usuário\n" + "\n".join(context) + "\n"
-        context.append(f"- Monitores do usuário (numeração do Windows): {monitors}.")
     instructions = AGENT_INSTRUCTION
     if context:
         instructions += "\n# Contexto do usuário\n" + "\n".join(context) + "\n"
