@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import shutil
 from pathlib import Path
 
@@ -53,6 +54,20 @@ def main() -> int:
         "Mouse e teclado (MOU-20): "
         f"{'ativado, visão com ' + settings.computer_use_model if settings.computer_use_enabled else 'desativado'}"
     )
+
+    print(
+        "Palavra de ativação (WAK-22): "
+        f"{'ativada' if settings.wake_word_enabled else 'desativada'}"
+    )
+    if settings.wake_word_enabled:
+        silence = f"{settings.wake_silence_seconds} s" if settings.wake_silence_seconds else "nunca"
+        print(f"Limiar: {settings.wake_threshold:.2f} · encerra o link após silêncio de: {silence}")
+        missing = [name for name in ("openwakeword", "sounddevice") if importlib.util.find_spec(name) is None]
+        if missing:
+            problems.append(f"Palavra de ativação ligada, mas falta instalar: pip install {' '.join(missing)}")
+            print(f"Aviso: {problems[-1]}")
+        else:
+            print("Calibre a sensibilidade com: python wake_word.py --test")
 
     _print_section("Backend")
     if problems:

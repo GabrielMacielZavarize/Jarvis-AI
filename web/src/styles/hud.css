@@ -687,6 +687,15 @@
   opacity: 0.85;
 }
 
+/* Shown by LiveKit only while the browser blocks the agent's voice (no click on the page yet). */
+.start-audio {
+  position: fixed;
+  left: 50%;
+  bottom: 22vh;
+  translate: -50% 0;
+  z-index: 20;
+}
+
 /* ───────────────────────── Responsive ───────────────────────── */
 
 @media (max-width: 1080px) {

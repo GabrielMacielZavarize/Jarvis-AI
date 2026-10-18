@@ -12,6 +12,10 @@ interface ControlDockProps {
   onStop: () => void;
   onToggleMic: () => void;
   onDemo: () => void;
+  /** WAK-22 detector waiting for "Jarvis". */
+  wakeListening?: boolean;
+  /** Seconds before the link closes for silence. */
+  closingIn?: number | null;
 }
 
 function MicIcon({ muted }: { muted: boolean }) {
@@ -33,7 +37,7 @@ function PowerIcon() {
 }
 
 export function ControlDock(props: ControlDockProps) {
-  const { mode, connected, busy, micEnabled, demo, canConnect, onStart, onStop, onToggleMic, onDemo } = props;
+  const { mode, connected, busy, micEnabled, demo, canConnect, onStart, onStop, onToggleMic, onDemo, wakeListening, closingIn } = props;
   const active = connected || demo;
 
   return (
@@ -71,9 +75,15 @@ export function ControlDock(props: ControlDockProps) {
         )}
       </div>
       <div className="dock__hint">
-        {active ? (
+        {active && !demo && closingIn ? (
+          <>Encerrando por silêncio em {closingIn} s · fale para continuar</>
+        ) : active ? (
           <>
             Fale naturalmente · <kbd>M</kbd> microfone · <kbd>/</kbd> digitar · <kbd>Esc</kbd> limpar painéis
+          </>
+        ) : canConnect && wakeListening ? (
+          <>
+            Diga “Jarvis”, pressione <kbd>Espaço</kbd> ou clique no núcleo para iniciar
           </>
         ) : canConnect ? (
           <>

@@ -103,3 +103,37 @@ class SettingsTests(unittest.TestCase):
         )
         with self.assertRaises(SettingsError):
             load_settings({"GOOGLE_API_KEY": "test-key", "JARVIS_ENABLE_APP_INSTALL": "talvez"})
+
+    def test_wake_word_is_opt_in_with_sane_defaults(self) -> None:
+        settings = load_settings({"GOOGLE_API_KEY": "test-key"})
+
+        self.assertFalse(settings.wake_word_enabled)
+        self.assertEqual(settings.wake_threshold, 0.5)
+        self.assertEqual(settings.wake_silence_seconds, 30)
+        self.assertIsNone(settings.wake_mic)
+
+    def test_wake_word_options(self) -> None:
+        settings = load_settings(
+            {
+                "GOOGLE_API_KEY": "test-key",
+                "JARVIS_WAKE_WORD": "true",
+                "JARVIS_WAKE_THRESHOLD": "0,35",
+                "JARVIS_WAKE_SILENCE_SECONDS": "0",
+                "JARVIS_WAKE_MIC": "Microphone Array",
+            }
+        )
+
+        self.assertTrue(settings.wake_word_enabled)
+        self.assertEqual(settings.wake_threshold, 0.35)
+        self.assertEqual(settings.wake_silence_seconds, 0)
+        self.assertEqual(settings.wake_mic, "Microphone Array")
+
+    def test_wake_word_rejects_bad_numbers(self) -> None:
+        for env in (
+            {"JARVIS_WAKE_THRESHOLD": "alto"},
+            {"JARVIS_WAKE_THRESHOLD": "1.5"},
+            {"JARVIS_WAKE_SILENCE_SECONDS": "5"},
+            {"JARVIS_WAKE_SILENCE_SECONDS": "-1"},
+        ):
+            with self.subTest(env=env), self.assertRaises(SettingsError):
+                load_settings({"GOOGLE_API_KEY": "test-key", **env})

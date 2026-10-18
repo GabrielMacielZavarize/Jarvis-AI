@@ -1,4 +1,4 @@
-import { RoomAudioRenderer, SessionProvider, useSession } from '@livekit/components-react';
+import { RoomAudioRenderer, SessionProvider, StartAudio, useSession } from '@livekit/components-react';
 import { ConnectionState, TokenSource } from 'livekit-client';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
@@ -13,9 +13,11 @@ import { useCameraMonitor } from './hooks/useCameraMonitor';
 import { useDemo } from './hooks/useDemo';
 import { type LiveJarvis, OFFLINE_LIVE, useLiveJarvis } from './hooks/useLiveJarvis';
 import { type StatusResult, useServerStatus } from './hooks/useServerStatus';
+import { useWakeWord } from './hooks/useWakeWord';
 import { homeFromTimezone } from './lib/geo';
 import { useHud } from './lib/hudStore';
 import type { JarvisMode } from './lib/types';
+import { micLabelFor } from './lib/wake';
 
 // three.js + postprocessing live in their own chunk; the boot sequence covers the load.
 const Scene = lazy(() => import('./scene/Scene').then((module) => ({ default: module.Scene })));
@@ -61,6 +63,8 @@ function LiveSession({ onChange }: { onChange: (live: LiveJarvis) => void }) {
     <SessionProvider session={session}>
       <LiveBridge onChange={onChange} />
       <RoomAudioRenderer />
+      {/* Only shows when the browser blocks the voice, e.g. a tab opened by "Jarvis" without a click yet. */}
+      <StartAudio label="Clique para ouvir o Jarvis" className="btn btn--primary start-audio" />
     </SessionProvider>
   );
 }
@@ -114,6 +118,23 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
 
   const stop = () => (demo.running ? demo.stop() : void live.stop());
 
+  // WAK-22: saying "Jarvis" connects; silence closes the link and the detector listens again.
+  const wake = useWakeWord({
+    enabled: server?.wake_word?.enabled ?? false,
+    canConnect,
+    ready: canConnect && live !== OFFLINE_LIVE,
+    connected: live.connected,
+    busy,
+    demo: demo.running,
+    mode: live.mode,
+    error: live.error,
+    lineCount: live.lines.length,
+    micLabel: micLabelFor(live.micDeviceId, live.micDevices),
+    start,
+    stop: live.stop,
+  });
+  const wakeListening = wake.enabled && wake.listening;
+
   // Global shortcuts: Space starts, M toggles the mic, Esc clears the projections.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -145,7 +166,9 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
 
       {booted && !connected && canConnect && (
         <button type="button" className="core-trigger" onClick={() => void start()} aria-label="Inicializar o Jarvis">
-          <span className="core-trigger__label">{busy ? 'Estabelecendo link' : 'Toque para inicializar'}</span>
+          <span className="core-trigger__label">
+            {busy ? 'Estabelecendo link' : wakeListening ? 'Diga “Jarvis” ou toque para inicializar' : 'Toque para inicializar'}
+          </span>
         </button>
       )}
 
@@ -169,6 +192,7 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
             connected={live.connected}
             micEnabled={live.micEnabled}
             microphone={{ devices: live.micDevices, deviceId: live.micDeviceId, onSelect: (id) => void live.selectMic(id) }}
+            wake={wake.enabled ? wake : null}
           />
           <CardStage enabledTools={server?.tools ?? null} />
         </aside>
@@ -200,6 +224,8 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
             onStop={stop}
             onToggleMic={() => void live.toggleMic()}
             onDemo={demo.start}
+            wakeListening={wakeListening}
+            closingIn={wake.closingIn}
           />
         </div>
       </div>

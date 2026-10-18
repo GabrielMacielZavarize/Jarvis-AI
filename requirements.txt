@@ -17,3 +17,6 @@ comtypes; sys_platform == "win32"
 # Gestos das mãos (opcional): mediapipe já traz o opencv-contrib; não instale opencv-python junto
 mediapipe
 opencv-contrib-python
+# Palavra de ativação "Jarvis" (WAK-22). No Linux o openwakeword exige tflite-runtime, sem wheel para o Python 3.12.
+openwakeword; sys_platform != "linux"
+sounddevice
