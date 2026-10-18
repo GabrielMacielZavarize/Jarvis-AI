@@ -10,3 +10,6 @@ web/node_modules/
 web/dist/
 # Atalhos pessoais de sites salvos pelo Jarvis
 atalhos.json
+# Numeração confirmada, apelidos das telas e layouts de janelas salvos pelo Jarvis
+telas.json
+layouts.json

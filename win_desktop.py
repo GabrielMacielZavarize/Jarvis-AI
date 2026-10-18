@@ -2,20 +2,32 @@
 
 Usa a API Win32 via ctypes, com coordenadas físicas (DPI por monitor), para
 funcionar com monitores de escalas e orientações diferentes.
+
+As telas são numeradas como o botão "Identificar" das Configurações do Windows, não
+como \\\\.\\DISPLAYn. O Windows não documenta essa numeração: ela é estimada pela ordem
+dos caminhos do QueryDisplayConfig (adaptador → tela interna, DisplayPort, HDMI... →
+conector) e o usuário pode confirmá-la ou corrigi-la por voz; o que ele confirmar fica
+em telas.json, junto com os apelidos ("tela de código"), fora do git.
 """
 
 from __future__ import annotations
 
 import ctypes
+import difflib
+import json
+import re
 import sys
 import time
+import unicodedata
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any, Iterator
 
 import psutil
 
 IS_WINDOWS = sys.platform == "win32"
+SCREENS_FILE = Path(__file__).resolve().parent / "telas.json"
 
 SW_SHOWNORMAL = 1
 SW_SHOWMINIMIZED = 2
@@ -33,16 +45,94 @@ DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ctypes.c_void_p(-4)
 # Janelas do próprio shell do Windows que nunca devem ser movidas ou fechadas.
 SHELL_CLASSES = {"Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Progman", "WorkerW"}
 
+# DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY (wingdi.h)
+OUTPUT_DVI = 4
+OUTPUT_HDMI = 5
+OUTPUT_LVDS = 6
+OUTPUT_DISPLAYPORT_EXTERNAL = 10
+OUTPUT_DISPLAYPORT_EMBEDDED = 11
+OUTPUT_UDI_EMBEDDED = 13
+OUTPUT_INTERNAL = 0x80000000
+# Telas embutidas (painel do notebook).
+INTERNAL_OUTPUTS = {OUTPUT_INTERNAL, OUTPUT_DISPLAYPORT_EMBEDDED, OUTPUT_LVDS, OUTPUT_UDI_EMBEDDED}
+# Ordem em que as Configurações costumam numerar as conexões (a mesma heurística do módulo
+# DisplayConfig, de MartinGC94): interna, DisplayPort embutida, DVI, DisplayPort, HDMI, outras.
+OUTPUT_PRIORITY = {
+    OUTPUT_INTERNAL: 50,
+    OUTPUT_DISPLAYPORT_EMBEDDED: 100,
+    OUTPUT_DVI: 150,
+    OUTPUT_DISPLAYPORT_EXTERNAL: 200,
+    OUTPUT_HDMI: 250,
+}
+OTHER_OUTPUT_PRIORITY = 300
+
+# Nomes automáticos das telas, na ordem em que um vira o nome principal.
+SIDE_NAMES = ("de cima", "de baixo", "da esquerda", "da direita")
+# Palavras faladas → nome automático ("o monitor de cima", "a tela do notebook").
+NAME_WORDS = {
+    "notebook": "notebook",
+    "note": "notebook",
+    "notebuque": "notebook",
+    "laptop": "notebook",
+    "portatil": "notebook",
+    "interna": "notebook",
+    "interno": "notebook",
+    "embutida": "notebook",
+    "vertical": "vertical",
+    "retrato": "vertical",
+    "pe": "vertical",  # "em pé"
+    "horizontal": "horizontal",
+    "deitado": "horizontal",
+    "deitada": "horizontal",
+    "paisagem": "horizontal",
+    "cima": "de cima",
+    "acima": "de cima",
+    "superior": "de cima",
+    "baixo": "de baixo",
+    "embaixo": "de baixo",
+    "debaixo": "de baixo",
+    "abaixo": "de baixo",
+    "inferior": "de baixo",
+    "esquerda": "da esquerda",
+    "esquerdo": "da esquerda",
+    "direita": "da direita",
+    "direito": "da direita",
+    "principal": "principal",
+    "primario": "principal",
+    "primaria": "principal",
+}
+NUMBER_WORDS = {
+    "um": 1, "uma": 1, "primeira": 1, "primeiro": 1,
+    "dois": 2, "duas": 2, "segunda": 2, "segundo": 2,
+    "tres": 3, "terceira": 3, "terceiro": 3,
+    "quatro": 4, "quarta": 4, "quarto": 4,
+    "cinco": 5, "quinta": 5, "quinto": 5,
+    "seis": 6, "sexta": 6, "sexto": 6,
+}  # fmt: skip
+# Palavras que só dizem "uma tela" ("pro monitor", "na tela") e não escolhem nenhuma.
+SCREEN_FILLER = {
+    "tela", "telas", "monitor", "monitores", "display", "o", "a", "os", "as", "do", "da", "de", "no", "na",
+    "em", "pro", "pra", "para", "pelo", "pela", "numero", "que", "fica", "esta", "ta",
+}  # fmt: skip
+
 
 @dataclass(frozen=True)
 class Monitor:
-    number: int
+    number: int  # o número que o "Identificar" das Configurações do Windows mostra
     left: int
     top: int
     right: int
     bottom: int
     work: tuple[int, int, int, int]
     primary: bool
+    device: str = ""  # \\.\DISPLAYn: numeração interna do Windows, diferente da das Configurações
+    name: str = ""  # nome falado automático: "notebook", "vertical", "de cima"...
+    aliases: tuple[str, ...] = ()  # outros nomes automáticos que também valem ("de baixo", "horizontal")
+    nicknames: tuple[str, ...] = ()  # apelidos dados pelo usuário ("tela de código")
+    internal: bool = False  # tela embutida do notebook
+    model: str = ""  # nome do monitor no EDID ("GF270A"); vazio na maioria dos notebooks
+    hardware_id: str = ""  # identificação estável do monitor ("QHX2700#UID20550"), chave do telas.json
+    confirmed: bool = False  # número confirmado pelo usuário, não só estimado
 
     @property
     def width(self) -> int:
@@ -55,6 +145,14 @@ class Monitor:
     @property
     def orientation(self) -> str:
         return "vertical" if self.height > self.width else "horizontal"
+
+    @property
+    def label(self) -> str:
+        """How to say it: 'notebook (tela 1)', 'monitor de cima (tela 3)' or just 'tela 2'."""
+        if not self.name:
+            return f"tela {self.number}"
+        noun = self.name if self.name == "notebook" else f"monitor {self.name}"
+        return f"{noun} (tela {self.number})"
 
 
 @dataclass(frozen=True)
@@ -127,11 +225,275 @@ if IS_WINDOWS:
     )
     _WINDOW_ENUM_PROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
 
+    class _LUID(ctypes.Structure):
+        _fields_ = [("LowPart", wintypes.DWORD), ("HighPart", wintypes.LONG)]
 
-def monitors() -> list[Monitor]:
-    """Monitors numbered like Windows does (\\\\.\\DISPLAY1 → tela 1)."""
+    class _PATH_SOURCE_INFO(ctypes.Structure):
+        _fields_ = [("adapterId", _LUID), ("id", ctypes.c_uint32), ("modeInfoIdx", ctypes.c_uint32), ("statusFlags", ctypes.c_uint32)]
+
+    class _PATH_TARGET_INFO(ctypes.Structure):
+        _fields_ = [
+            ("adapterId", _LUID),
+            ("id", ctypes.c_uint32),
+            ("modeInfoIdx", ctypes.c_uint32),
+            ("outputTechnology", ctypes.c_uint32),
+            ("rotation", ctypes.c_uint32),
+            ("scaling", ctypes.c_uint32),
+            ("refreshRate", ctypes.c_uint32 * 2),
+            ("scanLineOrdering", ctypes.c_uint32),
+            ("targetAvailable", wintypes.BOOL),
+            ("statusFlags", ctypes.c_uint32),
+        ]
+
+    class _PATH_INFO(ctypes.Structure):
+        _fields_ = [("sourceInfo", _PATH_SOURCE_INFO), ("targetInfo", _PATH_TARGET_INFO), ("flags", ctypes.c_uint32)]
+
+    class _MODE_INFO(ctypes.Structure):
+        _fields_ = [("infoType", ctypes.c_uint32), ("id", ctypes.c_uint32), ("adapterId", _LUID), ("data", ctypes.c_byte * 48)]
+
+    class _DEVICE_INFO_HEADER(ctypes.Structure):
+        _fields_ = [("type", ctypes.c_uint32), ("size", ctypes.c_uint32), ("adapterId", _LUID), ("id", ctypes.c_uint32)]
+
+    class _SOURCE_DEVICE_NAME(ctypes.Structure):
+        _fields_ = [("header", _DEVICE_INFO_HEADER), ("viewGdiDeviceName", ctypes.c_wchar * 32)]
+
+    class _TARGET_DEVICE_NAME(ctypes.Structure):
+        _fields_ = [
+            ("header", _DEVICE_INFO_HEADER),
+            ("flags", ctypes.c_uint32),
+            ("outputTechnology", ctypes.c_uint32),
+            ("edidManufactureId", ctypes.c_uint16),
+            ("edidProductCodeId", ctypes.c_uint16),
+            ("connectorInstance", ctypes.c_uint32),
+            ("monitorFriendlyDeviceName", ctypes.c_wchar * 64),
+            ("monitorDevicePath", ctypes.c_wchar * 128),
+        ]
+
+    class _ADAPTER_DEVICE_NAME(ctypes.Structure):
+        _fields_ = [("header", _DEVICE_INFO_HEADER), ("adapterDevicePath", ctypes.c_wchar * 128)]
+
+QDC_ONLY_ACTIVE_PATHS = 0x2
+DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME = 1
+DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME = 2
+DISPLAYCONFIG_DEVICE_INFO_GET_ADAPTER_NAME = 4
+
+
+@dataclass(frozen=True)
+class DisplayTarget:
+    """One active display path (QueryDisplayConfig): what is needed to number it like the Settings app."""
+
+    device: str  # \\.\DISPLAYn da origem (o mesmo nome do GetMonitorInfo)
+    adapter: str
+    target_id: int
+    output: int  # DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY
+    connector: int  # connectorInstance: conta as conexões do mesmo tipo
+    model: str = ""
+    hardware_id: str = ""
+
+    @property
+    def internal(self) -> bool:
+        return self.output in INTERNAL_OUTPUTS
+
+
+def hardware_id_from_path(device_path: str, fallback: str = "") -> str:
+    """'\\\\?\\DISPLAY#QHX2700#4&b182007&0&UID20550#{...}' → 'QHX2700#UID20550' (stable per monitor and port)."""
+    parts = device_path.split("#")
+    if len(parts) >= 3 and parts[1]:
+        return f"{parts[1]}#{parts[2].split('&')[-1]}".upper()
+    return fallback
+
+
+def _device_info(packet: Any, kind: int, adapter: Any, target: int) -> bool:
+    packet.header.type = kind
+    packet.header.size = ctypes.sizeof(packet)
+    packet.header.adapterId = adapter
+    packet.header.id = target
+    return ctypes.windll.user32.DisplayConfigGetDeviceInfo(ctypes.byref(packet)) == 0
+
+
+def display_targets() -> list[DisplayTarget]:
+    """Active display paths in QueryDisplayConfig order ([] when the API is unavailable)."""
     if not IS_WINDOWS:
         return []
+    user32 = ctypes.windll.user32
+    for _ in range(3):  # a topologia pode mudar entre as duas chamadas
+        path_count, mode_count = ctypes.c_uint32(), ctypes.c_uint32()
+        if user32.GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, ctypes.byref(path_count), ctypes.byref(mode_count)):
+            return []
+        paths = (_PATH_INFO * path_count.value)()
+        modes = (_MODE_INFO * mode_count.value)()
+        result = user32.QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS, ctypes.byref(path_count), paths, ctypes.byref(mode_count), modes, None
+        )
+        if result == 0:
+            break
+        if result != 122:  # ERROR_INSUFFICIENT_BUFFER: tenta de novo
+            return []
+    else:
+        return []
+
+    adapters: dict[tuple[int, int], str] = {}
+    found = []
+    for path in paths[: path_count.value]:
+        source, target = path.sourceInfo, path.targetInfo
+        source_name = _SOURCE_DEVICE_NAME()
+        if not _device_info(source_name, DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, source.adapterId, source.id):
+            continue
+        target_name = _TARGET_DEVICE_NAME()
+        _device_info(target_name, DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME, target.adapterId, target.id)
+        luid = (target.adapterId.HighPart, target.adapterId.LowPart)
+        if luid not in adapters:
+            adapter_name = _ADAPTER_DEVICE_NAME()
+            _device_info(adapter_name, DISPLAYCONFIG_DEVICE_INFO_GET_ADAPTER_NAME, target.adapterId, 0)
+            adapters[luid] = adapter_name.adapterDevicePath or f"{luid}"
+        found.append(
+            DisplayTarget(
+                device=source_name.viewGdiDeviceName,
+                adapter=adapters[luid],
+                target_id=target.id,
+                output=target.outputTechnology,
+                connector=target_name.connectorInstance,
+                model=target_name.monitorFriendlyDeviceName.strip(),
+                hardware_id=hardware_id_from_path(target_name.monitorDevicePath, f"{adapters[luid]}#{target.id}"),
+            )
+        )
+    return found
+
+
+def settings_order(targets: list[DisplayTarget]) -> list[DisplayTarget]:
+    """Targets in the order the Settings app numbers them (1, 2, 3...), as far as it can be known.
+
+    The Settings numbering is undocumented. This is the heuristic of the DisplayConfig module:
+    adapter, then connection type (internal first, then DisplayPort, then HDMI), then connector.
+    On Gabriel's setup it gives notebook = 1, vertical (DisplayPort) = 2, top (HDMI) = 3, like
+    "Identificar"; when it misses, the user corrects it and the fix is kept in telas.json.
+    """
+    return sorted(targets, key=lambda t: (t.adapter, OUTPUT_PRIORITY.get(t.output, OTHER_OUTPUT_PRIORITY) + t.connector))
+
+
+def _plain(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", str(text))
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", stripped)).strip().lower()
+
+
+def _core_words(text: str) -> list[str]:
+    return [word for word in _plain(text).split() if word not in SCREEN_FILLER]
+
+
+def load_screen_config(path: Path | None = None) -> dict[str, dict[str, Any]]:
+    """telas.json: {hardware_id: {"numero": 2, "apelidos": ["tela de código"], "monitor": "GF270A"}}."""
+    try:
+        data = json.loads((path or SCREENS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(key): value for key, value in data.items() if isinstance(value, dict)}
+
+
+def save_screen_config(config: dict[str, dict[str, Any]], path: Path | None = None) -> None:
+    (path or SCREENS_FILE).write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _confirmed_number(entry: dict[str, Any]) -> int | None:
+    number = entry.get("numero")
+    return number if isinstance(number, int) and not isinstance(number, bool) and number > 0 else None
+
+
+def _nicknames(entry: dict[str, Any]) -> tuple[str, ...]:
+    names = entry.get("apelidos")
+    if not isinstance(names, list):
+        return ()
+    return tuple(dict.fromkeys(str(name).strip() for name in names if str(name).strip()))
+
+
+def _overlap(a0: int, a1: int, b0: int, b1: int) -> int:
+    return max(0, min(a1, b1) - max(a0, b0))
+
+
+def _side_names(monitor: Monitor, items: list[Monitor]) -> list[str]:
+    """'de cima' when the monitor sits above a neighbor and below none; same for the other sides."""
+    above = below = left = right = False  # está acima/abaixo/à esquerda/à direita de algum vizinho
+    cx, cy = (monitor.left + monitor.right) / 2, (monitor.top + monitor.bottom) / 2
+    for other in items:
+        if other is monitor:
+            continue
+        side_by_side = _overlap(monitor.top, monitor.bottom, other.top, other.bottom) >= 0.3 * min(
+            monitor.height, other.height
+        )
+        stacked = _overlap(monitor.left, monitor.right, other.left, other.right) >= 0.3 * min(
+            monitor.width, other.width
+        )
+        ox, oy = (other.left + other.right) / 2, (other.top + other.bottom) / 2
+        if stacked and not side_by_side:
+            above, below = above or cy < oy, below or cy > oy
+        elif side_by_side and not stacked:
+            left, right = left or cx < ox, right or cx > ox
+    sides = {"de cima": above and not below, "de baixo": below and not above}
+    sides.update({"da esquerda": left and not right, "da direita": right and not left})
+    return [name for name in SIDE_NAMES if sides[name]]
+
+
+def name_monitors(items: list[Monitor]) -> list[Monitor]:
+    """Give each monitor its spoken names from hardware and geometry, keeping only unambiguous ones.
+
+    notebook = the built-in panel; vertical = portrait; de cima / de baixo / da esquerda /
+    da direita = where it sits; horizontal = the only landscape external monitor.
+    """
+    tags: dict[int, list[str]] = {}
+    for m in items:
+        found = ["notebook"] if m.internal else []
+        if m.orientation == "vertical":
+            found.append("vertical")
+        elif not m.internal:
+            found.append("horizontal")
+        tags[id(m)] = found + _side_names(m, items)
+    counts: dict[str, int] = {}
+    for found in tags.values():
+        for tag in found:
+            counts[tag] = counts.get(tag, 0) + 1
+    named = []
+    for m in items:
+        unique = [tag for tag in tags[id(m)] if counts[tag] == 1]
+        order = ["notebook", "vertical", *SIDE_NAMES, "horizontal"]
+        main = next((tag for tag in order if tag in unique), "")
+        named.append(replace(m, name=main, aliases=tuple(tag for tag in unique if tag != main)))
+    return named
+
+
+def number_monitors(
+    raw: list[Monitor], targets: list[DisplayTarget], config: dict[str, dict[str, Any]] | None = None
+) -> list[Monitor]:
+    """Renumber monitors like the Settings app, apply what the user confirmed, and name them.
+
+    `raw` holds the GetMonitorInfo data with `device` set; numbers confirmed in telas.json
+    win over the estimate, then the monitors are renumbered 1..N in that order (an unplugged
+    monitor doesn't leave a hole, as in the Settings app).
+    """
+    config = config or {}
+    ordered = settings_order(targets)
+    by_device: dict[str, tuple[int, DisplayTarget]] = {}
+    for index, target in enumerate(ordered):
+        by_device.setdefault(target.device.upper(), (index, target))  # clone: vale a primeira
+
+    ranked = []
+    for m in raw:
+        estimate, target = by_device.get(m.device.upper(), (len(ordered) + m.number, None))
+        hardware_id = target.hardware_id if target else m.hardware_id
+        entry = config.get(hardware_id, {}) if hardware_id else {}
+        confirmed = _confirmed_number(entry)
+        if target is not None:
+            m = replace(m, internal=target.internal, model=target.model, hardware_id=hardware_id)
+        m = replace(m, nicknames=_nicknames(entry), confirmed=confirmed is not None)
+        ranked.append(((confirmed if confirmed is not None else estimate + 1, confirmed is None, estimate), m))
+    ranked.sort(key=lambda item: item[0])
+    numbered = [replace(m, number=position) for position, (_, m) in enumerate(ranked, start=1)]
+    return name_monitors(numbered)
+
+
+def _raw_monitors() -> list[Monitor]:
+    """GetMonitorInfo for every monitor, numbered by \\\\.\\DISPLAYn (before renumbering)."""
     found: list[Monitor] = []
 
     def collect(handle: Any, _hdc: Any, _rect: Any, _data: Any) -> int:
@@ -148,6 +510,7 @@ def monitors() -> list[Monitor]:
                 bottom=info.rcMonitor.bottom,
                 work=(info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom),
                 primary=bool(info.dwFlags & 1),
+                device=info.szDevice,
             )
         )
         return 1
@@ -157,8 +520,67 @@ def monitors() -> list[Monitor]:
     return sorted(found, key=lambda monitor: monitor.number)
 
 
+def monitors() -> list[Monitor]:
+    """Monitors numbered like the Settings app's "Identificar" (tela 1, 2, 3), with spoken names."""
+    if not IS_WINDOWS:
+        return []
+    raw = _raw_monitors()
+    try:
+        targets = display_targets()
+    except (OSError, ValueError, AttributeError):
+        targets = []
+    return number_monitors(raw, targets, load_screen_config())
+
+
+def find_monitor(reference: int | str, items: list[Monitor]) -> Monitor:
+    """The monitor the user means: a number ("1", "tela 2", "terceira"), a name or a nickname.
+
+    Names are the automatic ones ("notebook", "vertical", "de cima", "principal"...) and the
+    user's nicknames ("tela de código"). Raises ValueError with a message safe to speak.
+    """
+    if isinstance(reference, bool) or not str(reference).strip():
+        raise ValueError("Diga qual tela: o número ou o nome dela.")
+    if isinstance(reference, int):
+        number: int | None = reference
+    else:
+        text = _plain(reference)
+        words = _core_words(reference)
+        for m in items:  # apelidos primeiro: um apelido pode conter qualquer palavra
+            for nickname in m.nicknames:
+                if _plain(nickname) == text or (words and _core_words(nickname) == words):
+                    return m
+        number = None
+        if len(words) == 1 and words[0].isdigit():
+            number = int(words[0])
+        elif len(words) == 1 and words[0] in NUMBER_WORDS:
+            number = NUMBER_WORDS[words[0]]
+        if number is None:
+            wanted = {NAME_WORDS[word] for word in words if word in NAME_WORDS}
+            if wanted:
+                matches = [m for m in items if wanted <= {m.name, *m.aliases, *(["principal"] if m.primary else [])}]
+                if len(matches) == 1:
+                    return matches[0]
+                if len(matches) > 1:
+                    raise ValueError(f"Mais de uma tela combina com '{reference}': {screen_list(matches)}. Qual delas?")
+                raise ValueError(f"Nenhuma tela é a única '{reference}' aqui. Telas: {screen_list(items)}.")
+            nicknames = {_plain(nickname): m for m in items for nickname in m.nicknames}
+            close = difflib.get_close_matches(text, list(nicknames), n=1, cutoff=0.75)
+            if close:
+                return nicknames[close[0]]
+            raise ValueError(f"Não sei qual é a tela '{reference}'. Telas: {screen_list(items)}.")
+    for m in items:
+        if m.number == number:
+            return m
+    raise ValueError(f"Não existe tela {number}. Telas disponíveis: {screen_list(items)}.")
+
+
+def screen_list(items: list[Monitor]) -> str:
+    """'1 (notebook), 2 (vertical), 3 (de cima)' or '1, 2, 3' when they have no names."""
+    return ", ".join(f"{m.number} ({m.name})" if m.name else str(m.number) for m in items)
+
+
 def describe_monitors(items: list[Monitor] | None = None) -> str:
-    """Human description such as 'tela 3: 1440x2560 vertical, à esquerda da principal'."""
+    """Human description such as 'tela 2: monitor vertical (GF270A), 1440x2560, à esquerda da principal'."""
     items = items if items is not None else monitors()
     primary = next((m for m in items if m.primary), items[0] if items else None)
     parts = []
@@ -174,8 +596,22 @@ def describe_monitors(items: list[Monitor] | None = None) -> str:
                 where = "acima da principal" if dy < 0 else "abaixo da principal"
         else:
             where = ""
-        parts.append(f"tela {m.number}: {m.width}x{m.height} {m.orientation}, {where}")
+        title = m.label.removesuffix(f" (tela {m.number})") if m.name else ""
+        model = f" ({m.model})" if m.model else ""
+        head = f"tela {m.number}: {title}{model}, " if title else f"tela {m.number}: "
+        extras = [f"também '{alias}'" for alias in m.aliases] + [f"apelido '{nick}'" for nick in m.nicknames]
+        tail = "".join(f", {extra}" for extra in extras)
+        parts.append(f"{head}{m.width}x{m.height} {m.orientation}, {where}{tail}")
     return "; ".join(parts)
+
+
+def workspace_offset(items: list[Monitor]) -> tuple[int, int]:
+    """Screen = workspace + offset. WINDOWPLACEMENT uses workspace coordinates, whose (0, 0) is
+    the top-left of the primary monitor's work area (it differs when the taskbar is on top/left)."""
+    primary = next((m for m in items if m.primary), None)
+    if primary is None:
+        return 0, 0
+    return primary.work[0] - primary.left, primary.work[1] - primary.top
 
 
 def monitor_for_rect(rect: tuple[int, int, int, int], items: list[Monitor]) -> Monitor | None:
@@ -306,8 +742,8 @@ def get_placement(hwnd: int) -> Placement | None:
     )
 
 
-def restore_placement(hwnd: int, saved: Placement) -> None:
-    """Put a window back where `saved` says (monitor, size, maximized), visible and focused."""
+def restore_placement(hwnd: int, saved: Placement, focus: bool = True) -> None:
+    """Put a window back where `saved` says (monitor, size, maximized), visible (and focused)."""
     placement = _WINDOWPLACEMENT()
     placement.length = ctypes.sizeof(placement)
     placement.flags = 0
@@ -320,10 +756,11 @@ def restore_placement(hwnd: int, saved: Placement) -> None:
         # Sai do maximizado no monitor atual antes, senão o Windows pode não trocar de tela.
         user32.ShowWindow(hwnd, SW_RESTORE)
         user32.SetWindowPlacement(hwnd, ctypes.byref(placement))
-    bring_to_front(hwnd)
+    if focus:
+        bring_to_front(hwnd)
 
 
-def move_to_monitor(hwnd: int, monitor: Monitor, maximize: bool | None = None) -> None:
+def move_to_monitor(hwnd: int, monitor: Monitor, maximize: bool | None = None, focus: bool = True) -> None:
     """Move a window to a monitor, keeping its size when it fits, and keep/maximize state."""
     user32 = ctypes.windll.user32
     was_maximized = bool(user32.IsZoomed(hwnd))
@@ -339,7 +776,8 @@ def move_to_monitor(hwnd: int, monitor: Monitor, maximize: bool | None = None) -
         user32.SetWindowPos(hwnd, None, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE)
         if maximize or (maximize is None and was_maximized):
             user32.ShowWindow(hwnd, SW_MAXIMIZE)
-    bring_to_front(hwnd)
+    if focus:
+        bring_to_front(hwnd)
 
 
 def show_window(hwnd: int, command: int) -> None:
