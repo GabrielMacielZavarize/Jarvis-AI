@@ -55,6 +55,9 @@ PC_TOOL_NAMES = [
     "lock_computer",
     "take_screenshot",
     "manage_window",
+    "manage_screens",
+    "manage_layouts",
+    "arrange_windows",
     "look_at_screen",
     "save_shortcut",
 ]
