@@ -39,6 +39,7 @@ from livekit.agents import RunContext, function_tool
 
 import win_desktop
 from hud import net_activity, send_screenshot, show_card, tool_status
+from vision import push_image_to_model
 
 logger = logging.getLogger("jarvis-pc")
 
@@ -1710,17 +1711,7 @@ async def look_at_screen(context: RunContext, monitor: int | None = None, window
     except PCControlError as exc:
         return str(exc)
 
-    sent_to_model = False
-    try:
-        from livekit import rtc
-
-        frame_image = image.convert("RGBA")
-        frame = rtc.VideoFrame(frame_image.width, frame_image.height, rtc.VideoBufferType.RGBA, frame_image.tobytes())
-        context.session.current_agent.realtime_llm_session.push_video(frame)
-        sent_to_model = True
-    except Exception:
-        logger.warning("Não foi possível enviar a captura ao modelo.", exc_info=True)
-
+    sent_to_model = push_image_to_model(context, image)
     await send_screenshot(image, label)
     logger.info("Captura (%s) enviada para análise.", label)
     if not sent_to_model:

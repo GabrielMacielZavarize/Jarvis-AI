@@ -20,7 +20,9 @@ import type { ChatLine, HudEvent, JarvisMode, MicReport } from '../lib/types';
 export const HUD_TOPIC = 'jarvis.hud';
 const HUD_RPC_METHOD = 'jarvis.hud';
 const SCREEN_TOPIC = 'jarvis.screen';
+const CAMERA_TOPIC = 'jarvis.camera';
 let lastScreenUrl: string | null = null;
+let lastCameraUrl: string | null = null;
 
 const decoder = new TextDecoder();
 const MIC_STORAGE_KEY = 'jarvis.microphone';
@@ -232,10 +234,22 @@ export function useLiveJarvis(): LiveJarvis {
       useHud.getState().addLog('info', `Print analisado · ${label}`);
     });
 
+    // Webcam frame Jarvis looked at (look_at_camera): opens the Câmera panel with it next to the live feed.
+    room.registerByteStreamHandler(CAMERA_TOPIC, async (reader) => {
+      const chunks = await reader.readAll();
+      const blob = new Blob(chunks as BlobPart[], { type: reader.info.mimeType || 'image/jpeg' });
+      if (lastCameraUrl) URL.revokeObjectURL(lastCameraUrl);
+      lastCameraUrl = URL.createObjectURL(blob);
+      const question = reader.info.attributes?.question || null;
+      useHud.getState().pushCard('camera', { snapshot: lastCameraUrl, takenAt: Date.now(), question });
+      useHud.getState().addLog('info', question ? `Quadro da câmera analisado · ${question}` : 'Quadro da câmera analisado');
+    });
+
     return () => {
       room.off(RoomEvent.DataReceived, onData);
       room.unregisterRpcMethod(HUD_RPC_METHOD);
       room.unregisterByteStreamHandler(SCREEN_TOPIC);
+      room.unregisterByteStreamHandler(CAMERA_TOPIC);
     };
   }, [room]);
 

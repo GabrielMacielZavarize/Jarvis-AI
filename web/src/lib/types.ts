@@ -18,7 +18,8 @@ export type CardKind =
   | 'email'
   | 'media'
   | 'screen'
-  | 'install';
+  | 'install'
+  | 'camera';
 
 export interface WeatherDay {
   date: string;
@@ -143,6 +144,32 @@ export interface ScreenData {
   takenAt: number;
 }
 
+/** Webcam panel: always the live feed; `snapshot` is the frame Jarvis analysed (look_at_camera). */
+export interface CameraData {
+  snapshot?: string | null;
+  takenAt?: number | null;
+  question?: string | null;
+}
+
+/** GET /api/camera/state: the webcam owned by the HUD server (camera.CameraHub). */
+export interface CameraState {
+  enabled: boolean;
+  /** Device open (or opening): the webcam light is on. */
+  active: boolean;
+  /** Frames are arriving. */
+  streaming: boolean;
+  /** Feeds, snapshots and gesture readers currently holding the camera. */
+  users: number;
+  pinned: boolean;
+  device: string | null;
+  backend: string | null;
+  width: number | null;
+  height: number | null;
+  fps: number;
+  since: number | null;
+  error: string | null;
+}
+
 export type HudPanelAction = 'list' | 'close' | 'close_all' | 'expand' | 'collapse';
 
 /** What the agent can ask the HUD over the `jarvis.hud` RPC. */
@@ -194,6 +221,7 @@ export interface CardDataMap {
   media: MediaData;
   screen: ScreenData;
   install: InstallData;
+  camera: CameraData;
 }
 
 export type HudCard = {
@@ -257,6 +285,7 @@ export interface ServerStatus {
   tools?: string[];
   pc_control?: boolean;
   app_install?: boolean;
+  camera?: boolean;
   home?: { name: string; latitude: number; longitude: number } | null;
   errors: string[];
 }

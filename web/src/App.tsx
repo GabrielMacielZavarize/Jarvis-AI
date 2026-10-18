@@ -3,11 +3,13 @@ import { ConnectionState, TokenSource } from 'livekit-client';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
 import { BootSequence } from './components/BootSequence';
+import { CameraIndicator } from './components/CameraIndicator';
 import { CardStage } from './components/cards/CardStage';
 import { ControlDock } from './components/ControlDock';
 import { ConversationPanel } from './components/ConversationPanel';
 import { SystemPanel } from './components/SystemPanel';
 import { TopBar } from './components/TopBar';
+import { useCameraMonitor } from './hooks/useCameraMonitor';
 import { useDemo } from './hooks/useDemo';
 import { type LiveJarvis, OFFLINE_LIVE, useLiveJarvis } from './hooks/useLiveJarvis';
 import { type StatusResult, useServerStatus } from './hooks/useServerStatus';
@@ -25,12 +27,14 @@ export default function App() {
   const [booted, setBooted] = useState(false);
   const [live, setLive] = useState<LiveJarvis>(OFFLINE_LIVE);
   const canConnect = status.state === 'ok' && status.status.livekit_configured;
+  useCameraMonitor();
 
   return (
     <>
       {canConnect && <LiveSession onChange={setLive} />}
       <Hud status={status} booted={booted} live={canConnect ? live : OFFLINE_LIVE} />
       {!booted && <BootSequence onDone={() => setBooted(true)} />}
+      <CameraIndicator />
     </>
   );
 }

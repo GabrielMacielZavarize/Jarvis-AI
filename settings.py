@@ -15,6 +15,9 @@ SUPPORTED_BACKENDS = (
     "openai-compatible-pipeline",
 )
 DEFAULT_GOOGLE_MODEL = "gemini-3.8-live"
+# Servidor do HUD (server.py). O worker do agente pede a câmera a ele por HTTP;
+# o jarvis.py passa a porta certa em JARVIS_HUD_URL.
+DEFAULT_HUD_URL = "http://127.0.0.1:8000"
 # "gemini-3.8-live", "gemini-3.8-live-extended-thinking", "gemini-live-2.5-flash-native-audio",
 # "gemini-2.5-flash-native-audio-preview-12-2025"...
 GOOGLE_LIVE_MODEL_PATTERN = re.compile(r"(^|-)live(-|$)|-native-audio")
@@ -110,6 +113,9 @@ class Settings:
     email_tool_enabled: bool = False
     pc_control_enabled: bool = False
     app_install_enabled: bool = False
+    camera_enabled: bool = False
+    camera_device: str | None = None
+    hud_url: str = DEFAULT_HUD_URL
     home_city: str | None = None
     transcription_hints: bool = False
     allowed_emails: tuple[str, ...] = ()
@@ -168,6 +174,13 @@ class Settings:
                 "JARVIS_ENABLE_APP_INSTALL",
                 default=False,
             ),
+            camera_enabled=_parse_bool(
+                env_map.get("JARVIS_ENABLE_CAMERA"),
+                "JARVIS_ENABLE_CAMERA",
+                default=False,
+            ),
+            camera_device=_clean_optional(env_map.get("JARVIS_CAMERA")),
+            hud_url=(_clean_optional(env_map.get("JARVIS_HUD_URL")) or DEFAULT_HUD_URL).rstrip("/"),
             home_city=_clean_optional(env_map.get("JARVIS_HOME_CITY")),
             transcription_hints=_parse_bool(
                 env_map.get("JARVIS_TRANSCRIPTION_HINTS"),
