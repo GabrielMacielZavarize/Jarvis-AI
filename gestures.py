@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
+from livekit.agents import RunContext, function_tool, get_job_context
 
 from gesture_actions import DesktopActions, DryRunActions, GestureActionError, Target, describe_direction
 from gesture_engine import Command, GestureMachine, Hand, Pose, State, Status, Tuning, classify
@@ -794,8 +795,6 @@ async def start_for_session(job_context: Any) -> str:
 
 
 def build_gesture_tools() -> list[Any]:
-    from livekit.agents import RunContext, function_tool, get_job_context
-
     from hud import tool_status
 
     registered: list[bool] = []

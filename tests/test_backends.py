@@ -98,3 +98,26 @@ class BackendTests(unittest.TestCase):
                 "cancel_pending_email",
             ],
         )
+
+
+class ToolSchemaTests(unittest.TestCase):
+    def test_every_tool_builds_the_schema_the_realtime_models_send(self) -> None:
+        from livekit.agents import llm
+
+        settings = load_settings(
+            {
+                "GOOGLE_API_KEY": "test-key",
+                "JARVIS_ENABLE_EMAIL_TOOL": "true",
+                "GMAIL_USER": "jarvis@example.com",
+                "GMAIL_APP_PASSWORD": "secret",
+                "JARVIS_ENABLE_PC_CONTROL": "true",
+                "JARVIS_ENABLE_APP_INSTALL": "true",
+                "JARVIS_ENABLE_CAMERA": "true",
+                "JARVIS_ENABLE_GESTURES": "true",
+                "JARVIS_ENABLE_COMPUTER_USE": "true",
+            }
+        )
+
+        for tool in build_tools(settings):
+            with self.subTest(tool=tool.__name__):
+                llm.utils.build_legacy_openai_schema(tool, internally_tagged=True)
