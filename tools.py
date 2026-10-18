@@ -780,6 +780,7 @@ HUD_PANEL_KINDS = {
     "media": "Reprodução",
     "screen": "Leitura de tela",
     "install": "Instalação de app",
+    "camera": "Câmera",
 }
 LAST_PANEL = "last"
 MAX_PANEL_TARGETS = 6
@@ -823,7 +824,7 @@ async def manage_hud_panels(
         action: list (what is open, newest first, with the title shown on each panel), close,
             close_all, expand (enlarge one panel in the center of the HUD) or collapse.
         panels: Which panels. Each item is a kind (weather, search, news, time, diagnostics,
-            timer, note, email, media, screen, install), words of the title/subject shown on the panel
+            timer, note, email, media, screen, install, camera), words of the title/subject shown on the panel
             ("Leitura de tela", "Reprodução", "lista de compras estrogonofe") or "last" for the
             most recent panel. Without panels, close and expand act on the most recent panel.
     """
@@ -1324,4 +1325,8 @@ def build_tools(settings: Settings) -> list[Any]:
         from installer import build_install_tools
 
         tools.extend(build_install_tools())
+    if settings.camera_enabled:
+        from vision import build_camera_tools
+
+        tools.extend(build_camera_tools())
     return tools

@@ -9,16 +9,21 @@ from __future__ import annotations
 import argparse
 import re
 import secrets
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import anyio
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import camera
+from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
 from settings import Settings, SettingsError, load_settings
 
@@ -63,6 +68,10 @@ PC_TOOL_NAMES = [
 ]
 EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", "cancel_pending_email"]
 INSTALL_TOOL_NAMES = ["search_apps", "prepare_app_install", "confirm_app_install", "cancel_app_install"]
+CAMERA_TOOL_NAMES = ["look_at_camera", "camera_view"]
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+NO_STORE = {"Cache-Control": "no-store"}
+MJPEG_BOUNDARY = "frame"
 
 
 class AgentDispatchRequest(BaseModel):
@@ -120,6 +129,32 @@ def _geocode_home(city: str) -> dict[str, Any] | None:
     return home
 
 
+def _require_local(request: Request) -> None:
+    """A webcam só atende este computador: recusa Host estranho (DNS rebinding) e páginas de
+    outros sites abertas no navegador (Sec-Fetch-Site), que poderiam ligá-la com um <img>."""
+    host = (request.url.hostname or "").strip("[]").lower()
+    if host not in LOCAL_HOSTS:
+        raise HTTPException(status_code=403, detail="A câmera só pode ser acessada pelo próprio computador.")
+    if request.headers.get("sec-fetch-site") not in (None, "same-origin", "none"):
+        raise HTTPException(status_code=403, detail="Pedido de outro site bloqueado: a câmera só atende o HUD do Jarvis.")
+
+
+async def _mjpeg(hub: CameraHub, ticket: int, first: bytes, seq: int, quality: int) -> AsyncIterator[bytes]:
+    """Feed MJPEG do HUD. Termina quando a câmera é desligada; o ticket volta ao hub quando o
+    navegador fecha a conexão (o painel foi fechado)."""
+    try:
+        data: bytes | None = first
+        while data is not None:
+            header = f"--{MJPEG_BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(data)}\r\n\r\n"
+            yield header.encode() + data + b"\r\n"
+            got = await anyio.to_thread.run_sync(hub.next_jpeg, ticket, seq, quality)
+            data, seq = got if got is not None else (None, seq)
+    except CameraError:
+        pass  # o HUD mostra o motivo lendo /api/camera/state
+    finally:
+        hub.stop(ticket)
+
+
 def _requested_agent_name(body: TokenRequest) -> str:
     agents = body.room_config.agents if body.room_config else None
     if agents and agents[0].agent_name:
@@ -127,15 +162,41 @@ def _requested_agent_name(body: TokenRequest) -> str:
     return DEFAULT_AGENT_NAME
 
 
-def create_app(*, reload_env: bool = True) -> FastAPI:
+def create_app(*, reload_env: bool = True, camera_hub: CameraHub | None = None) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
-    so credentials added while the server is running are picked up without a restart."""
-    app = FastAPI(title="Jarvis HUD", version=APP_VERSION)
+    so credentials added while the server is running are picked up without a restart.
+    ``camera_hub`` replaces the real webcam (tests)."""
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        yield
+        # Ao encerrar o servidor a webcam é solta na hora (a luz apaga).
+        if camera_hub is not None:
+            camera_hub.off()
+        else:
+            camera.shutdown()
+
+    app = FastAPI(title="Jarvis HUD", version=APP_VERSION, lifespan=lifespan)
 
     def current_settings() -> Settings:
         if reload_env:
             load_dotenv(ENV_FILE, override=True)
         return load_settings()
+
+    def hub() -> CameraHub:
+        return camera_hub if camera_hub is not None else camera.get_hub()
+
+    def camera_enabled() -> bool:
+        try:
+            return current_settings().camera_enabled
+        except SettingsError:
+            return False
+
+    def enabled_hub(request: Request) -> CameraHub:
+        _require_local(request)
+        if not camera_enabled():
+            raise HTTPException(status_code=403, detail=CAMERA_DISABLED)
+        return hub()
 
     @app.get("/api/status")
     def status() -> dict[str, Any]:
@@ -156,6 +217,7 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
             + (PC_TOOL_NAMES if settings.pc_control_enabled else [])
             + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
             + (INSTALL_TOOL_NAMES if settings.app_install_enabled else [])
+            + (CAMERA_TOOL_NAMES if settings.camera_enabled else [])
         )
         return {
             "version": APP_VERSION,
@@ -167,6 +229,7 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
             "tools": tools,
             "pc_control": settings.pc_control_enabled,
             "app_install": settings.app_install_enabled,
+            "camera": settings.camera_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "errors": backend_errors + livekit_errors,
         }
@@ -189,6 +252,59 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
             api_secret=settings.livekit_api_secret,
         )
         return {"server_url": settings.livekit_url or "", "participant_token": token}
+
+    @app.get("/api/camera/state")
+    def camera_state(request: Request) -> dict[str, Any]:
+        _require_local(request)
+        enabled = camera_enabled()
+        webcam = hub()
+        if not enabled and webcam.state()["active"]:
+            webcam.off()  # a câmera foi desativada no .env com ela ligada
+        return {"enabled": enabled, **webcam.state()}
+
+    @app.get("/api/camera/snapshot")
+    def camera_snapshot(request: Request, quality: int = Query(85, ge=30, le=95)) -> Response:
+        webcam = enabled_hub(request)
+        try:
+            data = webcam.snapshot_jpeg(quality)
+        except CameraError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return Response(data, media_type="image/jpeg", headers=NO_STORE)
+
+    @app.get("/api/camera/stream")
+    async def camera_stream(request: Request, quality: int = Query(70, ge=30, le=95)) -> StreamingResponse:
+        webcam = enabled_hub(request)
+        ticket = webcam.start()
+        try:
+            first = await anyio.to_thread.run_sync(webcam.next_jpeg, ticket, 0, quality, OPEN_TIMEOUT_S)
+        except CameraError as exc:
+            webcam.stop(ticket)
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if first is None:
+            raise HTTPException(status_code=409, detail="A câmera foi desligada.")
+        return StreamingResponse(
+            _mjpeg(webcam, ticket, *first, quality),
+            media_type=f"multipart/x-mixed-replace; boundary={MJPEG_BOUNDARY}",
+            headers=NO_STORE,
+        )
+
+    @app.post("/api/camera/on")
+    def camera_on(request: Request) -> dict[str, Any]:
+        """Mantém a câmera ligada até /api/camera/off (o indicador CÂMERA ATIVA fica no HUD)."""
+        webcam = enabled_hub(request)
+        try:
+            webcam.pin()
+        except CameraError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"enabled": True, **webcam.state()}
+
+    @app.post("/api/camera/off")
+    def camera_off(request: Request) -> dict[str, Any]:
+        """Desliga na hora para todos (feed do HUD, snapshots, gestos)."""
+        _require_local(request)
+        webcam = hub()
+        webcam.off()
+        return {"enabled": camera_enabled(), **webcam.state()}
 
     if (WEB_DIST / "index.html").exists():
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="hud")

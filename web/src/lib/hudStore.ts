@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { DEFAULT_HOME, locateHost } from './geo';
 import { describePanel, matchPanels } from './panels';
 import type {
+  CameraState,
   CardDataMap,
   CardKind,
   GeoPoint,
@@ -26,8 +27,9 @@ const nextId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(coun
 
 type StoredCard = HudCard & { key: string };
 
-/** Cards that must not scroll away: an email waiting for "confirmar <código>" and running timers. */
+/** Cards that must not scroll away: an email waiting for "confirmar <código>", running timers and the live camera. */
 function isPinned(card: HudCard, now: number): boolean {
+  if (card.kind === 'camera') return true;
   if (card.kind === 'email') return card.data.status === 'draft';
   if (card.kind === 'timer') return card.data.status === 'running' && (card.data.ends_at == null || card.data.ends_at > now);
   return false;
@@ -63,6 +65,8 @@ interface HudState {
   /** Card shown enlarged in the middle of the HUD. */
   expandedId: string | null;
   log: LogEntry[];
+  /** Webcam state polled from the server (null: server unreachable). */
+  camera: CameraState | null;
   setMode: (mode: JarvisMode) => void;
   setActiveTool: (name: string | null) => void;
   setDemo: (demo: boolean) => void;
@@ -84,6 +88,9 @@ interface HudState {
   runPanelCommand: (action: HudPanelAction, targets: string[]) => PanelCommandResult;
   addLog: (level: LogLevel, text: string) => void;
   clearLog: () => void;
+  setCamera: (camera: CameraState | null) => void;
+  /** Opens the Câmera panel unless it is already on screen (keeps the analysed frame). */
+  openCamera: () => void;
 }
 
 export const useHud = create<HudState>((set, get) => ({
@@ -97,6 +104,7 @@ export const useHud = create<HudState>((set, get) => ({
   cards: [],
   expandedId: null,
   log: [],
+  camera: null,
   setMode: (mode) => set((s) => (s.mode === mode ? s : { mode })),
   setActiveTool: (activeTool) => set({ activeTool }),
   setDemo: (demo) => set({ demo }),
@@ -187,4 +195,8 @@ export const useHud = create<HudState>((set, get) => ({
       log: [{ id: nextId('log'), ts: Date.now(), level, text }, ...s.log].slice(0, MAX_LOG),
     })),
   clearLog: () => set({ log: [] }),
+  setCamera: (camera) => set({ camera }),
+  openCamera: () => {
+    if (!get().cards.some((card) => card.kind === 'camera')) get().pushCard('camera', {});
+  },
 }));

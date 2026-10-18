@@ -59,7 +59,14 @@ def _port_is_free(host: str, port: int) -> bool:
     return True
 
 
-def _start_agent(mode: str) -> subprocess.Popen[bytes] | None:
+def _local_url(host: str, port: int) -> str:
+    """Endereço do servidor do HUD visto deste computador (0.0.0.0 escuta, mas não é destino)."""
+    if host in ("", "0.0.0.0", "::"):
+        host = "127.0.0.1"
+    return f"http://{f'[{host}]' if ':' in host else host}:{port}"
+
+
+def _start_agent(mode: str, hud_url: str) -> subprocess.Popen[bytes] | None:
     try:
         settings = load_settings()
         settings.validate_for_command(mode)
@@ -70,7 +77,9 @@ def _start_agent(mode: str) -> subprocess.Popen[bytes] | None:
         return None
 
     print(f"[AGENTE] Iniciando worker LiveKit ({mode}) com backend {settings.backend}...")
-    return subprocess.Popen([sys.executable, str(ROOT / "agent.py"), mode], cwd=ROOT)
+    # O worker é outro processo: pede a webcam (dona: o servidor do HUD) por HTTP nesse endereço.
+    env = {**os.environ, "JARVIS_HUD_URL": hud_url}
+    return subprocess.Popen([sys.executable, str(ROOT / "agent.py"), mode], cwd=ROOT, env=env)
 
 
 def main() -> int:
@@ -100,9 +109,9 @@ def main() -> int:
     if not _ensure_web_build(args.rebuild):
         return 1
 
-    agent_process = None if args.no_agent else _start_agent(args.agent_mode)
+    url = _local_url(args.host, args.port)
+    agent_process = None if args.no_agent else _start_agent(args.agent_mode, url)
 
-    url = f"http://{args.host}:{args.port}"
     print(f"[HUD] Interface disponível em {url}")
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()

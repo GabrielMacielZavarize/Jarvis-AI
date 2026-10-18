@@ -76,6 +76,7 @@ async def net_activity(hosts: list[str], kind: str = "request") -> bool:
 
 HUD_RPC_METHOD = "jarvis.hud"
 SCREEN_TOPIC = "jarvis.screen"
+CAMERA_TOPIC = "jarvis.camera"
 
 
 def _hud_participant() -> tuple[Any, str] | None:
@@ -119,8 +120,11 @@ async def hud_request(action: str, payload: dict[str, Any] | None = None) -> dic
     return reply if isinstance(reply, dict) else None
 
 
-async def send_screenshot(image: Any, label: str) -> bool:
-    """Stream a downscaled JPEG of a screenshot to the HUD so the user sees what Jarvis saw."""
+async def send_screenshot(
+    image: Any, label: str, *, topic: str = SCREEN_TOPIC, attributes: dict[str, str] | None = None
+) -> bool:
+    """Stream a downscaled JPEG of what Jarvis looked at (a screenshot, or a webcam frame on
+    CAMERA_TOPIC) to the HUD, so the user sees exactly what was analysed."""
     target = _hud_participant()
     if target is None:
         return False
@@ -137,8 +141,8 @@ async def send_screenshot(image: Any, label: str) -> bool:
             f"print-{int(time.time())}.jpg",
             total_size=len(data),
             mime_type="image/jpeg",
-            topic=SCREEN_TOPIC,
-            attributes={"label": label},
+            topic=topic,
+            attributes={"label": label, **(attributes or {})},
             destination_identities=[identity],
         )
         for start in range(0, len(data), 64 * 1024):

@@ -5,6 +5,7 @@ import { useHud } from '../../lib/hudStore';
 import { PANEL_META, panelTitle } from '../../lib/panels';
 import type { HudCard } from '../../lib/types';
 import { ProtocolsPanel } from '../ProtocolsPanel';
+import { CameraBody } from './CameraFeed';
 import {
   DiagnosticsBody,
   EmailBody,
@@ -44,6 +45,8 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <ScreenBody data={card.data} />;
     case 'install':
       return <InstallBody data={card.data} />;
+    case 'camera':
+      return <CameraBody data={card.data} />;
   }
 }
 
