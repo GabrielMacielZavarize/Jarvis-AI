@@ -43,6 +43,10 @@ def main() -> int:
         "Instalação de apps (winget): "
         f"{'ativada' if settings.app_install_enabled else 'desativada'}"
     )
+    print(
+        "Gestos das mãos (webcam): "
+        f"{'ativados' if settings.gestures_enabled else 'desativados'}"
+    )
     if settings.app_install_enabled and not shutil.which("winget"):
         print("Aviso: winget não encontrado; instale o 'App Installer' pela Microsoft Store.")
 

@@ -59,6 +59,7 @@ PC_TOOL_NAMES = [
     "save_shortcut",
 ]
 EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", "cancel_pending_email"]
+GESTURE_TOOL_NAMES = ["gesture_control"]
 INSTALL_TOOL_NAMES = ["search_apps", "prepare_app_install", "confirm_app_install", "cancel_app_install"]
 
 
@@ -151,6 +152,7 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
         tools = (
             TOOL_NAMES
             + (PC_TOOL_NAMES if settings.pc_control_enabled else [])
+            + (GESTURE_TOOL_NAMES if settings.gestures_enabled else [])
             + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
             + (INSTALL_TOOL_NAMES if settings.app_install_enabled else [])
         )
@@ -164,6 +166,7 @@ def create_app(*, reload_env: bool = True) -> FastAPI:
             "tools": tools,
             "pc_control": settings.pc_control_enabled,
             "app_install": settings.app_install_enabled,
+            "gestures": settings.gestures_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "errors": backend_errors + livekit_errors,
         }

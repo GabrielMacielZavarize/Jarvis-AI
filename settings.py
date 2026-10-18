@@ -110,6 +110,7 @@ class Settings:
     email_tool_enabled: bool = False
     pc_control_enabled: bool = False
     app_install_enabled: bool = False
+    gestures_enabled: bool = False
     home_city: str | None = None
     transcription_hints: bool = False
     allowed_emails: tuple[str, ...] = ()
@@ -166,6 +167,11 @@ class Settings:
             app_install_enabled=_parse_bool(
                 env_map.get("JARVIS_ENABLE_APP_INSTALL"),
                 "JARVIS_ENABLE_APP_INSTALL",
+                default=False,
+            ),
+            gestures_enabled=_parse_bool(
+                env_map.get("JARVIS_ENABLE_GESTURES"),
+                "JARVIS_ENABLE_GESTURES",
                 default=False,
             ),
             home_city=_clean_optional(env_map.get("JARVIS_HOME_CITY")),

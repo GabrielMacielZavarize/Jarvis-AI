@@ -14,3 +14,6 @@ httpx
 pyautogui
 pycaw; sys_platform == "win32"
 comtypes; sys_platform == "win32"
+# Gestos das mãos (opcional): mediapipe já traz o opencv-contrib; não instale opencv-python junto
+mediapipe
+opencv-contrib-python

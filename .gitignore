@@ -10,3 +10,5 @@ web/node_modules/
 web/dist/
 # Atalhos pessoais de sites salvos pelo Jarvis
 atalhos.json
+# Modelos baixados na primeira execução (MediaPipe)
+.cache/

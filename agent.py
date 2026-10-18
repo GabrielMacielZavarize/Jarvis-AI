@@ -24,6 +24,12 @@ async def jarvis_agent(ctx: agents.JobContext):
         room_options=runtime.room_options,
     )
 
+    if settings.gestures_enabled:
+        from gestures import autostart_requested, start_for_session
+
+        if autostart_requested():  # python jarvis.py --gestures
+            await start_for_session(ctx)
+
 
 def _validate_startup() -> None:
     argv = sys.argv[1:]
