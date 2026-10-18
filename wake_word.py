@@ -40,6 +40,11 @@ REFRACTORY_S = 2.0
 # Microfone mudo no Windows entrega zeros e ±1; voz e até o ruído de uma sala passam disso.
 SILENT_PEAK = 2
 SILENT_AFTER_S = 5.0
+# Calibração: fala perto do microfone passa de ~-36 dBFS; o ruído de fundo fica abaixo.
+SPEECH_PEAK = 500
+SILENT_FRAMES = round(SILENT_AFTER_S * SAMPLE_RATE / FRAME_SAMPLES)
+UTTERANCE_TAIL_FRAMES = 12
+MAX_UTTERANCE_FRAMES = 50
 SECRET_ENV = "JARVIS_WAKE_SECRET"
 SECRET_HEADER = "X-Jarvis-Wake"
 LOG_PREFIX = "[ATIVAÇÃO]"
@@ -419,25 +424,48 @@ def _calibrate(threshold: float, label: str | None) -> int:
     mic = open_microphone(label)
     print(f"Microfone: {mic.description}. Limiar atual: {threshold:.2f}. Ctrl+C para sair.")
     print("Diga “Jarvis” e “hey Jarvis” algumas vezes, e fale frases comuns para ver os falsos positivos.\n")
-    peak = 0.0
-    quiet_frames = 0
+    best = 0.0
+    loudest = voiced = quiet = silent = 0
     try:
         while True:
             frame = mic.read(timeout=1.0)
             if frame is None:
                 continue
+            level = _peak(frame)
             score = float(max(model.predict(frame).values(), default=0.0))
-            if score >= 0.05:
-                peak = max(peak, score)
-                quiet_frames = 0
+
+            if level > SILENT_PEAK:
+                if silent >= SILENT_FRAMES:
+                    print("Sinal chegando. Pode falar.", flush=True)
+                silent = 0
+            else:
+                silent += 1
+                if silent == SILENT_FRAMES:
+                    print("Sem sinal nenhum: o microfone está mudo no Windows? (tecla de mudo ou Som > Entrada)", flush=True)
+
+            if level >= SPEECH_PEAK or score >= 0.05:
+                voiced += 1
+                quiet = 0
+                best, loudest = max(best, score), max(loudest, level)
+                if voiced < MAX_UTTERANCE_FRAMES:
+                    continue
+            elif voiced:
+                # A pontuação chega meio segundo depois do som: espera antes de fechar a fala.
+                quiet += 1
+                best = max(best, score)
+                if quiet < UTTERANCE_TAIL_FRAMES:
+                    continue
+            else:
                 continue
-            quiet_frames += 1
-            # Fim de uma fala: mostra o pico dela.
-            if peak and quiet_frames == 4:
-                bar = "█" * round(peak * 30)
-                verdict = "ATIVARIA" if peak >= threshold else "abaixo do limiar"
-                print(f"pico {peak:.2f}  {bar:<30}  {verdict}", flush=True)
-                peak = 0.0
+
+            verdict = "ATIVARIA" if best >= threshold else "abaixo do limiar"
+            print(
+                f"fala de {voiced * FRAME_SAMPLES / SAMPLE_RATE:.1f} s · volume {loudest * 100 // 32767:>3}% · "
+                f"pontuação {best:.2f}  {'█' * round(best * 30):<30}  {verdict}",
+                flush=True,
+            )
+            best = 0.0
+            loudest = voiced = quiet = 0
     except KeyboardInterrupt:
         return 0
     finally:
