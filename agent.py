@@ -4,45 +4,74 @@ import asyncio
 import sys
 
 from livekit import agents
-from livekit.agents import AgentServer
+from livekit.agents import AgentServer, JobProcess
 
-from backends import build_runtime
-from hud import watch_user_voice
+from backends import build_runtime, watch_model_failover
+from hud import watch_response_time, watch_user_voice
+from model_pool import pool_for
 from settings import SettingsError, get_cli_command, load_settings, should_validate_runtime_command
 
-server = AgentServer()
+
+def _prewarm(proc: JobProcess) -> None:
+    """Loads the VAD while the process waits for a link, so opening one does not wait for it."""
+    from livekit.plugins import silero
+
+    proc.userdata["vad"] = silero.VAD.load()
+
+
+server = AgentServer(setup_fnc=_prewarm)
+
+
+async def _nothing() -> None:
+    return None
 
 
 @server.rtc_session(agent_name="jarvis")
 async def jarvis_agent(ctx: agents.JobContext):
     settings = load_settings()
-    runtime = build_runtime(settings)
+    pool = pool_for(settings)
+    model = pool.first() if settings.backend == "gemini-realtime" else None
+    runtime = build_runtime(settings, vad=ctx.proc.userdata.get("vad"), model=model)
     watch_user_voice(runtime.session)
+    watch_response_time(runtime.session, lambda: runtime.model)
+    watch_model_failover(runtime, pool)
     if settings.computer_use_enabled:
         # Modo ditado (DIT-29): escuta as transcrições desde o começo da sessão.
         from dictation import watch_dictation
 
         watch_dictation(runtime.session)
 
+    # As duas perguntas ao servidor do HUD saem juntas: o link abre sem esperar uma pela outra.
+    routine_check = _nothing()
+    notices_check = _nothing()
     if settings.routines_enabled:
         from routines import claim_scheduled
 
         # ROT-24: o link foi aberto por uma rotina agendada? Ela roda no lugar do cumprimento.
-        runtime.agent.startup_routine = await asyncio.to_thread(claim_scheduled, settings.hud_url)
-
+        routine_check = asyncio.to_thread(claim_scheduled, settings.hud_url)
     if settings.proactive_enabled:
-        from proactive import announcement_instruction, fetch_notices
+        from proactive import fetch_notices
 
         # Link aberto por um aviso (PRO-28): ele vira a primeira fala, no lugar da saudação.
-        waiting = await asyncio.to_thread(fetch_notices, settings.hud_url)
-        if waiting:
-            runtime.agent.first_reply_instruction = announcement_instruction(waiting)
+        notices_check = asyncio.to_thread(fetch_notices, settings.hud_url)
+    routine, waiting = await asyncio.gather(routine_check, notices_check)
+    if routine:
+        runtime.agent.startup_routine = routine
+    if waiting:
+        from proactive import announcement_instruction
+
+        runtime.agent.first_reply_instruction = announcement_instruction(waiting)
 
     await runtime.session.start(
         room=ctx.room,
         agent=runtime.agent,
         room_options=runtime.room_options,
     )
+    if runtime.model:
+        from hud import publish_hud_event
+
+        # The pool may have started on a fallback (paused primary or rotation): the HUD shows which.
+        await publish_hud_event("model", model=runtime.model)
     if settings.memory_enabled:
         # Depois do start: o participante local só existe com a sala conectada.
         from memory import serve_memory_panel

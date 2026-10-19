@@ -15,6 +15,11 @@ SUPPORTED_BACKENDS = (
     "openai-compatible-pipeline",
 )
 DEFAULT_GOOGLE_MODEL = "gemini-3.8-live"
+# Outros modelos Live da API Gemini, tentados quando o principal falha (cota, sobrecarga).
+# O extended-thinking fica de fora: pensa antes de falar e responde mais devagar.
+DEFAULT_GOOGLE_FALLBACK_MODELS = ("gemini-3.1-flash-live-preview", "gemini-2.5-flash-native-audio-preview-12-2025")
+# fallback: começa sempre pelo GOOGLE_MODEL; rotate: cada link novo começa pelo próximo da lista.
+MODEL_ROTATIONS = ("fallback", "rotate")
 # Servidor do HUD (server.py). O worker do agente pede a câmera a ele por HTTP;
 # o jarvis.py passa a porta certa em JARVIS_HUD_URL.
 DEFAULT_HUD_URL = "http://127.0.0.1:8000"
@@ -32,7 +37,8 @@ HELP_FLAGS = {"-h", "--help"}
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
 FALSY_VALUES = {"0", "false", "no", "off"}
 DEFAULT_WAKE_THRESHOLD = 0.5
-DEFAULT_WAKE_SILENCE_SECONDS = 30
+# 0: o link só fecha com "tchau, Jarvis" ou o botão, nunca por silêncio.
+DEFAULT_WAKE_SILENCE_SECONDS = 0
 # Voz do Gemini Live: grave e calma, a mais parecida com o Jarvis do filme (lista em voices.py).
 DEFAULT_VOICE = "Charon"
 DEFAULT_CALENDAR_REMINDER_MINUTES = 10
@@ -94,6 +100,29 @@ def _parse_wake_silence(raw_value: str | None) -> int:
     if 0 < seconds < 10:
         raise SettingsError(f"{env_name} precisa ser 0 (nunca encerrar) ou pelo menos 10 segundos.")
     return seconds
+
+
+def _parse_end_of_speech(raw_value: str | None) -> int:
+    """Silence (ms) that ends the user's turn in Gemini Live; 0 keeps Google's default."""
+    env_name = "JARVIS_END_OF_SPEECH_MS"
+    value = int(_parse_number(raw_value, env_name, 0, 0, 3000))
+    if 0 < value < 200:
+        raise SettingsError(f"{env_name} precisa ser 0 (padrão do Google) ou de 200 a 3000 ms.")
+    return value
+
+
+def _parse_rotation(raw_value: str | None) -> str:
+    env_name = "JARVIS_MODEL_ROTATION"
+    value = (_clean_optional(raw_value) or "fallback").lower()
+    if value not in MODEL_ROTATIONS:
+        raise SettingsError(f"Valor inválido em {env_name}: {raw_value!r}. Use fallback ou rotate.")
+    return value
+
+
+def _parse_fallback_models(raw_value: str | None, primary: str) -> tuple[str, ...]:
+    """GOOGLE_FALLBACK_MODELS: CSV; empty turns the fallback off. The primary model is never repeated."""
+    models = DEFAULT_GOOGLE_FALLBACK_MODELS if raw_value is None else _parse_csv(raw_value)
+    return tuple(model for model in models if model != primary)
 
 
 def _parse_voice(env_map: Mapping[str, str]) -> str:
@@ -172,6 +201,9 @@ class Settings:
     backend: str = "gemini-realtime"
     google_api_key: str | None = None
     google_model: str = DEFAULT_GOOGLE_MODEL
+    google_fallback_models: tuple[str, ...] = DEFAULT_GOOGLE_FALLBACK_MODELS
+    model_rotation: str = "fallback"
+    end_of_speech_ms: int = 0
     google_voice: str = DEFAULT_VOICE
     openai_api_key: str | None = None
     openai_base_url: str | None = None
@@ -225,13 +257,14 @@ class Settings:
                 f"JARVIS_BACKEND inválido: {backend!r}. Valores suportados: {supported}."
             )
 
+        google_model = _clean_optional(env_map.get("GOOGLE_MODEL")) or DEFAULT_GOOGLE_MODEL
         return cls(
             backend=backend,
             google_api_key=_clean_optional(env_map.get("GOOGLE_API_KEY")),
-            google_model=(
-                _clean_optional(env_map.get("GOOGLE_MODEL"))
-                or DEFAULT_GOOGLE_MODEL
-            ),
+            google_model=google_model,
+            google_fallback_models=_parse_fallback_models(env_map.get("GOOGLE_FALLBACK_MODELS"), google_model),
+            model_rotation=_parse_rotation(env_map.get("JARVIS_MODEL_ROTATION")),
+            end_of_speech_ms=_parse_end_of_speech(env_map.get("JARVIS_END_OF_SPEECH_MS")),
             google_voice=_parse_voice(env_map),
             openai_api_key=_clean_optional(env_map.get("OPENAI_API_KEY")),
             openai_base_url=_clean_optional(env_map.get("OPENAI_BASE_URL")),
@@ -340,6 +373,11 @@ class Settings:
         )
 
     @property
+    def google_models(self) -> tuple[str, ...]:
+        """The Live models Jarvis may use, in order of preference."""
+        return (self.google_model, *self.google_fallback_models)
+
+    @property
     def effective_allowed_emails(self) -> tuple[str, ...]:
         if self.allowed_emails:
             return self.allowed_emails
@@ -360,6 +398,13 @@ class Settings:
                 f"Use '{DEFAULT_GOOGLE_MODEL}' ou outro modelo com 'live' ou "
                 "'-native-audio' no nome."
             )
+        if self.backend == "gemini-realtime":
+            for model in self.google_fallback_models:
+                if not _is_google_live_model(model):
+                    errors.append(
+                        f"GOOGLE_FALLBACK_MODELS tem {model!r}, que não é um modelo do Gemini Live API "
+                        "(precisa ter 'live' ou '-native-audio' no nome)."
+                    )
 
         if self.backend == "gemini-realtime":
             from voices import GEMINI_VOICES, canonical_voice

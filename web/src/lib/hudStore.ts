@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { DEFAULT_HOME, locateHost } from './geo';
+import { addLatency, type LatencyStats } from './latency';
 import { describePanel, matchPanels } from './panels';
 import type {
   CameraState,
@@ -75,6 +76,10 @@ interface HudState {
   camera: CameraState | null;
   /** Dictation mode (DIT-29) shown by the DITADO indicator. */
   dictation: DictationState | null;
+  /** Gemini Live model the agent is using right now (null until the link reports it). */
+  liveModel: string | null;
+  /** Response time of the recent turns. */
+  latency: LatencyStats | null;
   setMode: (mode: JarvisMode) => void;
   setActiveTool: (name: string | null, detail?: string | null) => void;
   setDemo: (demo: boolean) => void;
@@ -100,6 +105,8 @@ interface HudState {
   clearLog: () => void;
   setCamera: (camera: CameraState | null) => void;
   setDictation: (dictation: DictationState | null) => void;
+  setLiveModel: (model: string | null) => void;
+  recordLatency: (seconds: number) => void;
   /** Opens the Câmera panel unless it is already on screen (keeps the analysed frame). */
   openCamera: () => void;
 }
@@ -118,6 +125,8 @@ export const useHud = create<HudState>((set, get) => ({
   log: [],
   camera: null,
   dictation: null,
+  liveModel: null,
+  latency: null,
   setMode: (mode) => set((s) => (s.mode === mode ? s : { mode })),
   setActiveTool: (activeTool, detail = null) => set({ activeTool, activeToolDetail: activeTool ? detail : null }),
   setDemo: (demo) => set({ demo }),
@@ -214,6 +223,8 @@ export const useHud = create<HudState>((set, get) => ({
   clearLog: () => set({ log: [] }),
   setCamera: (camera) => set({ camera }),
   setDictation: (dictation) => set({ dictation }),
+  setLiveModel: (liveModel) => set({ liveModel }),
+  recordLatency: (seconds) => set((s) => ({ latency: addLatency(s.latency, seconds) })),
   openCamera: () => {
     if (!get().cards.some((card) => card.kind === 'camera')) get().pushCard('camera', {});
   },

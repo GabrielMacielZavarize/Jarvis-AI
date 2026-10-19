@@ -5,6 +5,7 @@ import { levels, SIGNAL_FLOOR } from '../lib/audio';
 import { type PresenceState, presenceLabel } from '../lib/presence';
 import { BACKEND_LABELS, MODE_LABELS } from '../lib/catalog';
 import { useHud } from '../lib/hudStore';
+import { formatSeconds, latencyTone } from '../lib/latency';
 import type { JarvisMode } from '../lib/types';
 import type { WakeWord } from '../hooks/useWakeWord';
 import { Panel } from './Panel';
@@ -125,6 +126,10 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
   const live = connected && !demo;
   const silent = useSilentMicrophone(live && micEnabled);
   const heardAt = useHud((s) => s.userHeardAt);
+  const liveModel = useHud((s) => s.liveModel);
+  const latency = useHud((s) => s.latency);
+  const model = live && liveModel ? liveModel : server?.model;
+  const fallback = Boolean(live && liveModel && server?.model && liveModel !== server.model);
   const now = useClock(1000);
   const heardRecently = heardAt !== null && now - heardAt < 4000;
   const inputs = microphone.devices.filter((device) => device.deviceId);
@@ -162,9 +167,18 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
           <dd>{demo ? 'Simulação' : backend}</dd>
         </div>
         <div className="stat" style={{ gridColumn: '1 / -1' }}>
-          <dt>Modelo</dt>
-          <dd title={server?.model}>{demo ? 'jarvis-demo' : (server?.model ?? '—')}</dd>
+          <dt>Modelo{fallback ? ' · reserva' : ''}</dt>
+          <dd title={fallback ? `Reserva no lugar de ${server?.model}` : model}>{demo ? 'jarvis-demo' : (model ?? '—')}</dd>
         </div>
+        {latency && !demo && (
+          <div className="stat" style={{ gridColumn: '1 / -1' }}>
+            <dt title="Do fim da sua fala até a primeira palavra do Jarvis">Tempo de resposta</dt>
+            <dd className={`latency latency--${latencyTone(latency.last)}`}>
+              {formatSeconds(latency.last)}
+              <small>média {formatSeconds(latency.average)} · {latency.samples.length} turnos</small>
+            </dd>
+          </div>
+        )}
         {server?.voice && !demo && (
           <div className="stat" style={{ gridColumn: '1 / -1' }}>
             <dt>Voz · VOZ-30</dt>

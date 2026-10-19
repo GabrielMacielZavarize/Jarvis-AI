@@ -412,6 +412,10 @@ export type HudEvent =
   | { type: 'voice'; state: 'speaking'; ts: number }
   | { type: 'net'; hosts: string[]; kind: LinkKind; ts: number }
   | { type: 'hud'; action: 'close' | 'clear'; kinds: CardKind[]; ts: number }
+  /** Gemini Live model in use: sent when the link opens and when it moves to a fallback model. */
+  | { type: 'model'; model: string; previous?: string | null; reason?: string | null; ts: number }
+  /** Seconds between the end of the user's speech and Jarvis's first word. */
+  | { type: 'latency'; seconds: number; model?: string | null; ts: number }
   | DictationEvent
   | { [K in CardKind]: { type: 'card'; kind: K; data: CardDataMap[K]; ts: number } }[CardKind];
 

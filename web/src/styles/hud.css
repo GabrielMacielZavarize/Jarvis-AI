@@ -456,6 +456,22 @@
 .ok-text {
   color: var(--c-ok);
 }
+.latency small {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+.latency--ok {
+  color: var(--c-ok);
+}
+.latency--warn {
+  color: var(--c-accent);
+}
+.latency--slow {
+  color: var(--c-danger);
+}
 .meter {
   grid-column: 1 / -1;
   display: grid;

@@ -137,6 +137,15 @@ function handleHudEvent(event: HudEvent) {
     if (event.beep) playDictationBeep(event.beep);
     return;
   }
+  if (event.type === 'model') {
+    hud.setLiveModel(event.model);
+    if (event.previous) hud.addLog('warn', `Modelo trocado · ${event.previous} → ${event.model}${event.reason ? ` (${event.reason})` : ''}`);
+    return;
+  }
+  if (event.type === 'latency') {
+    hud.recordLatency(event.seconds);
+    return;
+  }
   if (event.type === 'net') {
     hud.addLinks(event.hosts, event.kind);
     if (event.kind === 'source') hud.addLog('info', `Fontes: ${event.hosts.slice(0, 4).join(', ')}`);
@@ -361,6 +370,8 @@ export function useLiveJarvis(): LiveJarvis {
     setError(null);
     useHud.getState().resetVoice();
     useHud.getState().setDictation(null);
+    // Each link may start on another model (rotation or a paused one); the agent reports it.
+    useHud.getState().setLiveModel(null);
     useHud.getState().addLog('info', 'Solicitando credenciais de acesso…');
     // Capture from the microphone chosen in the HUD; "ideal" falls back to the default if it is gone.
     if (savedMic) room.options.audioCaptureDefaults = { ...room.options.audioCaptureDefaults, deviceId: { ideal: savedMic } };

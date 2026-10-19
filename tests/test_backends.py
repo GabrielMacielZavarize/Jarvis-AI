@@ -45,6 +45,20 @@ class BackendTests(unittest.TestCase):
         self.assertIsNone(components.stt)
         self.assertIsNone(components.tts)
 
+    def test_gemini_session_survives_long_links_and_honors_the_turn_settings(self) -> None:
+        settings = load_settings({"GOOGLE_API_KEY": "test-key", "JARVIS_END_OF_SPEECH_MS": "600"})
+
+        opts = build_backend_components(settings, "gemini-3.1-flash-live-preview").llm._opts
+
+        self.assertEqual(opts.model, "gemini-3.1-flash-live-preview")
+        # Without compression Gemini Live ends audio sessions after ~15 min.
+        self.assertIsNotNone(opts.context_window_compression.sliding_window)
+        self.assertEqual(opts.realtime_input_config.automatic_activity_detection.silence_duration_ms, 600)
+
+        default = build_backend_components(load_settings({"GOOGLE_API_KEY": "test-key"})).llm._opts
+        self.assertEqual(default.model, "gemini-3.8-live")
+        self.assertFalse(default.realtime_input_config)
+
     def test_openai_realtime_backend_builds_realtime_components(self) -> None:
         settings = load_settings(
             {
