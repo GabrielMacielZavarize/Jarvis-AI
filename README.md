@@ -313,6 +313,61 @@ Limitações:
 - Os modelos pré-treinados do openWakeWord são licenciados como CC BY-NC-SA 4.0 (uso pessoal, não comercial).
 - No Linux o `openwakeword` depende do `tflite-runtime`, que não tem wheel para o Python 3.12; lá, instale-o com `pip install openwakeword --no-deps` mais `onnxruntime tqdm requests`.
 
+### Celular na rede de casa (LAN-26)
+
+Fale com o Jarvis pelo celular, no Wi-Fi de casa, com o link de voz, os painéis e o Jarvis controlando o PC como sempre.
+
+```bash
+python jarvis.py --lan           # ou JARVIS_LAN=true no .env
+```
+
+- O PC continua em `http://127.0.0.1:8000`, igual a hoje. O celular abre `https://<ip-do-pc>:8000`; o terminal mostra o endereço (`[LAN] Celular: https://192.168.0.12:8000`).
+- Na primeira vez o Windows pergunta se o Python pode usar a rede: libere só em **Redes privadas**.
+- O HTTPS é obrigatório, porque o navegador só libera o microfone em página segura. Na primeira execução o Jarvis cria uma autoridade certificadora local em `.jarvis-tls/` (fica só no seu PC, fora do git) e um certificado para os IPs do PC. Se o IP mudar, o certificado é refeito na próxima execução com a mesma autoridade, e o celular continua confiando.
+
+**Parear o celular**
+
+1. No HUD do PC, o painel **CELULAR** (coluna da esquerda, só aparece com `--lan`) mostra o endereço. Toque em **Parear celular**: aparecem um código de 6 dígitos e um QR, válidos por 5 minutos.
+2. No celular, leia o QR com a câmera, ou abra o endereço e digite o código. Dê um nome ao aparelho ("Pixel do Gabriel") e toque em **Parear**.
+3. Pronto: o celular abre o HUD completo. Toque no núcleo para falar.
+
+Revogue um aparelho no mesmo painel (**Revogar**): ele perde o acesso na hora, inclusive o feed da câmera que estiver aberto, e volta para a tela de pareamento em até 15 s, o que também encerra o link de voz.
+
+**Tirar o aviso de certificado (recomendado)**
+
+Sem isso o navegador mostra "Sua conexão não é particular" a cada visita. Dá para tocar em *Avançado → Continuar* e o microfone funciona, mas o PWA não instala direito. O melhor é instalar a autoridade do Jarvis no celular uma vez. Ela só vale para IPs privados (`192.168.*`, `10.*`, `172.16–31.*`) e nomes `.local`: mesmo que alguém copiasse a chave, ela não serviria para imitar outros sites.
+
+- **Android (Chrome):** abra `https://<ip-do-pc>:8000/api/lan/ca.crt` (aceite o aviso dessa vez) ou toque no link da tela de pareamento. Depois vá em *Configurações → Segurança e privacidade → Mais configurações de segurança → Criptografia e credenciais → Instalar um certificado → Certificado de CA*, confirme "Instalar mesmo assim" e escolha `jarvis-ca.crt` em Downloads. O caminho muda um pouco por fabricante; procure "certificado de CA" na busca das Configurações. Feche e abra o Chrome.
+- **iPhone (Safari):** abra o mesmo endereço no Safari e toque em *Permitir* para baixar o perfil. Vá em *Ajustes → Geral → VPN e Gerenciamento de Dispositivos → Jarvis CA local → Instalar*. Depois ative em *Ajustes → Geral → Sobre → Ajustes de Confiança de Certificados → Jarvis CA local* (sem este passo o iPhone continua desconfiando).
+
+Para remover depois: no Android, *Credenciais do usuário*; no iPhone, apague o perfil em *VPN e Gerenciamento de Dispositivos*. Apagar a pasta `.jarvis-tls/` gera uma autoridade nova, e aí é preciso instalar de novo.
+
+**Instalar como app (PWA)**
+
+- **Android:** no Chrome, menu ⋮ → *Instalar app* (ou *Adicionar à tela inicial*).
+- **iPhone:** no Safari, Compartilhar → *Adicionar à Tela de Início*. O app instalado tem armazenamento próprio no iPhone, então pareie de novo **dentro do app** (gere outro código no PC).
+
+**No celular**
+
+- O núcleo vira o botão de falar, grande no centro; o dock com **Inicializar/Encerrar link** e o microfone fica preso embaixo; os painéis vêm empilhados abaixo, rolando.
+- A cena 3D roda com menos pixels e só o brilho (sem aberração, ruído e vinheta), para não esquentar o celular.
+- O áudio sai e entra pelo celular. O Jarvis continua agindo no PC: abrir apps, mover janelas, a webcam do notebook e o resto.
+- Dizer "Jarvis" perto do PC conecta só uma aba do PC, nunca o celular, e o microfone escolhido no celular não muda o microfone do detector.
+
+**Roteiro de teste ao vivo (celular)**
+
+1. `python jarvis.py --lan`; libere o Python em *Redes privadas* no aviso do Windows. Anote o endereço `[LAN] Celular: ...`.
+2. Com o celular no mesmo Wi-Fi, abra o endereço **sem** parear: deve aparecer só a tela "Parear este aparelho". Tente `https://<ip>:8000/api/status` e `.../api/camera/snapshot` no navegador do celular: os dois devem responder `401`.
+3. No PC, painel CELULAR → **Parear celular**. Leia o QR com a câmera do celular: ele deve parear sozinho e abrir o HUD. O aparelho aparece na lista do PC.
+4. Instale a CA (Android ou iPhone, acima) e reabra a página: o aviso de certificado some.
+5. Toque no núcleo, permita o microfone e peça "Jarvis, abre o bloco de notas" e "que horas são?": o Jarvis responde pelo alto-falante do celular e o app abre no PC.
+6. Peça "mostra a câmera": o feed da webcam do notebook aparece no celular, e o aviso CÂMERA ATIVA aparece nos dois.
+7. Com o feed aberto, revogue o celular no PC: o feed congela na hora e, em até 15 s, o celular volta para a tela de pareamento e o link de voz cai.
+8. Erre o código cinco vezes no celular: o código do PC deve sumir, pedindo um novo.
+9. Instale o PWA (Chrome: *Instalar app*; iPhone: *Adicionar à Tela de Início*), abra pelo ícone e confira que abre em tela cheia. No iPhone, pareie de novo dentro do app.
+10. Com o PWA aberto, feche o Jarvis no PC e recarregue: deve aparecer o aviso "O PC não respondeu" (Android, com a CA instalada).
+11. Diga "Jarvis" perto do PC com o HUD aberto no celular e no PC: só a aba do PC conecta.
+
 Confira tudo com:
 
 ```bash
@@ -337,6 +392,7 @@ Opções úteis:
 | `python jarvis.py --agent-mode start` | Worker sem hot reload |
 | `python jarvis.py --port 8080 --no-browser` | Outra porta, sem abrir o navegador |
 | `python jarvis.py --rebuild` | Recompila a interface |
+| `python jarvis.py --lan` | Atende também o celular na rede de casa, com HTTPS e pareamento ([LAN-26](#celular-na-rede-de-casa-lan-26)) |
 | `python jarvis.py --gestures` | Liga também os gestos das mãos (com a sessão de voz; sem agente, rodam no próprio launcher) |
 | `python gestures.py --preview` | Só os gestos, com a imagem da webcam para testar |
 
@@ -466,9 +522,20 @@ Uma memória falsa plantada por uma página seria um prompt injection persistent
 - Uma foto só vai para o **Gemini (Google)** quando você pede para o Jarvis olhar (`look_at_camera`); ela aparece no painel Câmera ("Analisado") para você ver exatamente o que foi enviado. O feed ao vivo nunca sai do computador.
 - Os endpoints da câmera só atendem este computador: recusam outro `Host` (DNS rebinding) e pedidos vindos de outros sites abertos no navegador (`Sec-Fetch-Site`), que poderiam tentar ligar a webcam com um `<img>`.
 
+### Celular na rede (LAN-26)
+
+- Do próprio PC (conexão vinda de `127.0.0.1`) tudo continua como antes. De qualquer outro endereço, **nenhuma rota responde sem um aparelho pareado** (`401`): token do LiveKit, status, câmera (foto e feed), prints, eventos da palavra de ativação, a documentação da API e qualquer rota que vier a existir. O bloqueio é um middleware que nega por padrão. Sem token, o celular só recebe os arquivos do HUD compilado (que não têm dados), a pergunta "estou pareado?", o envio do código e o certificado público da CA.
+- Gerar código, ver o QR, listar e revogar aparelhos só funciona no próprio PC, inclusive contra DNS rebinding (o `Host` precisa ser `127.0.0.1`/`localhost`). Um celular pareado não pareia outros.
+- O código tem 6 dígitos, vale 5 minutos e só pode ser usado uma vez. Cinco tentativas erradas queimam o código, e é preciso gerar outro no PC.
+- Cada aparelho recebe seu próprio token aleatório (256 bits), guardado num cookie `HttpOnly`, `Secure` e `SameSite=Strict` (o JavaScript da página não o lê, e outros sites não o usam). O PC guarda só o hash SHA-256 em `aparelhos.json` (fora do git).
+- Pedidos de outros sites abertos no celular (`Sec-Fetch-Site`) são recusados.
+- A revogação corta na hora as rotas e as respostas longas em andamento (feed da câmera, eventos). Um link de voz já aberto no LiveKit cai quando a página do celular percebe a revogação (até 15 s); um token de voz emitido antes da revogação ainda vale para entrar na sala por até 30 min.
+- O tráfego do celular é HTTPS com a CA local, restrita por *Name Constraints* a IPs privados e `.local`. A chave da CA fica em `.jarvis-tls/jarvis-ca.key`, só no PC.
+- Não abra a porta 8000 no roteador: o modo `--lan` é só para a rede de casa e atende apenas os IPs privados do PC (`192.168.*`, `10.*`, `172.16–31.*`).
+
 ### Rede e credenciais
 
-- O servidor do HUD escuta apenas em `127.0.0.1` por padrão: o endpoint de token não tem autenticação, então não o exponha na rede sem colocar uma camada de acesso na frente.
+- O servidor do HUD escuta apenas em `127.0.0.1` por padrão. Para usar o celular, use `--lan` (veja abaixo), nunca `--host 0.0.0.0`: sem o modo `--lan` não há HTTPS, e o celular nem consegue usar o microfone.
 - O `.env` nunca é enviado ao navegador; `/api/status` só informa se cada item está configurado.
 - Email continua desligado por padrão. Para ativar:
 
@@ -500,6 +567,8 @@ Cobertura: settings, seleção de backend, registro de ferramentas, clima e prev
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), memória (pedido na última fala, recusa de senhas/documentos/cartões, resumo na sessão seguinte, painel MEM-23), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa), palavra de ativação (microfone pelo nome que o navegador mostra, detector, pausa durante o link, aviso ao HUD e encerramento por silêncio) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador, nem abrem o microfone.
 
+Cobertura do celular (LAN-26): código de pareamento (validade, uso único, tentativas), token por aparelho só como hash, revogação (inclusive cortando o feed da câmera em andamento), todas as rotas protegidas sem token (câmera, prints, token, eventos, gerência), cookie `HttpOnly`/`Secure`/`SameSite=Strict`, gerência só no PC (com DNS rebinding), certificado com *Name Constraints* e reemissão quando o IP muda, a palavra de ativação sem acordar o celular e, no HUD (vitest), o código do QR, o nome do aparelho, as chamadas de pareamento e revogação, a cena leve e o manifest do PWA.
+
 ## Estrutura
 
 ```
@@ -525,6 +594,7 @@ prompts.py            Persona, saudação por horário e resumo das memórias
 server.py             FastAPI: serve web/dist e emite tokens LiveKit
 wake_word.py          Detector local da palavra "Jarvis" (openWakeWord), iniciado pelo jarvis.py
 wake_hub.py           Ponte detector → HUD: avisa a aba por SSE ou abre o navegador
+lan_access.py         Celular na rede (LAN-26): pareamento, tokens por aparelho, bloqueio das rotas e certificados
 jarvis.py             Inicializador: HUD + agente em um comando
 doctor.py             Checagem de configuração
 web/

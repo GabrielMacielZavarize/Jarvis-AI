@@ -7,6 +7,7 @@ no formato padrão de endpoint usado pelo ``TokenSource.endpoint`` do livekit-cl
 from __future__ import annotations
 
 import argparse
+import mimetypes
 import os
 import re
 import secrets
@@ -27,6 +28,7 @@ from pydantic import BaseModel
 import camera
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
+from lan_access import DeviceRegistry, LanGuard, TlsFiles, build_lan_router, device_of, ensure_certificates, lan_addresses, lan_url
 from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
 from wake_hub import WakeHub, build_wake_router
@@ -39,6 +41,8 @@ GRACEFUL_SHUTDOWN_S = 2
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
 WEB_DIST = ROOT / "web" / "dist"
+# O manifest do PWA precisa do tipo certo (o Windows nem sempre o conhece).
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.\- ]{1,64}$")
 TOOL_NAMES = [
     "get_weather",
@@ -148,10 +152,11 @@ def _geocode_home(city: str) -> dict[str, Any] | None:
 
 
 def _require_local(request: Request) -> None:
-    """A webcam só atende este computador: recusa Host estranho (DNS rebinding) e páginas de
-    outros sites abertas no navegador (Sec-Fetch-Site), que poderiam ligá-la com um <img>."""
+    """A webcam só atende este computador ou um celular pareado (LAN-26): recusa Host estranho
+    (DNS rebinding) e páginas de outros sites abertas no navegador (Sec-Fetch-Site), que poderiam
+    ligá-la com um <img>."""
     host = (request.url.hostname or "").strip("[]").lower()
-    if host not in LOCAL_HOSTS:
+    if host not in LOCAL_HOSTS and device_of(request) is None:
         raise HTTPException(status_code=403, detail="A câmera só pode ser acessada pelo próprio computador.")
     if request.headers.get("sec-fetch-site") not in (None, "same-origin", "none"):
         raise HTTPException(status_code=403, detail="Pedido de outro site bloqueado: a câmera só atende o HUD do Jarvis.")
@@ -185,11 +190,12 @@ def create_app(
     reload_env: bool = True,
     camera_hub: CameraHub | None = None,
     open_browser: Callable[[str], Any] = webbrowser.open,
+    devices: DeviceRegistry | None = None,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
     ``camera_hub`` replaces the real webcam (tests); ``open_browser`` opens the HUD when
-    "Jarvis" is heard and no tab is open."""
+    "Jarvis" is heard and no tab is open; ``devices`` replaces ``aparelhos.json`` (tests)."""
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -201,6 +207,25 @@ def create_app(
             camera.shutdown()
 
     app = FastAPI(title="Jarvis HUD", version=APP_VERSION, lifespan=lifespan)
+    # LAN-26: fora do próprio PC nada responde sem um aparelho pareado. serve() preenche os
+    # endereços da rede local e o certificado quando o modo --lan está ligado.
+    app.state.lan_urls = []
+    app.state.tls = None
+    registry_box: list[DeviceRegistry] = [devices] if devices is not None else []
+
+    def registry() -> DeviceRegistry:
+        if not registry_box:
+            registry_box.append(DeviceRegistry())
+        return registry_box[0]
+
+    app.add_middleware(LanGuard, registry=registry, web_dist=WEB_DIST)
+    app.include_router(
+        build_lan_router(
+            registry,
+            lambda: app.state.lan_urls,
+            lambda: app.state.tls.ca_cert if app.state.tls else None,
+        )
+    )
 
     def current_settings() -> Settings:
         if reload_env:
@@ -262,6 +287,7 @@ def create_app(
             "memory": settings.memory_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
+            "lan": bool(app.state.lan_urls),
             "errors": backend_errors + livekit_errors,
         }
 
@@ -364,32 +390,91 @@ def create_app(
 app = create_app()
 
 
-def serve(hud_app: FastAPI, *, host: str, port: int, log_level: str) -> None:
+def enable_lan(hud_app: FastAPI, port: int) -> list[str]:
+    """LAN-26: descobre os IPs da rede de casa e prepara o certificado HTTPS para eles."""
+    ips = lan_addresses()
+    if not ips:
+        raise RuntimeError("Nenhum IP de rede local encontrado. O PC está no Wi-Fi ou no cabo de casa?")
+    hud_app.state.tls = ensure_certificates(ips)
+    hud_app.state.lan_urls = [lan_url(ip, port) for ip in ips]
+    return ips
+
+
+def serve(hud_app: FastAPI, *, host: str, port: int, log_level: str, lan_ips: list[str] | None = None) -> None:
     """``uvicorn.run`` that first ends the SSE streams of open HUD tabs, which would otherwise
-    keep Ctrl+C waiting until every tab is closed."""
+    keep Ctrl+C waiting until every tab is closed.
+
+    With ``lan_ips`` (``--lan``) the same app also listens with HTTPS on each LAN address and the
+    same port: the PC keeps http://127.0.0.1, the phone gets https://<ip> (the mic needs HTTPS)."""
+    import asyncio
+    import contextlib
+
     import uvicorn
+
+    extras: list[uvicorn.Server] = []
 
     class HudServer(uvicorn.Server):
         async def shutdown(self, sockets: Any = None) -> None:
             hud_app.state.wake_hub.close()
+            for extra in extras:
+                extra.should_exit = True
             await super().shutdown(sockets)
+
+    class LanServer(uvicorn.Server):
+        # Ctrl+C chega ao servidor principal, que encerra este junto.
+        def capture_signals(self) -> Any:
+            return contextlib.nullcontext()
 
     config = uvicorn.Config(
         hud_app, host=host, port=port, log_level=log_level, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_S
     )
+    main_server = HudServer(config)
+    tls: TlsFiles | None = hud_app.state.tls
+    for ip in lan_ips or []:
+        if tls is None:
+            break
+        lan_config = uvicorn.Config(
+            hud_app,
+            host=ip,
+            port=port,
+            log_level=log_level,
+            lifespan="off",
+            ssl_certfile=str(tls.cert),
+            ssl_keyfile=str(tls.key),
+            timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_S,
+        )
+        extras.append(LanServer(lan_config))
+
+    async def run_all() -> None:
+        await asyncio.gather(main_server.serve(), *(extra.serve() for extra in extras))
+
     try:
-        HudServer(config).run()
+        if extras:
+            asyncio.run(run_all())
+        else:
+            main_server.run()
     except KeyboardInterrupt:
         pass
+
+
+def _lan_from_env() -> bool:
+    try:
+        return load_settings().lan_enabled
+    except SettingsError:
+        return False
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Servidor do HUD do Jarvis.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--lan", action="store_true", help="Atende também o celular na rede de casa (HTTPS).")
     args = parser.parse_args()
 
-    serve(app, host=args.host, port=args.port, log_level="info")
+    lan_ips = enable_lan(app, args.port) if args.lan or _lan_from_env() else None
+    for url in app.state.lan_urls:
+        print(f"[LAN] Celular: {url}")
+    serve(app, host=args.host, port=args.port, log_level="info", lan_ips=lan_ips)
     return 0
 
 

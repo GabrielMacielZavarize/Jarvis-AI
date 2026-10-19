@@ -20,3 +20,6 @@ opencv-contrib-python
 # Palavra de ativação "Jarvis" (WAK-22). No Linux o openwakeword exige tflite-runtime, sem wheel para o Python 3.12.
 openwakeword; sys_platform != "linux"
 sounddevice
+# Celular na rede de casa (LAN-26): certificado HTTPS local e QR de pareamento
+cryptography
+segno

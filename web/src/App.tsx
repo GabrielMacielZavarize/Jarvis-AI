@@ -7,10 +7,13 @@ import { CameraIndicator } from './components/CameraIndicator';
 import { CardStage } from './components/cards/CardStage';
 import { ControlDock } from './components/ControlDock';
 import { ConversationPanel } from './components/ConversationPanel';
+import { LanPanel } from './components/LanPanel';
+import { PairingScreen } from './components/PairingScreen';
 import { SystemPanel } from './components/SystemPanel';
 import { TopBar } from './components/TopBar';
 import { useCameraMonitor } from './hooks/useCameraMonitor';
 import { useDemo } from './hooks/useDemo';
+import { useLanAccess } from './hooks/useLanAccess';
 import { type LiveJarvis, OFFLINE_LIVE, useLiveJarvis } from './hooks/useLiveJarvis';
 import { type StatusResult, useServerStatus } from './hooks/useServerStatus';
 import { useWakeWord } from './hooks/useWakeWord';
@@ -25,6 +28,14 @@ const Scene = lazy(() => import('./scene/Scene').then((module) => ({ default: mo
 const newRoomName = () => `jarvis-${crypto.randomUUID().slice(0, 8)}`;
 
 export default function App() {
+  // LAN-26: a phone that is not paired sees only the pairing screen (the server answers nothing else).
+  const { access, refresh } = useLanAccess();
+  if (access.state === 'loading') return null;
+  if (access.state === 'unpaired') return <PairingScreen revoked={access.revoked} onPaired={() => void refresh()} />;
+  return <JarvisApp local={access.state !== 'paired'} />;
+}
+
+function JarvisApp({ local }: { local: boolean }) {
   const status = useServerStatus();
   const [booted, setBooted] = useState(false);
   const [live, setLive] = useState<LiveJarvis>(OFFLINE_LIVE);
@@ -34,7 +45,7 @@ export default function App() {
   return (
     <>
       {canConnect && <LiveSession onChange={setLive} />}
-      <Hud status={status} booted={booted} live={canConnect ? live : OFFLINE_LIVE} />
+      <Hud status={status} booted={booted} live={canConnect ? live : OFFLINE_LIVE} local={local} />
       {!booted && <BootSequence onDone={() => setBooted(true)} />}
       <CameraIndicator />
     </>
@@ -75,7 +86,7 @@ function LiveBridge({ onChange }: { onChange: (live: LiveJarvis) => void }) {
   return null;
 }
 
-function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; live: LiveJarvis }) {
+function Hud({ status, booted, live, local }: { status: StatusResult; booted: boolean; live: LiveJarvis; local: boolean }) {
   const demo = useDemo();
   const [busy, setBusy] = useState(false);
   const [sessionStart, setSessionStart] = useState<number | null>(null);
@@ -194,6 +205,7 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
             microphone={{ devices: live.micDevices, deviceId: live.micDeviceId, onSelect: (id) => void live.selectMic(id) }}
             wake={wake.enabled ? wake : null}
           />
+          {local && server?.lan && <LanPanel />}
           <CardStage enabledTools={server?.tools ?? null} />
         </aside>
 

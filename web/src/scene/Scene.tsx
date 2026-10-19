@@ -4,6 +4,7 @@ import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@re
 import { BlendFunction } from 'postprocessing';
 import { useMemo, useRef } from 'react';
 import { type Group, Vector2 } from 'three';
+import { currentSceneProfile } from '../lib/lan';
 import { EarthGlobe } from './EarthGlobe';
 import { GridFloor } from './GridFloor';
 import { HudRings } from './HudRings';
@@ -66,12 +67,14 @@ function Hologram({ visible }: { visible: boolean }) {
 
 export function Scene({ visible }: { visible: boolean }) {
   const aberration = useMemo(() => new Vector2(0.0007, 0.0005), []);
+  // LAN-26: on a phone the scene renders fewer pixels and keeps only the bloom.
+  const profile = useMemo(currentSceneProfile, []);
 
   return (
     <Canvas
       className="scene"
-      dpr={[1, 1.75]}
-      gl={{ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false }}
+      dpr={profile.dpr}
+      gl={{ antialias: false, powerPreference: profile.lite ? 'default' : 'high-performance', alpha: false, stencil: false }}
       camera={{ position: [0, 0.6, 14], fov: FOV, near: 0.1, far: 120 }}
     >
       <color attach="background" args={['#010409']} />
@@ -80,13 +83,19 @@ export function Scene({ visible }: { visible: boolean }) {
       <CameraRig />
       <Hologram visible={visible} />
       <GridFloor />
-      <Sparkles count={90} scale={[20, 11, 10]} size={2.2} speed={0.25} opacity={0.45} color="#7fe9ff" noise={0.6} />
-      <EffectComposer multisampling={0} enableNormalPass={false}>
-        <Bloom mipmapBlur intensity={1.05} luminanceThreshold={0.08} luminanceSmoothing={0.35} radius={0.78} />
-        <ChromaticAberration offset={aberration} radialModulation modulationOffset={0.35} blendFunction={BlendFunction.NORMAL} />
-        <Noise premultiply blendFunction={BlendFunction.SCREEN} opacity={0.05} />
-        <Vignette offset={0.22} darkness={0.82} />
-      </EffectComposer>
+      <Sparkles count={profile.sparkles} scale={[20, 11, 10]} size={2.2} speed={0.25} opacity={0.45} color="#7fe9ff" noise={0.6} />
+      {profile.postprocessing === 'full' ? (
+        <EffectComposer multisampling={0} enableNormalPass={false}>
+          <Bloom mipmapBlur intensity={1.05} luminanceThreshold={0.08} luminanceSmoothing={0.35} radius={0.78} />
+          <ChromaticAberration offset={aberration} radialModulation modulationOffset={0.35} blendFunction={BlendFunction.NORMAL} />
+          <Noise premultiply blendFunction={BlendFunction.SCREEN} opacity={0.05} />
+          <Vignette offset={0.22} darkness={0.82} />
+        </EffectComposer>
+      ) : (
+        <EffectComposer multisampling={0} enableNormalPass={false} resolutionScale={0.5}>
+          <Bloom intensity={1.1} luminanceThreshold={0.1} luminanceSmoothing={0.35} />
+        </EffectComposer>
+      )}
     </Canvas>
   );
 }

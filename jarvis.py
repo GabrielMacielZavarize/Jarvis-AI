@@ -5,6 +5,7 @@ Uso:
     python jarvis.py --no-agent      # apenas o HUD (útil para o modo demonstração)
     python jarvis.py --gestures      # liga também o controle de janelas por gestos (webcam)
     python jarvis.py --port 8080 --no-browser
+    python jarvis.py --lan           # também atende o celular em https://<ip-do-pc>:8000 (LAN-26)
 
 Com JARVIS_WAKE_WORD=true também sobe o detector local da palavra "Jarvis" (wake_word.py).
 """
@@ -86,6 +87,13 @@ def _start_agent(mode: str, hud_url: str) -> subprocess.Popen[bytes] | None:
     return subprocess.Popen([sys.executable, str(ROOT / "agent.py"), mode], cwd=ROOT, env=env)
 
 
+def _lan_from_env() -> bool:
+    try:
+        return load_settings().lan_enabled
+    except SettingsError:
+        return False
+
+
 def _start_wake_word(url: str) -> subprocess.Popen[bytes] | None:
     """Local detector of "Jarvis"; must start before the server is imported (it reads the secret)."""
     try:
@@ -114,6 +122,11 @@ def main() -> int:
         "--gestures",
         action="store_true",
         help="Liga o controle de janelas por gestos das mãos (webcam) junto com o Jarvis.",
+    )
+    parser.add_argument(
+        "--lan",
+        action="store_true",
+        help="Atende também o celular na rede de casa, com HTTPS e pareamento (ou JARVIS_LAN=true).",
     )
     parser.add_argument(
         "--agent-mode",
@@ -154,10 +167,19 @@ def main() -> int:
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
 
-    from server import app, serve
+    from server import app, enable_lan, serve
+
+    lan_ips = None
+    if args.lan or _lan_from_env():
+        try:
+            lan_ips = enable_lan(app, args.port)
+        except RuntimeError as exc:
+            print(f"[LAN] {exc}")
+        for lan in app.state.lan_urls:
+            print(f"[LAN] Celular: {lan}  (pareie pelo painel CELULAR do HUD no PC)")
 
     try:
-        serve(app, host=args.host, port=args.port, log_level="warning")
+        serve(app, host=args.host, port=args.port, log_level="warning", lan_ips=lan_ips)
     except KeyboardInterrupt:
         pass
     finally:

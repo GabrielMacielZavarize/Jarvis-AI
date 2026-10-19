@@ -154,6 +154,7 @@ class Settings:
     wake_threshold: float = DEFAULT_WAKE_THRESHOLD
     wake_silence_seconds: int = DEFAULT_WAKE_SILENCE_SECONDS
     wake_mic: str | None = None
+    lan_enabled: bool = False
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -247,6 +248,7 @@ class Settings:
             ),
             wake_silence_seconds=_parse_wake_silence(env_map.get("JARVIS_WAKE_SILENCE_SECONDS")),
             wake_mic=_clean_optional(env_map.get("JARVIS_WAKE_MIC")),
+            lan_enabled=_parse_bool(env_map.get("JARVIS_LAN"), "JARVIS_LAN", default=False),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),

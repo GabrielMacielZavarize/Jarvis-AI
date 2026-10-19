@@ -20,3 +20,7 @@ memoria*.json
 memoria.json.tmp
 # Configurações pessoais da IDE
 .idea/
+# Celular na rede (LAN-26): aparelhos pareados (só hashes) e a CA/certificado HTTPS locais
+aparelhos.json
+aparelhos.json.tmp
+.jarvis-tls/

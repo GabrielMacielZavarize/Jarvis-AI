@@ -343,5 +343,7 @@ export interface ServerStatus {
   home?: { name: string; latitude: number; longitude: number } | null;
   /** WAK-22: "Jarvis" opens the link; silence_s of quiet closes it (0 = never). */
   wake_word?: { enabled: boolean; silence_s: number };
+  /** LAN-26: the server also answers paired phones on the home network (--lan). */
+  lan?: boolean;
   errors: string[];
 }
