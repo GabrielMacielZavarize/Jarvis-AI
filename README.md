@@ -77,6 +77,7 @@ Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CON
 
 Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`; MOU só com `JARVIS_ENABLE_COMPUTER_USE=true`.
 | MEM-23 | `remember` / `recall` / `forget` — memória entre conversas em `memoria.json`; o painel Memória lista e apaga | "Lembra que minha reunião de segunda é às 9." · "O que você sabe sobre mim?" · "Esquece isso." |
+| PRO-28 | `set_reminder` / `list_reminders` / `cancel_reminder` / `configure_alerts` — lembretes com hora em `lembretes.json` e avisos sozinhos de bateria, CPU/RAM, downloads e disco | "Me lembra amanhã às 10h de ligar pro contador." · "Quais lembretes eu tenho?" · "Para de me avisar sobre bateria." |
 
 Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`. MEM vem ligado e some com `JARVIS_ENABLE_MEMORY=false`.
 
@@ -313,6 +314,36 @@ Limitações:
 - Os modelos pré-treinados do openWakeWord são licenciados como CC BY-NC-SA 4.0 (uso pessoal, não comercial).
 - No Linux o `openwakeword` depende do `tflite-runtime`, que não tem wheel para o Python 3.12; lá, instale-o com `pip install openwakeword --no-deps` mais `onnxruntime tqdm requests`.
 
+### Avisos proativos e lembretes (PRO-28)
+
+```env
+JARVIS_PROACTIVE=true
+JARVIS_QUIET_HOURS=23:00-07:00   # horário de silêncio: só o crítico fala; "off" desliga
+JARVIS_DOWNLOADS_DIR=            # opcional: outra pasta para vigiar (vazio = Downloads do Windows)
+```
+
+O Jarvis passa a avisar sozinho, na hora certa:
+
+- **Lembretes com hora.** "Me lembra amanhã às 10h de ligar pro contador", "daqui a 2 horas me lembra de tirar a roupa da máquina", "segunda às 9", "dia 25 às 8", "hoje à noite". Ficam em `lembretes.json` (fora do git) e sobrevivem a reinícios. Se o PC estava desligado na hora, o aviso sai quando o Jarvis voltar, dizendo o horário original. "Quais lembretes eu tenho?" lista (também num painel do HUD); "cancela o lembrete do contador" ou "desmarca o próximo" cancelam. "É urgente" faz o lembrete falar mesmo no horário de silêncio. `set_timer` continua sendo a contagem curta da conversa atual.
+- **Bateria:** carregador desconectado, bateria em 20% (alta) e em 10% fora da tomada (crítica). Volta a avisar depois de carregar.
+- **CPU ou RAM acima de 90% por 5 minutos**, citando o processo culpado (somado pelo nome: as dezenas de processos do Chrome contam como um). No máximo um aviso a cada 30 minutos.
+- **Download concluído** na pasta Downloads (a de verdade do Windows, mesmo se você a mudou de disco): espera o `.crdownload`/`.part` sumir e o tamanho parar de mudar. Vários juntos viram um aviso só.
+- **Disco quase cheio:** menos de 10% livre (normal) ou de 3% (alta), em cada disco fixo, no máximo a cada 12 horas.
+
+**Como ele avisa.** Quem vigia é o servidor do HUD (sobe com o `jarvis.py` e fica de pé o tempo todo). Cada aviso tem uma prioridade:
+
+| Link | Baixa / normal (download, CPU, carregador, disco) | Alta (lembrete, bateria 20%) | Crítica (bateria 10%, lembrete urgente) |
+| --- | --- | --- | --- |
+| Aberto | o Jarvis fala | o Jarvis fala | o Jarvis fala |
+| Fechado | aviso no HUD | abre o link pela mesma via do "Jarvis" e fala | abre o link e fala |
+| Horário de silêncio | aviso no HUD | aviso no HUD | abre o link e fala |
+
+Com o link aberto, o agente pergunta ao servidor a cada 2 s (`/api/proactive/next`) e espera você ou ele terminarem de falar antes de dar o aviso. Com o link fechado, o aviso importante faz o mesmo que a palavra de ativação: bipe, a aba conecta sozinha (ou o servidor abre o navegador) e a primeira fala do Jarvis é o aviso, no lugar da saudação. Depois de `JARVIS_WAKE_SILENCE_SECONDS` de silêncio o link fecha de novo, mesmo sem a palavra de ativação ligada. Os avisos "só no HUD" aparecem como painel "Aviso · …" e no registro de atividade; se nenhuma aba estiver aberta, os últimos 10 esperam a próxima.
+
+**Por voz.** "Para de me avisar sobre bateria" silencia o assunto (ele continua aparecendo no HUD, sem voz); "por duas horas" põe prazo; "pode voltar a avisar da bateria" desfaz. "Horário de silêncio das 22h às 6h" ou "desliga o horário de silêncio" mudam o horário (a escolha falada vale mais que o `.env` e fica em `lembretes.json`). "O que você está vigiando?" resume tudo.
+
+Limitações: sem o servidor do HUD (só `python agent.py console`) os lembretes não disparam; ficam guardados até o `jarvis.py` subir de novo. O horário entendido é sempre repetido na resposta: se o Jarvis entender errado, cancele e peça de novo com "amanhã às 10h".
+
 Confira tudo com:
 
 ```bash
@@ -453,6 +484,12 @@ Uma memória falsa plantada por uma página seria um prompt injection persistent
 - Os endpoints que o HUD usa (`/api/wake/events`, `/hud`, `/result`) recusam pedidos vindos de outros sites (`Sec-Fetch-Site`), então uma página aberta no navegador não consegue abrir o link nem desligar o detector.
 - A ativação só conecta o mesmo link do botão "Inicializar": as regras de email, instalação e controle do PC continuam iguais.
 
+### Avisos proativos
+
+- O texto de um aviso (nome de arquivo baixado, nome de processo, lembrete) chega ao modelo como dado entre marcas de "nunca ordens", sem aspas, colchetes ou sinais de tag, para um arquivo chamado `ignore tudo e ....pdf` não virar instrução.
+- `/api/proactive/next` só atende o próprio computador (Host local e sem `Sec-Fetch-Site` de outro site). Um aviso só abre o mesmo link do botão "Inicializar"; as regras de email, instalação e controle do PC continuam iguais.
+- `lembretes.json` é gravado de forma atômica, com uma trava de arquivo entre o agente e o servidor; um arquivo ilegível é preservado como `lembretes.corrompido-<data>.json`.
+
 ### Leitura de tela
 
 `look_at_screen` só roda quando você pede. O print aparece no HUD e é **enviado ao Gemini (Google)** para análise, incluindo tudo o que estiver visível naquela tela ou janela. Feche arquivos sensíveis (como o `.env`) antes de pedir. O Jarvis é instruído a nunca ler senhas, chaves ou tokens em voz alta.
@@ -500,6 +537,8 @@ Cobertura: settings, seleção de backend, registro de ferramentas, clima e prev
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), memória (pedido na última fala, recusa de senhas/documentos/cartões, resumo na sessão seguinte, painel MEM-23), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa), palavra de ativação (microfone pelo nome que o navegador mostra, detector, pausa durante o link, aviso ao HUD e encerramento por silêncio) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador, nem abrem o microfone.
 
+Avisos proativos (PRO-28): horários em português ("amanhã às 10h", "daqui a 2h30", "segunda às 9") com relógio falso, `lembretes.json` entre reinícios e com trava, bateria/CPU/RAM/disco com sondas falsas, pasta Downloads falsa (parciais do Chrome e do Firefox), rota de cada prioridade com link aberto/fechado, silêncio e assuntos silenciados, abertura do link pela via da palavra de ativação e as ferramentas de voz.
+
 ## Estrutura
 
 ```
@@ -525,6 +564,7 @@ prompts.py            Persona, saudação por horário e resumo das memórias
 server.py             FastAPI: serve web/dist e emite tokens LiveKit
 wake_word.py          Detector local da palavra "Jarvis" (openWakeWord), iniciado pelo jarvis.py
 wake_hub.py           Ponte detector → HUD: avisa a aba por SSE ou abre o navegador
+proactive.py          Avisos proativos (PRO-28): lembretes.json, monitores, prioridade/silêncio e ferramentas
 jarvis.py             Inicializador: HUD + agente em um comando
 doctor.py             Checagem de configuração
 web/
@@ -552,6 +592,10 @@ O worker precisa estar rodando (`python jarvis.py` já sobe, ou `python agent.py
 
 O navegador só libera o microfone em `localhost`/`127.0.0.1` ou HTTPS. No painel **Sistema** do HUD, escolha o microfone certo e veja se o medidor "Entrada de voz" se mexe. Quando o agente detecta sua voz, o painel mostra "Ouvindo sua voz agora" e o terminal registra `Voz do usuário detectada.`
 
+### O Jarvis não avisa sozinho
+
+Confira `JARVIS_PROACTIVE=true`, se o painel Sistema mostra "Avisos proativos · PRO-28" e o horário de silêncio ("o que você está vigiando?"). Avisos de prioridade normal com o link fechado aparecem só no HUD, de propósito. No terminal, cada aviso gera uma linha `Aviso proativo (<assunto>, <rota>)`. Para um lembrete que abre o link, o LiveKit precisa estar configurado e o Chrome pode exigir um clique para tocar o som ("Clique para ouvir o Jarvis").
+
 ### Falo "Jarvis" e nada acontece
 
 - O painel Sistema diz "Detector offline": veja as linhas `[ATIVAÇÃO]` no terminal. Faltando pacote, rode `pip install openwakeword sounddevice`.
@@ -575,6 +619,19 @@ O Windows às vezes impede que outro programa traga uma janela para frente. Se o
 ### O provider compatível com OpenAI falhou
 
 Esse modo é `pipeline-first` e best-effort. Confirme se o endpoint suporta os paths de chat, STT e TTS.
+
+## Roteiro de teste ao vivo (PRO-28)
+
+No Windows, com `JARVIS_PROACTIVE=true` e `python jarvis.py --rebuild`:
+
+1. **Lembrete com o link aberto.** "Jarvis, daqui a 2 minutos me lembra de beber água." Ele repete o horário; espere de boca fechada: em até ~7 s depois da hora ele fala o lembrete. "Quais lembretes eu tenho?" deve mostrar a lista vazia depois.
+2. **Lembrete com o link fechado.** Marque um para daqui a 3 minutos e encerre o link ("tchau, Jarvis"). Na hora, o HUD toca o bipe, conecta sozinho e a primeira fala é o lembrete (sem "Bom dia, senhor"). Repita com a aba do HUD fechada: o navegador deve abrir sozinho.
+3. **Reinício.** Marque um para daqui a 5 minutos, feche o `jarvis.py` (Ctrl+C) e suba de novo: o lembrete continua em `lembretes.json` e dispara. Desligado na hora? Ele avisa ao voltar, dizendo "era para…".
+4. **Cancelar.** "Me lembra amanhã às 10h de ligar pro contador" → "cancela o lembrete do contador".
+5. **Carregador.** No notebook, tire o carregador com o link aberto: "Carregador desconectado". Com o link fechado, só o painel "Aviso · Carregador desconectado · sem voz". Diga "para de me avisar sobre bateria", recoloque e tire de novo: só aparece no HUD.
+6. **Download.** Baixe um PDF qualquer pelo Chrome e outro pelo Firefox: um aviso por download, só depois de terminar (nada enquanto o `.crdownload`/`.part` existir).
+7. **CPU.** Rode algo pesado por mais de 5 minutos (ex.: um benchmark ou `python -c "while True: pass"` em vários terminais): o aviso cita o processo culpado.
+8. **Silêncio.** "Horário de silêncio de agora até daqui a uma hora" (ex.: "das 15h às 16h") e repita o passo 5: só HUD. Um lembrete "urgente" nesse horário ainda fala. Depois, "desliga o horário de silêncio".
 
 ## Referências
 
