@@ -10,6 +10,7 @@ do próprio Jarvis (look_at_screen).
 from __future__ import annotations
 
 import ctypes
+import functools
 import logging
 import queue
 import sys
@@ -48,6 +49,7 @@ class OverlayView:
 # ───────────────────────── desenho ─────────────────────────
 
 
+@functools.lru_cache(maxsize=64)
 def _font(names: tuple[str, ...], size: int) -> Any:
     from PIL import ImageFont
 
@@ -242,6 +244,112 @@ CLASS_NAME = "JarvisGestureOverlay"
 _CLOSE = object()
 
 
+class LayeredWindow:
+    """One layered window (click-through, always on top, never focused, out of screenshots).
+
+    Create, paint and destroy it from a single thread: Win32 windows belong to their thread.
+    """
+
+    def __init__(self, class_name: str, title: str) -> None:
+        self.user32, self.gdi32, kernel32, self.shcore = _dlls()
+        self.user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))  # PER_MONITOR_AWARE_V2
+        self.class_name = class_name
+        self.instance = kernel32.GetModuleHandleW(None)
+        user32 = self.user32
+
+        def window_proc(hwnd: Any, message: int, wparam: Any, lparam: Any) -> int:
+            return user32.DefWindowProcW(hwnd, message, wparam, lparam)
+
+        self._proc = _WNDPROC(window_proc)
+        wc = _WNDCLASSEXW()
+        wc.cbSize = ctypes.sizeof(_WNDCLASSEXW)
+        wc.lpfnWndProc = self._proc
+        wc.hInstance = self.instance
+        wc.lpszClassName = class_name
+        self._registered = bool(user32.RegisterClassExW(ctypes.byref(wc)))
+        self.hwnd = user32.CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            class_name,
+            title,
+            WS_POPUP,
+            0, 0, 1, 1,
+            None, None, self.instance, None,
+        )  # fmt: skip
+        if not self.hwnd:
+            raise OSError(f"CreateWindowExW falhou ({ctypes.get_last_error()})")
+        user32.SetWindowDisplayAffinity(self.hwnd, WDA_EXCLUDEFROMCAPTURE)
+        self.visible = False
+        self._msg = wintypes.MSG()
+
+    def pump(self) -> None:
+        while self.user32.PeekMessageW(ctypes.byref(self._msg), None, 0, 0, PM_REMOVE):
+            self.user32.TranslateMessage(ctypes.byref(self._msg))
+            self.user32.DispatchMessageW(ctypes.byref(self._msg))
+
+    def scale(self, area: tuple[int, int, int, int]) -> float:
+        """DPI scale (1.0 = 96 dpi) of the monitor holding the center of `area`."""
+        left, top, right, bottom = area
+        point = wintypes.POINT((left + right) // 2, (top + bottom) // 2)
+        monitor = self.user32.MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST)
+        dpi_x, dpi_y = wintypes.UINT(96), wintypes.UINT(96)
+        if monitor and self.shcore.GetDpiForMonitor(monitor, 0, ctypes.byref(dpi_x), ctypes.byref(dpi_y)) == 0:
+            return max(1.0, dpi_x.value / 96)
+        return 1.0
+
+    def hide(self) -> None:
+        if self.visible:
+            self.user32.ShowWindow(self.hwnd, SW_HIDE)
+            self.visible = False
+
+    def paint(self, image: Any, x: int, y: int, alpha: int = 255) -> None:
+        """Show an RGBA image at (x, y) in physical pixels, with an extra constant opacity."""
+        user32, gdi32 = self.user32, self.gdi32
+        width, height = image.size
+        data = premultiplied_bgra(image)
+        screen_dc = user32.GetDC(None)
+        memory_dc = gdi32.CreateCompatibleDC(screen_dc)
+        info = _BITMAPINFO()
+        info.bmiHeader.biSize = ctypes.sizeof(_BITMAPINFOHEADER)
+        info.bmiHeader.biWidth = width
+        info.bmiHeader.biHeight = -height  # de cima para baixo
+        info.bmiHeader.biPlanes = 1
+        info.bmiHeader.biBitCount = 32
+        bits = ctypes.c_void_p()
+        bitmap = gdi32.CreateDIBSection(screen_dc, ctypes.byref(info), 0, ctypes.byref(bits), None, 0)
+        try:
+            if not bitmap or not bits.value:
+                return
+            ctypes.memmove(bits, data, len(data))
+            previous = gdi32.SelectObject(memory_dc, bitmap)
+            blend = _BLENDFUNCTION(AC_SRC_OVER, 0, max(0, min(255, int(alpha))), AC_SRC_ALPHA)
+            user32.UpdateLayeredWindow(
+                self.hwnd,
+                screen_dc,
+                ctypes.byref(wintypes.POINT(x, y)),
+                ctypes.byref(wintypes.SIZE(width, height)),
+                memory_dc,
+                ctypes.byref(wintypes.POINT(0, 0)),
+                0,
+                ctypes.byref(blend),
+                ULW_ALPHA,
+            )
+            gdi32.SelectObject(memory_dc, previous)
+        finally:
+            if bitmap:
+                gdi32.DeleteObject(bitmap)
+            gdi32.DeleteDC(memory_dc)
+            user32.ReleaseDC(None, screen_dc)
+        if not self.visible:
+            user32.ShowWindow(self.hwnd, SW_SHOWNOACTIVATE)
+            self.visible = True
+        user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+
+    def destroy(self) -> None:
+        self.user32.DestroyWindow(self.hwnd)
+        if self._registered:
+            self.user32.UnregisterClassW(self.class_name, self.instance)
+
+
 class Overlay:
     """Thread-safe front: show(view, area) / hide() from any thread; the window lives in its own thread."""
 
@@ -283,38 +391,10 @@ class Overlay:
             logger.exception("O overlay dos gestos falhou; os gestos continuam sem ele.")
 
     def _loop(self) -> None:
-        user32, gdi32, kernel32, shcore = _dlls()
-        user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))  # PER_MONITOR_AWARE_V2
-        instance = kernel32.GetModuleHandleW(None)
-
-        def window_proc(hwnd: Any, message: int, wparam: Any, lparam: Any) -> int:
-            return user32.DefWindowProcW(hwnd, message, wparam, lparam)
-
-        proc = _WNDPROC(window_proc)
-        wc = _WNDCLASSEXW()
-        wc.cbSize = ctypes.sizeof(_WNDCLASSEXW)
-        wc.lpfnWndProc = proc
-        wc.hInstance = instance
-        wc.lpszClassName = CLASS_NAME
-        registered = bool(user32.RegisterClassExW(ctypes.byref(wc)))
-        hwnd = user32.CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-            CLASS_NAME,
-            "Jarvis · gestos",
-            WS_POPUP,
-            0, 0, 1, 1,
-            None, None, instance, None,
-        )  # fmt: skip
-        if not hwnd:
-            raise OSError(f"CreateWindowExW falhou ({ctypes.get_last_error()})")
-        user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
-        msg = wintypes.MSG()
-        visible = False
+        window = LayeredWindow(CLASS_NAME, "Jarvis · gestos")
         try:
             while True:
-                while user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, PM_REMOVE):
-                    user32.TranslateMessage(ctypes.byref(msg))
-                    user32.DispatchMessageW(ctypes.byref(msg))
+                window.pump()
                 try:
                     item = self._queue.get(timeout=0.03)
                 except queue.Empty:
@@ -328,69 +408,11 @@ class Overlay:
                     break
                 view, area = item
                 if view is None or area is None:
-                    if visible:
-                        user32.ShowWindow(hwnd, SW_HIDE)
-                        visible = False
+                    window.hide()
                     continue
-                self._paint(user32, gdi32, shcore, hwnd, view, area)
-                if not visible:
-                    user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
-                    visible = True
-                user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+                scale = window.scale(area)
+                image = render(view, scale)
+                left, top, right, _ = area
+                window.paint(image, left + (right - left - image.size[0]) // 2, top + round(22 * scale))
         finally:
-            user32.DestroyWindow(hwnd)
-            if registered:
-                user32.UnregisterClassW(CLASS_NAME, instance)
-            del proc
-
-    @staticmethod
-    def _scale(user32: Any, shcore: Any, area: tuple[int, int, int, int]) -> float:
-        left, top, right, bottom = area
-        monitor = user32.MonitorFromPoint(wintypes.POINT((left + right) // 2, (top + bottom) // 2), MONITOR_DEFAULTTONEAREST)
-        dpi_x, dpi_y = wintypes.UINT(96), wintypes.UINT(96)
-        if monitor and shcore.GetDpiForMonitor(monitor, 0, ctypes.byref(dpi_x), ctypes.byref(dpi_y)) == 0:
-            return max(1.0, dpi_x.value / 96)
-        return 1.0
-
-    def _paint(self, user32: Any, gdi32: Any, shcore: Any, hwnd: Any, view: OverlayView, area: tuple[int, int, int, int]) -> None:
-        scale = self._scale(user32, shcore, area)
-        image = render(view, scale)
-        width, height = image.size
-        left, top, right, _ = area
-        x = left + (right - left - width) // 2
-        y = top + round(22 * scale)
-        data = premultiplied_bgra(image)
-
-        screen_dc = user32.GetDC(None)
-        memory_dc = gdi32.CreateCompatibleDC(screen_dc)
-        info = _BITMAPINFO()
-        info.bmiHeader.biSize = ctypes.sizeof(_BITMAPINFOHEADER)
-        info.bmiHeader.biWidth = width
-        info.bmiHeader.biHeight = -height  # de cima para baixo
-        info.bmiHeader.biPlanes = 1
-        info.bmiHeader.biBitCount = 32
-        bits = ctypes.c_void_p()
-        bitmap = gdi32.CreateDIBSection(screen_dc, ctypes.byref(info), 0, ctypes.byref(bits), None, 0)
-        try:
-            if not bitmap or not bits.value:
-                return
-            ctypes.memmove(bits, data, len(data))
-            previous = gdi32.SelectObject(memory_dc, bitmap)
-            blend = _BLENDFUNCTION(AC_SRC_OVER, 0, 255, AC_SRC_ALPHA)
-            user32.UpdateLayeredWindow(
-                hwnd,
-                screen_dc,
-                ctypes.byref(wintypes.POINT(x, y)),
-                ctypes.byref(wintypes.SIZE(width, height)),
-                memory_dc,
-                ctypes.byref(wintypes.POINT(0, 0)),
-                0,
-                ctypes.byref(blend),
-                ULW_ALPHA,
-            )
-            gdi32.SelectObject(memory_dc, previous)
-        finally:
-            if bitmap:
-                gdi32.DeleteObject(bitmap)
-            gdi32.DeleteDC(memory_dc)
-            user32.ReleaseDC(None, screen_dc)
+            window.destroy()

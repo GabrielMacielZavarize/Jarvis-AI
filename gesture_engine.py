@@ -100,6 +100,7 @@ class Tuning:
     maximize_max_move: float = 0.07
     maximize_palms: float = 0.35
     close_hold_s: float = 1.2
+    panel_hold_s: float = 1.0  # dois dedos parados por tanto tempo mostram/escondem o painel de gestos
     swipe_distance: float = 0.16
     swipe_max_s: float = 0.5
     swipe_min_speed: float = 0.55  # no teste real o swipe de aba saiu a ~0,8/s
@@ -135,7 +136,7 @@ class Status:
     state: State
     pose: Pose
     hand: bool
-    charging: str | None = None  # "arm" | "mouse_on" | "mouse_off" | "close"
+    charging: str | None = None  # "arm" | "mouse_on" | "mouse_off" | "close" | "panel"
     progress: float | None = None
     direction: str | None = None
     dragging: bool = False
@@ -339,6 +340,12 @@ class GestureMachine:
         self._last_point: tuple[float, float] | None = None
         self._charging: tuple[str, float] | None = None
         self._shape: Shape | None = None
+        self._panel_latched = False  # o painel já alternou com estes dois dedos: precisa soltar
+
+    @property
+    def shape(self) -> Shape | None:
+        """Pose and position of the hand in the last frame that had one."""
+        return self._shape
 
     # ── controle externo (voz, teclado do preview) ──
 
@@ -461,6 +468,8 @@ class GestureMachine:
             return
         if self._need_release and self.pose not in (Pose.FIST, Pose.THUMB_DOWN, Pose.NONE):
             self._need_release = False
+        if self.pose != Pose.TWO:
+            self._panel_latched = False
         if self._pending_swipe is not None:
             if t - self._pending_swipe > tuning.swipe_settle_s:
                 self._pending_swipe = None
@@ -505,6 +514,15 @@ class GestureMachine:
                 opposite = "left" if direction == "right" else "right"
                 self._blocked = (opposite, t + tuning.return_block_s)
                 out.append(Command("tab", direction=direction, step=1 if direction == "right" else -1))
+                self._panel_latched = True  # trocou de aba: estes dois dedos não abrem o painel
+            elif not self._panel_latched:
+                held = self._still_for(t)
+                if held > 0.25:
+                    self._charging = ("panel", min(1.0, held / tuning.panel_hold_s))
+                    if held >= tuning.panel_hold_s:
+                        self._panel_latched = True
+                        self._touch(t)
+                        out.append(Command("panel"))
         elif self.pose == Pose.POINT:
             held = self._still_for(t)
             if held > 0.25:

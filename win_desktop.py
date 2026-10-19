@@ -780,6 +780,26 @@ def move_to_monitor(hwnd: int, monitor: Monitor, maximize: bool | None = None, f
         bring_to_front(hwnd)
 
 
+def place_window(hwnd: int, rect: tuple[int, int, int, int], maximize: bool = False, focus: bool = True) -> None:
+    """Put a window at an exact rectangle (physical pixels), e.g. on another monitor.
+
+    Crossing to a monitor with another DPI, apps that follow the DPI resize themselves right
+    after the move; a second SetWindowPos puts the size back to what was asked.
+    """
+    user32 = ctypes.windll.user32
+    left, top, right, bottom = rect
+    with physical_pixels():
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        for _ in range(2):
+            user32.SetWindowPos(hwnd, None, left, top, right - left, bottom - top, SWP_NOZORDER | SWP_NOACTIVATE)
+            if window_rect(hwnd) == rect:
+                break
+        if maximize:
+            user32.ShowWindow(hwnd, SW_MAXIMIZE)
+    if focus:
+        bring_to_front(hwnd)
+
+
 def show_window(hwnd: int, command: int) -> None:
     ctypes.windll.user32.ShowWindow(hwnd, command)
 
