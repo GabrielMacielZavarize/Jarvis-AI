@@ -14,6 +14,7 @@ BASE_TOOLS = [
     "get_timers",
     "show_on_hud",
     "manage_hud_panels",
+    "set_hud_appearance",
     "check_microphone",
     "end_session",
     "change_voice",

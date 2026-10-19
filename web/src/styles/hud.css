@@ -43,27 +43,54 @@
   pointer-events: auto;
 }
 
-/* The panels wait behind the boot sequence, then materialize one after another. */
+/* The panels wait behind the boot sequence, then materialize one after another ("backwards":
+   once done, the panel's own styles rule again, like the dragging fade). */
 .hud:not(.hud--online) > * {
   visibility: hidden;
 }
 .hud--online .hud__top {
-  animation: hud-drop 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: hud-drop 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
-.hud--online .hud__left > *,
-.hud--online .hud__right > * {
-  animation: panel-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+.hud--online .slot > * {
+  animation: panel-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
-.hud--online .hud__left > :nth-child(2),
-.hud--online .hud__right > :nth-child(2) {
+.hud--online .slot:nth-child(2) > * {
   animation-delay: 0.14s;
 }
-.hud--online .hud__left > :nth-child(n + 3),
-.hud--online .hud__right > :nth-child(n + 3) {
+.hud--online .slot:nth-child(n + 3) > * {
   animation-delay: 0.28s;
 }
+
+/* Each side panel sits in a slot that can be dragged by its header to another place. */
+.slot {
+  display: contents;
+}
+.slot--dragging > * {
+  opacity: 0.45;
+  outline: 1px dashed var(--line-strong);
+  outline-offset: 2px;
+}
+.app:has(.slot--dragging) {
+  user-select: none;
+}
+.drop-line {
+  position: fixed;
+  z-index: 30;
+  height: 2px;
+  background: var(--c-primary);
+  box-shadow: 0 0 12px var(--c-primary);
+  pointer-events: none;
+}
+@media (min-width: 1081px) {
+  .slot .panel__head {
+    cursor: grab;
+  }
+  .slot--dragging .panel__head {
+    cursor: grabbing;
+  }
+}
 .hud--online .hud__dock {
-  animation: hud-rise 0.8s 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: hud-rise 0.8s 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 @keyframes hud-drop {
   from {
@@ -506,6 +533,59 @@
 .stat--setting {
   animation: setting-in 0.28s ease-out;
 }
+.themes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+  white-space: normal;
+}
+.theme-swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  text-align: left;
+  cursor: pointer;
+}
+.theme-swatch i {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+}
+.theme-swatch:hover,
+.theme-swatch--on {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.theme-swatch--on {
+  background: rgb(var(--c-primary-rgb) / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(var(--c-primary-rgb) / 0.35);
+}
+.quality-readout {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.toggles .toggle {
+  min-width: 0;
+}
 @keyframes setting-in {
   from {
     opacity: 0;
@@ -876,13 +956,23 @@
   gap: 10px;
 }
 
-/* Protocol running now, floating over the bottom of the core like a lower third. */
-.tool-plate {
-  --plate-rgb: var(--c-accent-rgb);
+/* Floats over the bottom of the core: the protocol running now and the live caption. */
+.dock__float {
   position: absolute;
   bottom: calc(100% + 16px);
   left: 50%;
   translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(760px, 92vw);
+  pointer-events: none;
+}
+
+/* Protocol running now, like a lower third. */
+.tool-plate {
+  --plate-rgb: var(--c-accent-rgb);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas:
@@ -903,6 +993,39 @@
 }
 .tool-plate--done {
   --plate-rgb: 82 255 176;
+}
+
+/* Live caption: Jarvis's words appearing one by one, film-subtitle style. */
+.caption {
+  display: -webkit-box;
+  max-width: 100%;
+  margin: 0;
+  padding: 6px 18px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  background: radial-gradient(ellipse at center, rgb(1 4 9 / 0.62), transparent 72%);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.38;
+  letter-spacing: 0.01em;
+  text-align: center;
+  color: var(--text);
+  text-shadow:
+    0 0 10px rgb(0 0 0 / 0.95),
+    0 0 18px rgb(var(--c-primary-rgb) / 0.35);
+}
+.caption span {
+  animation: caption-word 0.35s ease-out;
+}
+.caption__more {
+  color: var(--text-faint);
+}
+@keyframes caption-word {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+  }
 }
 .tool-plate--error {
   --plate-rgb: 255 90 90;
@@ -1071,6 +1194,46 @@
 .btn--muted {
   --c-primary-rgb: 255 90 90;
   color: var(--c-danger);
+}
+.btn--on {
+  border-color: var(--line-strong);
+  background: rgb(var(--c-primary-rgb) / 0.16);
+  color: var(--c-primary);
+}
+
+/* ───────────────────────── Cinema mode ───────────────────────── */
+
+.hud__left,
+.hud__right,
+.chips {
+  transition:
+    opacity 0.6s ease,
+    transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.app[data-cinema] .hud__left,
+.app[data-cinema] .hud__right {
+  opacity: 0;
+  pointer-events: none;
+}
+.app[data-cinema] .hud__left {
+  transform: perspective(1500px) rotateY(28deg) translateX(-80px);
+}
+.app[data-cinema] .hud__right {
+  transform: perspective(1500px) rotateY(-28deg) translateX(80px);
+}
+.app[data-cinema] .chips,
+.app[data-cinema] .brand__tag {
+  opacity: 0;
+}
+.app[data-cinema] .caption {
+  font-size: clamp(22px, 2.2vw, 30px);
+}
+@media (max-width: 1080px) {
+  /* Stacked columns would leave an empty page: in cinema mode they leave the flow. */
+  .app[data-cinema] .hud__left,
+  .app[data-cinema] .hud__right {
+    display: none;
+  }
 }
 
 /* ───────────────────────── Core overlay ───────────────────────── */
@@ -1353,4 +1516,201 @@
     top: auto;
     bottom: 60px;
   }
+}
+
+/* ───────────────────────── Notifications ───────────────────────── */
+
+.toasts {
+  position: fixed;
+  top: 96px;
+  right: 28px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+.toast {
+  --toast-rgb: var(--c-primary-rgb);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(var(--toast-rgb) / 0.55);
+  background:
+    linear-gradient(100deg, rgb(var(--toast-rgb) / 0.16), transparent 60%),
+    rgb(2 10 18 / 0.86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 0 26px rgb(var(--toast-rgb) / 0.22);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  pointer-events: auto;
+}
+.toast--warn {
+  --toast-rgb: var(--c-accent-rgb);
+}
+.toast--ok {
+  --toast-rgb: 82 255 176;
+}
+.toast--critical {
+  --toast-rgb: 255 90 90;
+  animation: toast-alarm 1.4s ease-in-out infinite;
+}
+@keyframes toast-alarm {
+  50% {
+    box-shadow: 0 0 34px rgb(var(--toast-rgb) / 0.5);
+  }
+}
+.toast__body {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 11px 14px 12px 16px;
+  border: none;
+  border-left: 3px solid rgb(var(--toast-rgb));
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.toast__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.toast__head strong {
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(var(--toast-rgb));
+  text-shadow: 0 0 10px rgb(var(--toast-rgb) / 0.6);
+}
+.toast__code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.toast__message {
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--text);
+}
+.toast__timer {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: rgb(var(--toast-rgb) / 0.8);
+  transform-origin: left;
+  animation: toast-timer linear forwards;
+}
+@keyframes toast-timer {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (max-width: 1080px) {
+  .toasts {
+    top: max(12px, env(safe-area-inset-top));
+    right: 16px;
+  }
+}
+
+/* ───────────────────────── Ambient mode ───────────────────────── */
+
+.hud,
+.core-trigger {
+  transition: opacity 1s ease;
+}
+.app[data-ambient] .hud,
+.app[data-ambient] .core-trigger {
+  opacity: 0;
+  pointer-events: none;
+}
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at 50% 45%, transparent 18%, rgb(1 4 9 / 0.55) 70%);
+  pointer-events: none;
+}
+.ambient__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  /* The core stays visible in the middle: clock above it, the details below. */
+  height: 100%;
+  padding: 9vh 24px 8vh;
+  transition: transform 2s ease;
+}
+.ambient__clock {
+  font-family: var(--font-mono);
+  font-size: clamp(64px, 15vh, 180px);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  text-shadow:
+    0 0 30px rgb(var(--c-primary-rgb) / 0.55),
+    0 0 80px rgb(var(--c-primary-rgb) / 0.25);
+}
+.ambient__clock span {
+  color: var(--c-primary);
+  animation: blink 2s steps(2) infinite;
+}
+.ambient__date {
+  font-family: var(--font-display);
+  font-size: clamp(12px, 1.6vh, 16px);
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  color: var(--c-primary);
+}
+.ambient__row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  margin-top: auto;
+}
+.ambient__card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 260px;
+  padding: 14px 20px;
+  border: 1px solid var(--line);
+  background: rgb(2 10 18 / 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+}
+.ambient__value {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1.05;
+  color: var(--text);
+}
+.ambient__value--event {
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+.ambient__label {
+  margin-top: 4px;
+  font-size: 15px;
+  color: var(--text-dim);
+}
+.ambient__hint {
+  margin-top: 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }

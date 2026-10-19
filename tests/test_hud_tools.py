@@ -30,6 +30,8 @@ from tools import (
     get_timers,
     get_weather,
     manage_hud_panels,
+    match_hud_theme,
+    set_hud_appearance,
     run_diagnostics,
     search_news,
     set_timer,
@@ -126,6 +128,11 @@ class WeatherCardTests(unittest.IsolatedAsyncioTestCase):
                         "temperature_2m_min": [14, 15],
                         "precipitation_probability_max": [80, 10],
                     },
+                    "hourly": {
+                        "time": ["2026-10-17T14:00", "2026-10-17T15:00", "2026-10-17T16:00"],
+                        "temperature_2m": [18.2, 19.0, None],
+                        "precipitation_probability": [70, 40],
+                    },
                 }
             ),
         ]
@@ -145,6 +152,14 @@ class WeatherCardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(card["data"]["location"], "Porto Alegre")
         self.assertEqual(len(card["data"]["daily"]), 2)
         self.assertEqual(card["data"]["daily"][1]["label"], "Parcialmente nublado")
+        # The hourly chart stops at the first hour without a temperature.
+        self.assertEqual(
+            card["data"]["hourly"],
+            [
+                {"time": "2026-10-17T14:00", "temp": 18.2, "rain": 70},
+                {"time": "2026-10-17T15:00", "temp": 19.0, "rain": 40},
+            ],
+        )
 
 
 class NewsToolTests(unittest.IsolatedAsyncioTestCase):
@@ -277,6 +292,44 @@ SCREEN = panel("screen", "Leitura de tela", "tela 2")
 MEDIA = panel("media", "Reprodução", "YouTube · lo-fi")
 WEATHER = panel("weather", "Meteorologia", "Criciúma")
 NOTE = panel("note", "Lista de compras estrogonofe de frango")
+
+
+class HudAppearanceToolTests(unittest.IsolatedAsyncioTestCase):
+    def test_themes_by_name_or_colour(self) -> None:
+        cases = {
+            "vermelho": "mark3",
+            "Homem de Ferro": "mark3",
+            "roxo": "friday",
+            "F.R.I.D.A.Y.": "friday",
+            "J.A.R.V.I.S.": "jarvis",
+            "friday": "friday",
+            "volta ao normal": "jarvis",
+            "prata": "stealth",
+            "verde-limão": None,
+        }
+        for text, theme in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(match_hud_theme(text), theme)
+
+    async def test_theme_and_cinema_report_what_the_hud_shows(self) -> None:
+        with patch("tools.hud_request", AsyncMock(return_value={"theme": "mark3", "cinema": True})) as request:
+            result = await set_hud_appearance(FakeRunContext(), theme="vermelho", cinema=True)
+
+        request.assert_awaited_once_with("appearance", {"theme": "mark3", "cinema": True})
+        self.assertEqual(result, "Tema do HUD agora: Mark III. modo cinema ligado (só o núcleo e a legenda).")
+
+    async def test_unknown_theme_changes_nothing(self) -> None:
+        with patch("tools.hud_request", AsyncMock()) as request:
+            result = await set_hud_appearance(FakeRunContext(), theme="verde-limão")
+
+        request.assert_not_awaited()
+        self.assertTrue(result.startswith("NADA mudou"))
+
+    async def test_without_hud_nothing_changes(self) -> None:
+        with patch("tools.hud_request", AsyncMock(return_value=None)):
+            result = await set_hud_appearance(FakeRunContext(), cinema=False)
+
+        self.assertIn("NADA mudou: o HUD não está conectado", result)
 
 
 class HudPanelToolTests(unittest.IsolatedAsyncioTestCase):

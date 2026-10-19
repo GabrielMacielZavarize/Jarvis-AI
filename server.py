@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import datetime as dt
 import logging
 import mimetypes
 import os
 import re
 import secrets
 import threading
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import webbrowser
@@ -60,6 +62,7 @@ TOOL_NAMES = [
     "get_timers",
     "show_on_hud",
     "manage_hud_panels",
+    "set_hud_appearance",
     "check_microphone",
     "end_session",
     "change_voice",
@@ -192,6 +195,46 @@ def _geocode_home(city: str) -> dict[str, Any] | None:
     home = {"name": place.get("name", city), "latitude": place["latitude"], "longitude": place["longitude"]}
     _HOME_CACHE[city] = home
     return home
+
+
+# Modo ambiente do HUD: o clima muda devagar e a agenda é consultada no Google, então os dois
+# ficam guardados um tempo em vez de ir à rede a cada minuto de tela ociosa.
+AMBIENT_WEATHER_TTL = 10 * 60
+AMBIENT_AGENDA_TTL = 5 * 60
+_AMBIENT_CACHE: dict[str, tuple[float, Any]] = {}
+
+
+def _cached(key: str, ttl: float, fetch: Callable[[], Any]) -> Any:
+    hit = _AMBIENT_CACHE.get(key)
+    now = time.monotonic()
+    if hit is not None and now - hit[0] < ttl:
+        return hit[1]
+    try:
+        value = fetch()
+    except Exception:
+        logger.debug("Modo ambiente: falha ao buscar %s.", key, exc_info=True)
+        value = None
+    _AMBIENT_CACHE[key] = (now, value)
+    return value
+
+
+def _next_event() -> dict[str, Any] | None:
+    """The next meeting with a time in the coming 24 h (all-day events are not meetings)."""
+    from calendar_tools import TZ, is_connected, list_events
+
+    if not is_connected():
+        return None
+    now = dt.datetime.now(TZ)
+    for event in list_events(now, now + dt.timedelta(hours=24)):
+        if not event.all_day and event.end > now:
+            return {
+                "title": event.title,
+                "start": event.start.isoformat(),
+                "end": event.end.isoformat(),
+                "location": event.location,
+                "call": bool(event.meeting_link),
+            }
+    return None
 
 
 def _require_local(request: Request, name: str = "A câmera", *, devices: bool = True) -> None:
@@ -586,6 +629,39 @@ def create_app(
             threading.Thread(target=open_browser, args=(app.state.hud_url,), daemon=True).start()
 
     app.state.routines.on_due = routine_due
+
+    @app.get("/api/ambient")
+    def ambient(request: Request) -> dict[str, Any]:
+        """Modo ambiente do HUD: clima da JARVIS_HOME_CITY e a próxima reunião, com cache."""
+        _require_local(request, "A tela ambiente")
+        try:
+            settings = current_settings()
+        except SettingsError:
+            return {"weather": None, "next_event": None}
+        home = _geocode_home(settings.home_city) if settings.home_city else None
+        weather = None
+        if home is not None:
+            from weather import current_conditions
+
+            weather = _cached(
+                f"weather:{home['name']}",
+                AMBIENT_WEATHER_TTL,
+                lambda: {"city": home["name"], **current_conditions(home["latitude"], home["longitude"])},
+            )
+        event = _cached("agenda", AMBIENT_AGENDA_TTL, _next_event) if settings.calendar_enabled else None
+        return {"weather": weather, "next_event": event}
+
+    @app.get("/api/system/live")
+    def system_live(request: Request) -> dict[str, Any]:
+        """CPU e memória agora, para o painel Diagnóstico ao vivo (desde a consulta anterior)."""
+        _require_local(request, "A leitura do sistema")
+        import psutil
+
+        return {
+            "cpu": psutil.cpu_percent(interval=None),
+            "per_core": psutil.cpu_percent(interval=None, percpu=True),
+            "memory": psutil.virtual_memory().percent,
+        }
 
     @app.post("/api/routines/claim")
     def claim_routine(request: Request) -> dict[str, Any]:

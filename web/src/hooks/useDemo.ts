@@ -116,6 +116,11 @@ export function useDemo(): DemoState {
               await wait(beat.ms);
             }
             break;
+          case 'toast':
+            hud.pushToast(beat.toast);
+            playCue('notice');
+            await wait(600);
+            break;
           case 'card':
             hud.pushCard(beat.card.kind, beat.card.data() as never);
             hud.addLog('ok', `${TOOL_LABELS[useHud.getState().activeTool ?? ''] ?? 'Protocolo'} concluído`);

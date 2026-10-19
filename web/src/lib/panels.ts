@@ -171,13 +171,20 @@ export function matchPanels(
 
 /** Parses the agent's RPC payload; older agents sent `kinds` instead of `targets`. */
 export function parseHudRequest(payload: string): HudRequest {
-  let raw: { action?: unknown; targets?: unknown; kinds?: unknown } = {};
+  let raw: { action?: unknown; targets?: unknown; kinds?: unknown; theme?: unknown; cinema?: unknown } = {};
   try {
     raw = JSON.parse(payload || '{}') ?? {};
   } catch {
     raw = {};
   }
   if (raw.action === 'mic' || raw.action === 'end_session') return { action: raw.action };
+  if (raw.action === 'appearance') {
+    return {
+      action: 'appearance',
+      theme: typeof raw.theme === 'string' ? raw.theme : null,
+      cinema: typeof raw.cinema === 'boolean' ? raw.cinema : null,
+    };
+  }
   const action = PANEL_ACTIONS.includes(raw.action as HudPanelAction) ? (raw.action as HudPanelAction) : 'list';
   const list = Array.isArray(raw.targets) ? raw.targets : Array.isArray(raw.kinds) ? raw.kinds : [];
   return { action, targets: list.filter((item): item is string => typeof item === 'string') };

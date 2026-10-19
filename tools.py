@@ -33,6 +33,7 @@ from confirmation import (
 )
 from hud import hud_request, net_activity, show_card, tool_status
 from settings import Settings
+from weather import WEATHER_CODES
 
 logger = logging.getLogger("jarvis-tools")
 
@@ -91,29 +92,6 @@ MONTHS_PT = (
     "novembro",
     "dezembro",
 )
-WEATHER_CODES = {
-    0: "Céu limpo",
-    1: "Predominantemente limpo",
-    2: "Parcialmente nublado",
-    3: "Nublado",
-    45: "Névoa",
-    48: "Névoa com geada",
-    51: "Garoa leve",
-    53: "Garoa moderada",
-    55: "Garoa forte",
-    61: "Chuva leve",
-    63: "Chuva moderada",
-    65: "Chuva forte",
-    71: "Neve leve",
-    73: "Neve moderada",
-    75: "Neve forte",
-    80: "Pancadas leves",
-    81: "Pancadas moderadas",
-    82: "Pancadas fortes",
-    95: "Trovoada",
-    96: "Trovoada com granizo leve",
-    99: "Trovoada com granizo forte",
-}
 
 # Mantém referência aos timers ativos para que não sejam coletados pelo GC.
 _TIMER_TASKS: set[asyncio.Task[None]] = set()
@@ -266,6 +244,25 @@ def _parse_daily_forecast(daily: Any) -> list[dict[str, Any]]:
     return forecast
 
 
+# Horas de previsão no gráfico do painel Meteorologia.
+HOURLY_POINTS = 24
+
+
+def _parse_hourly_forecast(hourly: Any) -> list[dict[str, Any]]:
+    """Next hours for the temperature chart of the weather panel; [] when the API sent none."""
+    if not isinstance(hourly, dict):
+        return []
+    times = hourly.get("time") or []
+    temps = hourly.get("temperature_2m") or []
+    rain = hourly.get("precipitation_probability") or []
+    points = []
+    for index, moment in enumerate(times[:HOURLY_POINTS]):
+        if index >= len(temps) or temps[index] is None:
+            break
+        points.append({"time": moment, "temp": temps[index], "rain": rain[index] if index < len(rain) else None})
+    return points
+
+
 def _fetch_weather(city: str) -> tuple[str, dict[str, Any]]:
     location = _geocode(city)
     city_name = location.get("name", city)
@@ -285,6 +282,8 @@ def _fetch_weather(city: str) -> tuple[str, dict[str, Any]]:
                 "weather_code,temperature_2m_max,temperature_2m_min,"
                 "precipitation_probability_max"
             ),
+            "hourly": "temperature_2m,precipitation_probability",
+            "forecast_hours": HOURLY_POINTS,
             "forecast_days": 7,
             "timezone": "auto",
         },
@@ -319,6 +318,7 @@ def _fetch_weather(city: str) -> tuple[str, dict[str, Any]]:
             "is_day": current.get("is_day", 1),
         },
         "daily": forecast,
+        "hourly": _parse_hourly_forecast(weather_data.get("hourly")),
     }
     return summary, card
 
@@ -884,6 +884,61 @@ async def manage_hud_panels(
     return result
 
 
+# Temas do HUD (web/src/lib/themes.ts) e como o usuário costuma chamá-los.
+HUD_THEMES = {
+    "jarvis": ("jarvis", "padrao", "normal", "original", "azul", "ciano", "classico"),
+    "mark3": ("mark3", "mark 3", "mark iii", "homem de ferro", "iron man", "armadura", "vermelho", "dourado", "ouro"),
+    "friday": ("friday", "sexta-feira", "sexta feira", "roxo", "violeta", "lilas", "rosa"),
+    "stealth": ("stealth", "furtivo", "discreto", "prata", "branco", "cinza", "neutro"),
+}
+HUD_THEME_NAMES = {"jarvis": "J.A.R.V.I.S.", "mark3": "Mark III", "friday": "F.R.I.D.A.Y.", "stealth": "Stealth"}
+
+
+def match_hud_theme(text: str) -> str | None:
+    # "F.R.I.D.A.Y." / "J.A.R.V.I.S." como o HUD escreve.
+    folded = re.sub(r"[^a-z0-9 -]", "", strip_accents(text).lower()).strip()
+    for theme, names in HUD_THEMES.items():
+        if folded == theme or any(name in folded for name in names):
+            return theme
+    return None
+
+
+@function_tool()
+async def set_hud_appearance(
+    context: RunContext,
+    theme: str | None = None,
+    cinema: bool | None = None,
+) -> str:
+    """Change how the holographic HUD looks: its colour theme and/or the cinema mode.
+
+    Args:
+        theme: Colour theme by name or colour: "jarvis" (cyan, the default), "mark3" (gold and
+            red, the Iron Man armour), "friday" (violet) or "stealth" (silver). Omit to keep it.
+        cinema: true hides every panel and leaves only the core and the live caption ("modo
+            cinema", "modo foco", "esconde os painéis"); false brings the full HUD back.
+    """
+    wanted = None
+    if theme:
+        wanted = match_hud_theme(theme)
+        if wanted is None:
+            options = ", ".join(HUD_THEME_NAMES.values())
+            return f"NADA mudou: não conheço o tema '{theme}'. Temas do HUD: {options}."
+    if wanted is None and cinema is None:
+        return "Diga o tema (J.A.R.V.I.S., Mark III, F.R.I.D.A.Y. ou Stealth) ou se é para ligar o modo cinema."
+
+    response = await hud_request("appearance", {"theme": wanted, "cinema": cinema})
+    if response is None:
+        return "NADA mudou: o HUD não está conectado. Não diga que conseguiu."
+    if response.get("error"):
+        return "NADA mudou: este HUD é de uma versão anterior. Peça para rodar python jarvis.py --rebuild."
+    parts = []
+    if wanted:
+        parts.append(f"Tema do HUD agora: {HUD_THEME_NAMES.get(str(response.get('theme')), response.get('theme'))}")
+    if cinema is not None:
+        parts.append("modo cinema ligado (só o núcleo e a legenda)" if response.get("cinema") else "modo cinema desligado")
+    return ". ".join(parts) + "."
+
+
 # ───────────────────────── microphone ─────────────────────────
 
 
@@ -1322,6 +1377,7 @@ def build_tools(settings: Settings) -> list[Any]:
         get_timers,
         show_on_hud,
         manage_hud_panels,
+        set_hud_appearance,
         check_microphone,
         end_session,
     ]

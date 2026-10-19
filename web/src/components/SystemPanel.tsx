@@ -9,6 +9,7 @@ import { formatSeconds, latencyTone } from '../lib/latency';
 import type { JarvisMode } from '../lib/types';
 import type { WakeWord } from '../hooks/useWakeWord';
 import { Panel } from './Panel';
+import { HudSettings } from './HudSettings';
 import { SoundControls } from './SoundControls';
 
 const SETTINGS_STORAGE_KEY = 'jarvis.hud.settings';
@@ -209,6 +210,7 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
           </div>
         )}
         {showSettings && <SoundControls />}
+        {showSettings && <HudSettings />}
         {wake && !demo && (
           <div className="stat" style={{ gridColumn: '1 / -1' }}>
             <dt>Ativação por voz · WAK-22</dt>

@@ -14,10 +14,12 @@ Short English summary: real-time voice assistant built on LiveKit Agents (Gemini
 - **Controle do computador** (opcional): abrir e fechar apps, sites, YouTube e streamings, abas do navegador, mídia, volume, pastas, captura e bloqueio de tela.
 - **Globo 3D com conexões**: enquanto pensa ou busca algo, o núcleo vira um globo holográfico que desenha arcos da sua cidade até os serviços consultados.
 - **Seletor de microfone** e diagnóstico de captação no HUD (botão **Ajustes** do painel Sistema).
+- **Link que não cai sozinho e troca de modelo**: o link só fecha com "tchau, Jarvis" ou o botão (`JARVIS_WAKE_SILENCE_SECONDS=0`), a sessão do Gemini Live não morre mais em ~15 minutos (compressão de contexto) e, quando um modelo gratuito estoura a cota ou fica sobrecarregado, a conversa continua no próximo da lista sem derrubar o link. O painel Sistema mostra o modelo em uso e o tempo de resposta de cada turno (veja [Modelos, cota e tempo de resposta](#modelos-cota-e-tempo-de-resposta)).
+- **HUD personalizável** (veja [Visual do HUD](#visual-do-hud)): temas de cor (J.A.R.V.I.S., Mark III, F.R.I.D.A.Y., Stealth) também por voz, legenda ao vivo sob o núcleo, modo cinema, modo ambiente com relógio e clima quando ocioso, notificações holográficas, gráficos nos painéis (temperatura por hora, CPU/RAM ao vivo, linha do tempo da agenda), globo que cresce nas pesquisas, painéis arrastáveis, qualidade automática da cena e som do reator.
 - **Visual do HUD refinado**: boot com o anel do reator se completando, painéis que se materializam depois do boot, marca de reator arc na barra superior, placa sobre o núcleo com o protocolo em execução (código, nome, alvo e o resultado), transcrição com hora, registro em linha do tempo, radar no piso e feixe de luz do projetor. O HUD inteiro troca de cor com o modo (âmbar ao processar, vermelho na falha).
 - **Visão pela webcam** (opcional): o Jarvis olha pela câmera quando você pede e o HUD mostra o feed ao vivo num painel holográfico, com o aviso CÂMERA ATIVA sempre visível.
 - **Assistente de tela para dev** (TEL-31): "explica esse erro", "o que tem de errado aqui?", "o que esse código faz?", "resume essa página", "traduz isso" e "copia a correção", com painel de explicação e blocos de código com destaque e botão de copiar.
-- **Palavra de ativação** (opcional): diga "Jarvis" e o link abre sozinho; o silêncio o encerra para poupar a cota do Gemini. Detecção local, sem enviar áudio antes da ativação.
+- **Palavra de ativação** (opcional): diga "Jarvis" e o link abre sozinho; se quiser, o silêncio o encerra para poupar a cota do Gemini (`JARVIS_WAKE_SILENCE_SECONDS`). Detecção local, sem enviar áudio antes da ativação.
 - **Voz e jeito do filme (VOZ-30)**: voz grave e calma configurável (`JARVIS_VOICE`, troca por comando de voz), persona de mordomo britânico com humor seco, sons de interface gerados no navegador e animações de "pensando" e "executando" no núcleo 3D.
 - **Rotinas** (ROT-24): "Bom dia, Jarvis" cumprimenta, diz o clima, as manchetes e os lembretes, arruma as janelas e toca uma playlist; "modo foco", "modo jogo", "boa noite" e as rotinas que você criar por voz. Também rodam sozinhas no horário ("todo dia útil às 8h").
 - **Um comando para subir tudo**: `python jarvis.py`.
@@ -59,6 +61,7 @@ flowchart LR
 | TMR-06 | `set_timer` — contagem regressiva com aviso falado | "Timer de 10 minutos pro café." |
 | TMR-06 | `get_timers` — quanto falta em cada timer da conversa | "Quanto tempo falta pro timer acabar?" |
 | HUD-07 | `show_on_hud` — painel com listas, passos, resumos | "Mostre os passos no painel." |
+| HUD-07 | `set_hud_appearance` — tema de cores do HUD e modo cinema; diz "NADA mudou" sem HUD conectado | "Muda o tema para vermelho." · "Deixa o HUD roxo." · "Modo cinema." · "Mostra os painéis de novo." |
 | HUD-07 | `manage_hud_panels` — lista (tipo + título exibido), fecha e amplia painéis do HUD pelo tipo, pelo título ou "o último"; diz "NADA foi fechado" quando nada mudou | "Feche a aba." · "Fecha a aba de reprodução." · "Maximiza o rascunho da lista de compras." · "Fecha essas abinhas da esquerda." |
 | MED-08 | `play_youtube` / `open_streaming` / `media_control` | "Toque lo-fi no YouTube." · "Abre a live do Gaules." · "Toca Guns N' Roses no Spotify." · "Pausa." |
 | PC-09 | `open_app` / `close_app` / `open_folder` / `lock_computer` / `take_screenshot` | "Abra o Spotify." · "Bloqueie a tela." |
@@ -359,8 +362,24 @@ JARVIS_VOICE=Charon
 Observações do plano gratuito:
 
 - No plano gratuito o Google pode usar o conteúdo das conversas para melhorar os produtos dele.
-- Os limites de uso aparecem em **AI Studio → Rate limits**. As sessões só de áudio duram até 15 minutos; o plugin do LiveKit retoma a sessão automaticamente.
-- Outros modelos Live aceitos: `gemini-3.8-live-extended-thinking` (raciocina mais, responde mais devagar) e `gemini-2.5-flash-native-audio-preview-12-2025` (geração anterior).
+- Os limites de uso aparecem em **AI Studio → Rate limits** e valem por modelo. O Jarvis liga a compressão de contexto do Gemini Live, então a sessão de áudio não para nos ~15 minutos; quando o Google renova a conexão (a cada ~10 min), o plugin do LiveKit retoma a sessão sozinho.
+- Outros modelos Live aceitos: `gemini-3.1-flash-live-preview`, `gemini-3.8-live-extended-thinking` (raciocina mais, responde mais devagar) e `gemini-2.5-flash-native-audio-preview-12-2025` (geração anterior).
+
+#### Modelos, cota e tempo de resposta
+
+```env
+GOOGLE_FALLBACK_MODELS=gemini-3.1-flash-live-preview,gemini-2.5-flash-native-audio-preview-12-2025
+JARVIS_MODEL_ROTATION=fallback   # fallback | rotate
+JARVIS_END_OF_SPEECH_MS=0        # 0 = padrão do Google; 500 responde mais cedo
+JARVIS_WAKE_SILENCE_SECONDS=0    # 0 = o link nunca fecha sozinho
+```
+
+- **Reservas.** O plano gratuito limita cada modelo separadamente. Quando o modelo em uso estoura a cota, fica sobrecarregado ou some para a sua chave, o Jarvis passa a conversa para o próximo de `GOOGLE_FALLBACK_MODELS` sem derrubar o link: o histórico vai junto e, se a sua última fala ficou sem resposta, ele responde. O painel Sistema mostra "Modelo · reserva" e uma notificação conta o motivo. O modelo que falhou fica em pausa em `modelos.json` (fora do git): 30 min por cota por minuto, até a meia-noite do Pacífico por cota diária, 5 min por sobrecarga e 6 h quando não está disponível para a chave. `python doctor.py` lista a fila e quem está em pausa. Antes disso, uma sessão do Gemini que morria deixava o link aberto e mudo.
+- **Rodízio.** Com `JARVIS_MODEL_ROTATION=rotate`, cada link novo começa pelo próximo modelo da lista, para dividir o uso entre eles; `fallback` (padrão) sempre começa pelo `GOOGLE_MODEL`, que costuma ser o melhor.
+- **Custos.** Com faturamento ativo na chave, confira o preço de cada modelo antes de deixá-lo nas reservas. `GOOGLE_FALLBACK_MODELS=` (vazio) desliga a troca.
+- **Tempo de resposta.** O painel Sistema mostra quanto o Jarvis levou do fim da sua fala até a primeira palavra (verde até 1,5 s, âmbar até 3 s, vermelho acima) e a média dos últimos 10 turnos; o terminal do agente registra o mesmo ("Resposta em 1,2 s (gemini-3.8-live)"). Ferramentas que vão à internet (clima, pesquisa) entram nesse tempo, e a placa sobre o núcleo mostra quando é uma delas.
+- **Fim da fala.** O Gemini espera um silêncio para decidir que você terminou. Se as respostas demoram a começar, teste `JARVIS_END_OF_SPEECH_MS=500`; se ele te cortar no meio da frase, suba para 900.
+- **Link sempre aberto.** Sem desligamento por silêncio, o link aberto gasta minutos do LiveKit e cota do Gemini mesmo calado. Para economizar, use `JARVIS_WAKE_SILENCE_SECONDS=120` (ou mais) com a palavra de ativação.
 
 ### Opção 2: OpenAI Realtime
 
@@ -536,14 +555,14 @@ Formatos aceitos: hoje, amanhã, depois de amanhã, segunda… domingo (sozinho 
 ```env
 JARVIS_WAKE_WORD=true
 JARVIS_WAKE_THRESHOLD=0.5        # 0.05–0.99: menor ativa mais fácil (e erra mais)
-JARVIS_WAKE_SILENCE_SECONDS=30   # encerra o link após N s de silêncio; 0 = nunca
+JARVIS_WAKE_SILENCE_SECONDS=0    # 0 = nunca fecha sozinho; 120 = encerra após 2 min de silêncio
 JARVIS_WAKE_MIC=                 # opcional: parte do nome de um microfone só para o detector
 ```
 
 Com isso, `python jarvis.py` também sobe `wake_word.py`, um processo leve (cerca de 110 MB de RAM e 2 ms de CPU a cada 80 ms de áudio) que roda o [openWakeWord](https://github.com/dscripka/openWakeWord) com o modelo pré-treinado `hey_jarvis`. Na primeira execução ele baixa cerca de 5 MB de modelos do GitHub do openWakeWord.
 
 1. Diga **"Jarvis"** ou **"hey Jarvis"**, espere o bipe e fale. O HUD toca o bipe e conecta o link sozinho. Se nenhuma aba do HUD estiver aberta, o servidor abre o navegador e a aba conecta assim que carrega.
-2. Depois de `JARVIS_WAKE_SILENCE_SECONDS` sem conversa, o link fecha com um bipe descendente e o detector volta a ouvir só a palavra de ativação. O Jarvis falando ou pensando conta como conversa. Nos últimos 10 s o dock mostra a contagem ("Encerrando por silêncio em 8 s"), e basta falar para continuar. O link não fecha enquanto houver timer correndo, código esperando "confirmar" ou instalação em andamento. Com a ativação ligada, a regra vale também para links abertos pelo clique ou pelo Espaço, e para um link em que o agente nunca respondeu.
+2. Com `JARVIS_WAKE_SILENCE_SECONDS` maior que 0 (o padrão é 0, nunca fechar), depois desse tempo sem conversa o link fecha com um bipe descendente e o detector volta a ouvir só a palavra de ativação. O Jarvis falando ou pensando conta como conversa. Nos últimos 10 s o dock mostra a contagem ("Encerrando por silêncio em 8 s"), e basta falar para continuar. O link não fecha enquanto houver timer correndo, código esperando "confirmar" ou instalação em andamento. Com a ativação ligada, a regra vale também para links abertos pelo clique ou pelo Espaço, e para um link em que o agente nunca respondeu.
 3. O painel Sistema mostra o estado do detector: "Aguardando “Jarvis”", "Pausada durante o link", "Detector offline" ou "Sem sinal no microfone", quando o microfone que ele abriu só entrega silêncio por 5 s (em geral, mudo no Windows).
 
 **Privacidade.** O detector analisa o som no próprio PC e só manda ao servidor local (127.0.0.1) a pontuação da detecção. Nada é gravado, e nenhum áudio vai para o Gemini ou o LiveKit antes de o link abrir.
@@ -776,6 +795,21 @@ Abra `http://localhost:5173` — o Vite encaminha `/api` para o `server.py`.
 
 Sem LiveKit configurado, o botão **Simulação** roda uma conversa roteirizada com áudio sintético para você ver todos os estados e painéis. Os dados exibidos nesse modo são fictícios e o HUD mostra o selo "SIMULAÇÃO".
 
+### Visual do HUD
+
+Tudo fica em **Ajustes** (painel Sistema) e é salvo no navegador.
+
+- **Temas.** J.A.R.V.I.S. (ciano e âmbar), Mark III (dourado e vermelho), F.R.I.D.A.Y. (violeta e rosa) e Stealth (prata e verde-água). Mudam o HUD e a cena 3D; processando continua num tom próprio do tema e a falha continua vermelha. Também por voz: "Jarvis, muda o tema para vermelho", "deixa roxo", "volta ao normal".
+- **Legenda ao vivo.** A fala do Jarvis aparece palavra por palavra embaixo do núcleo e some alguns segundos depois.
+- **Modo cinema.** Botão ao lado do dock, tecla `F` ou "modo cinema": some com os painéis, aproxima o núcleo e aumenta a legenda. Notificações continuam aparecendo.
+- **Modo ambiente.** Depois de 3 minutos sem link e sem mexer no mouse ou teclado, o HUD vira um relógio grande com o clima da `JARVIS_HOME_CITY` e a próxima reunião (com `JARVIS_ENABLE_CALENDAR=true`), e o núcleo fica em baixa energia. O relógio desloca alguns pixels por minuto para não marcar a tela. Qualquer movimento, "Jarvis" ou um aviso volta ao HUD.
+- **Notificações.** Avisos proativos, timers que acabaram, reunião chegando, rotina agendada e troca de modelo entram pela direita; os críticos ficam até o clique.
+- **Gráficos nos painéis.** Meteorologia mostra a temperatura das próximas 24 h (passe o mouse para ver cada hora e a chance de chuva); Diagnóstico atualiza CPU e RAM ao vivo enquanto está aberto; Agenda desenha o dia em blocos com um marcador de agora.
+- **Globo nas pesquisas.** Enquanto o Jarvis consulta a internet, o globo cresce, os anéis recuam e cada destino ganha um rótulo com a cidade e o serviço.
+- **Painéis arrastáveis.** Arraste um painel pelo cabeçalho para a outra coluna ou outra posição (no computador); "Restaurar painéis" volta ao layout de fábrica.
+- **Qualidade da cena.** Automática (padrão) mede os quadros por segundo e diminui partículas e efeitos quando o PC não acompanha, voltando quando sobra fôlego; Alta, Média e Economia fixam o nível. O painel mostra o nível em uso e os fps.
+- **Som do reator.** Zumbido baixo que cresce com a voz do Jarvis enquanto o link está aberto. Vem desligado e segue o volume dos sons da interface.
+
 ### Atalhos do HUD
 
 | Tecla | Ação |
@@ -783,7 +817,8 @@ Sem LiveKit configurado, o botão **Simulação** roda uma conversa roteirizada 
 | `Espaço` | Inicializar o link (ou diga "Jarvis", com a [palavra de ativação](#palavra-de-ativação-jarvis-wak-22)) |
 | `M` | Silenciar / ativar microfone |
 | `/` | Focar a linha de comando de texto |
-| `Esc` | Limpar os painéis holográficos |
+| `F` | Modo cinema: só o núcleo e a legenda (de novo para voltar) |
+| `Esc` | Sai do painel ampliado, depois do modo cinema, depois limpa os painéis holográficos |
 
 O microfone e os sons da interface ficam no botão **Ajustes** do painel Sistema (a escolha de deixar aberto ou fechado fica salva no navegador). Se o microfone escolhido não entregar som, os ajustes abrem sozinhos junto do aviso.
 
@@ -980,7 +1015,9 @@ Cobertura do celular (LAN-26): código de pareamento (validade, uso único, tent
 
 ```
 agent.py              Worker LiveKit (entrypoint do agente)
-backends.py           Gemini / OpenAI Realtime / pipeline compatível
+backends.py           Gemini / OpenAI Realtime / pipeline compatível, compressão de contexto e troca de modelo na conversa
+model_pool.py         Fila de modelos do Gemini: reservas, rodízio e pausa por cota/sobrecarga (modelos.json)
+weather.py            Clima do Open-Meteo: rótulos dos códigos e o resumo do modo ambiente
 tools.py              Ferramentas do Jarvis
 hud.py                Ponte ferramentas → HUD (data channel "jarvis.hud")
 pc_control.py         Ações seguras no computador (apps, sites, abas, janelas, mídia, volume, tela)
@@ -1019,10 +1056,20 @@ web/
   src/scene/          Cena 3D (núcleo, anéis, espectro, órbitas, partículas, grade)
   src/components/     Painéis do HUD e cartões holográficos
   src/hooks/          Sessão LiveKit, simulação, status do servidor
-  src/lib/            Estado do HUD, áudio, catálogo de protocolos, sons de interface (sounds.ts)
+  src/lib/            Estado do HUD, áudio, catálogo de protocolos, sons de interface (sounds.ts), temas,
+                      preferências do HUD (prefs.ts), qualidade da cena, gráficos e som do reator
 ```
 
 ## Troubleshooting
+
+### O Jarvis demora para responder
+
+Olhe "Tempo de resposta" no painel Sistema e o terminal do agente. Abaixo de 1,5 s é o normal do Gemini Live; acima disso, as causas mais comuns são:
+
+- **Modelo sobrecarregado ou na cota.** Acontece no plano gratuito em horários de pico; com `GOOGLE_FALLBACK_MODELS` a conversa passa para outro modelo, e `JARVIS_MODEL_ROTATION=rotate` divide o uso entre eles.
+- **O Gemini demora a entender que você terminou de falar.** Barulho de fundo ou um microfone sensível prolongam o turno; teste `JARVIS_END_OF_SPEECH_MS=500` e um fone com microfone.
+- **Modelo que pensa antes de falar.** `gemini-3.8-live-extended-thinking` responde mais devagar; prefira `gemini-3.8-live`.
+- **Ferramentas de internet.** Clima, pesquisa e notícias esperam o site responder (até 15 s); a placa sobre o núcleo mostra quando é isso.
 
 ### `Python was not found` no Windows
 

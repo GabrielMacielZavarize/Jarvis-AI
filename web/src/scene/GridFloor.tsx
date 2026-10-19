@@ -36,7 +36,9 @@ const fragment = /* glsl */ `
     float ring = smoothstep(1.4, 0.0, abs(d - wave)) * (1.0 - wave / 32.0);
     float pad = smoothstep(0.08, 0.0, abs(d - 3.0)) * 0.6 + smoothstep(0.05, 0.0, abs(d - 3.6)) * 0.3;
     // Radar sweep: a beam turning around the pad that lights the grid and leaves a fading wake.
-    float behind = mod(uSweep - atan(vWorld.z, vWorld.x), TAU);
+    // atan(0, 0) is undefined: one NaN pixel at the centre would be smeared black by the bloom.
+    float angle = d > 0.001 ? atan(vWorld.z, vWorld.x) : 0.0;
+    float behind = mod(uSweep - angle, TAU);
     float wake = smoothstep(1.3, 0.0, behind) * smoothstep(3.0, 3.8, d) * fade;
     float beam = smoothstep(0.035, 0.0, behind) * smoothstep(3.0, 3.8, d) * fade;
     float alpha = (minor + major) * fade + ring * 0.55 * fade + pad * (0.5 + uEnergy * 0.6);

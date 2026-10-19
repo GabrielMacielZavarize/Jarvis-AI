@@ -15,6 +15,7 @@ export type SoundCue =
   | 'confirm'
   | 'error'
   | 'timerDone'
+  | 'notice'
   | 'dictationStart'
   | 'dictationTick'
   | 'dictationError'
@@ -67,6 +68,11 @@ export const SOUND_CUES: Record<SoundCue, Tone[]> = {
     { at: 0, from: 1320, to: 1320, duration: 0.12, gain: 0.12 },
     { at: 0.18, from: 1320, to: 1320, duration: 0.12, gain: 0.12 },
     { at: 0.36, from: 1760, to: 1760, duration: 0.3, gain: 0.12 },
+  ],
+  // Notification that arrives without Jarvis speaking it (PRO-28 "só no HUD").
+  notice: [
+    { at: 0, from: 988, to: 988, duration: 0.09, gain: 0.08 },
+    { at: 0.11, from: 1319, to: 1319, duration: 0.18, gain: 0.07 },
   ],
   // Modo ditado (DIT-29): o Jarvis não fala enquanto dita, estes bipes falam por ele.
   dictationStart: [
@@ -196,7 +202,8 @@ export function subscribeSoundSettings(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-function audioContext(): AudioContext | null {
+/** Shared with the reactor hum (reactorHum.ts): one AudioContext for every HUD sound. */
+export function audioContext(): AudioContext | null {
   if (typeof AudioContext === 'undefined') return null;
   context ??= new AudioContext();
   // Without a click on the page yet the browser may keep it suspended; the tone is then skipped.

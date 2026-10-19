@@ -2,6 +2,8 @@ import { Color } from 'three';
 import { levels, sampleAudio } from '../lib/audio';
 import { coreActivity, flashLevel, lastToolResult } from '../lib/coreActivity';
 import { useHud } from '../lib/hudStore';
+import { getPrefs } from '../lib/prefs';
+import { sceneLook } from '../lib/themes';
 import type { JarvisMode } from '../lib/types';
 
 interface ModeLook {
@@ -43,6 +45,8 @@ export const scene = {
   surge: 0,
   /** 0 → 1 while the globe shows network connections (driven by EarthGlobe). */
   network: 0,
+  /** 0 → 1 while a search/request is drawn: the globe grows and the rings step back. */
+  globeFocus: 0,
   /** 0 → 1 while the model is working on a reply (VOZ-30). */
   thinking: 0,
   /** 0 → 1 while a tool runs. */
@@ -62,7 +66,7 @@ const target = {
 export function updateScene(time: number, delta: number) {
   sampleAudio(time);
 
-  const { mode, activeTool } = useHud.getState();
+  const { mode, activeTool, ambient } = useHud.getState();
   const effective: JarvisMode = activeTool && mode !== 'speaking' ? 'thinking' : mode;
   if (effective !== scene.mode) {
     scene.mode = effective;
@@ -70,15 +74,19 @@ export function updateScene(time: number, delta: number) {
   }
 
   const look = MODE_LOOK[effective];
+  // The theme only recolours: speed and glow keep telling the mode apart.
+  const colours = sceneLook(getPrefs().theme, effective) ?? look;
   const k = 1 - Math.exp(-delta * 3.2);
-  target.primary.set(look.primary);
-  target.secondary.set(look.secondary);
-  target.accent.set(look.accent);
+  target.primary.set(colours.primary);
+  target.secondary.set(colours.secondary);
+  target.accent.set(colours.accent);
   scene.primary.lerp(target.primary, k);
   scene.secondary.lerp(target.secondary, k);
   scene.accent.lerp(target.accent, k);
-  scene.speed += (look.speed - scene.speed) * k;
-  scene.glow += (look.glow - scene.glow) * k;
+  // Ambient mode: the reactor idles at low power behind the big clock.
+  const power = ambient ? 0.55 : 1;
+  scene.speed += (look.speed * power - scene.speed) * k;
+  scene.glow += (look.glow * power - scene.glow) * k;
 
   scene.agent = levels.agent;
   scene.user = levels.user;

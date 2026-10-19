@@ -143,8 +143,16 @@ async def _apply_after_reply(session: Any, llm: Any, voice: str, wait_for_reply:
 
 
 def _live_model(session: Any) -> Any | None:
-    """The Gemini Live model of this session, when it can change voice without a new session."""
-    llm = getattr(session, "llm", None)
+    """The Gemini Live model of this session, when it can change voice without a new session.
+
+    After a fallback (backends.watch_model_failover) the model lives on the current agent.
+    """
+    try:
+        llm = getattr(session.current_agent, "llm", None)
+    except Exception:  # no agent running yet (or a test double without one)
+        llm = None
+    if llm is None or not hasattr(llm, "update_options"):
+        llm = getattr(session, "llm", None)
     if llm is None or not type(llm).__module__.startswith("livekit.plugins.google"):
         return None
     return llm if callable(getattr(llm, "update_options", None)) else None

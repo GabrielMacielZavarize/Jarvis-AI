@@ -1,7 +1,8 @@
 import { RoomAudioRenderer, SessionProvider, StartAudio, useSession } from '@livekit/components-react';
 import { ConnectionState, TokenSource } from 'livekit-client';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
+import { AmbientMode } from './components/AmbientMode';
 import { BootSequence } from './components/BootSequence';
 import { CameraIndicator } from './components/CameraIndicator';
 import { CardStage } from './components/cards/CardStage';
@@ -11,16 +12,22 @@ import { ConversationPanel } from './components/ConversationPanel';
 import { LanPanel } from './components/LanPanel';
 import { PairingScreen } from './components/PairingScreen';
 import { SystemPanel } from './components/SystemPanel';
+import { Toasts } from './components/Toasts';
 import { TopBar } from './components/TopBar';
 import { useCameraMonitor } from './hooks/useCameraMonitor';
 import { useDemo } from './hooks/useDemo';
+import { useIdle } from './hooks/useIdle';
+import { usePanelDrag } from './hooks/usePanelDrag';
+import { useReactorHum } from './hooks/useReactorHum';
 import { usePresence } from './hooks/usePresence';
 import { useLanAccess } from './hooks/useLanAccess';
 import { type LiveJarvis, OFFLINE_LIVE, useLiveJarvis } from './hooks/useLiveJarvis';
 import { type StatusResult, useServerStatus } from './hooks/useServerStatus';
 import { useWakeWord } from './hooks/useWakeWord';
+import { AMBIENT_AFTER_MS } from './lib/ambient';
 import { homeFromTimezone } from './lib/geo';
 import { useHud } from './lib/hudStore';
+import { type PanelId, usePrefs } from './lib/prefs';
 import type { JarvisMode } from './lib/types';
 import { micLabelFor } from './lib/wake';
 
@@ -94,6 +101,8 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   const [busy, setBusy] = useState(false);
   const [sessionStart, setSessionStart] = useState<number | null>(null);
   const activeTool = useHud((s) => s.activeTool);
+  const cinema = useHud((s) => s.cinema);
+  const prefs = usePrefs();
 
   const server = status.state === 'ok' ? status.status : null;
   const canConnect = server?.livekit_configured ?? false;
@@ -153,19 +162,62 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
     stop: live.stop,
   });
   const wakeListening = wake.enabled && wake.listening;
+  // Ambient mode: a few idle minutes without a link (never during a session or the simulation).
+  const ambient = useIdle(AMBIENT_AFTER_MS, prefs.ambient && booted && !connected && !busy);
+  // The hum only plays with the reactor awake: a link or the simulation, never on the idle screen.
+  useReactorHum(booted && connected);
   // PRS-25: "Presente" / "Ausente há 5 min" in the Sistema panel.
   const presence = usePresence(server?.presence ?? false);
+
+  // Every panel of the side columns; Ajustes and dragging a header decide which column and order.
+  const drag = usePanelDrag();
+  const panels: Record<PanelId, ReactNode> = {
+    system: (
+      <SystemPanel
+        mode={mode}
+        status={status}
+        demo={demo.running}
+        connected={live.connected}
+        micEnabled={live.micEnabled}
+        microphone={{ devices: live.micDevices, deviceId: live.micDeviceId, onSelect: (id) => void live.selectMic(id) }}
+        wake={wake.enabled ? wake : null}
+        presence={presence}
+      />
+    ),
+    lan: local && server?.lan ? <LanPanel /> : null,
+    cards: <CardStage enabledTools={server?.tools ?? null} />,
+    conversation: (
+      <>
+        <ConversationPanel
+          lines={lines}
+          thinking={mode === 'thinking' || activeTool !== null}
+          canSend={live.connected && !demo.running}
+          onSend={live.send}
+        />
+        {live.error && !demo.running && (
+          <div className="notice" role="alert">
+            <strong>Atenção.</strong> {live.error}
+          </div>
+        )}
+      </>
+    ),
+    log: <ActivityLog />,
+  };
 
   // Global shortcuts: Space starts, M toggles the mic, Esc clears the projections.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const typing = (event.target as HTMLElement)?.tagName === 'INPUT';
+      const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes((event.target as HTMLElement)?.tagName);
       if (event.key === 'Escape') {
         const hud = useHud.getState();
         if (hud.expandedId) hud.setExpanded(null);
+        else if (hud.cinema) hud.setCinema(false);
         else hud.clearCards();
       }
       if (typing) return;
+      if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        useHud.getState().setCinema(!useHud.getState().cinema);
+      }
       if (event.code === 'Space' && !connected && canConnect) {
         event.preventDefault();
         void start();
@@ -177,7 +229,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   });
 
   return (
-    <main className="app" data-mode={mode}>
+    <main className="app" data-mode={mode} data-cinema={cinema || undefined} data-ambient={ambient || undefined}>
       <Suspense fallback={null}>
         <Scene visible={booted} />
       </Suspense>
@@ -206,35 +258,23 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
           />
         </div>
 
-        <aside className="hud__left">
-          <SystemPanel
-            mode={mode}
-            status={status}
-            demo={demo.running}
-            connected={live.connected}
-            micEnabled={live.micEnabled}
-            microphone={{ devices: live.micDevices, deviceId: live.micDeviceId, onSelect: (id) => void live.selectMic(id) }}
-            wake={wake.enabled ? wake : null}
-            presence={presence}
-          />
-          {local && server?.lan && <LanPanel />}
-          <CardStage enabledTools={server?.tools ?? null} />
-        </aside>
-
-        <aside className="hud__right">
-          <ConversationPanel
-            lines={lines}
-            thinking={mode === 'thinking' || activeTool !== null}
-            canSend={live.connected && !demo.running}
-            onSend={live.send}
-          />
-          {live.error && !demo.running && (
-            <div className="notice" role="alert">
-              <strong>Atenção.</strong> {live.error}
-            </div>
-          )}
-          <ActivityLog />
-        </aside>
+        {(['left', 'right'] as const).map((column) => (
+          <aside key={column} className={`hud__${column}`}>
+            {prefs.layout[column].map((id) => (
+              <div
+                key={id}
+                className={`slot ${drag.dragging === id ? 'slot--dragging' : ''}`}
+                data-slot={id}
+                onPointerDown={drag.onPointerDown(id)}
+              >
+                {panels[id]}
+              </div>
+            ))}
+          </aside>
+        ))}
+        {drag.target && (
+          <i className="drop-line" style={{ top: drag.target.top, left: drag.target.left, width: drag.target.width }} aria-hidden />
+        )}
 
         <div className="hud__dock">
           <ControlDock
@@ -248,11 +288,14 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
             onStop={stop}
             onToggleMic={() => void live.toggleMic()}
             onDemo={demo.start}
+            lines={lines}
             wakeListening={wakeListening}
             closingIn={wake.closingIn}
           />
         </div>
       </div>
+      <AmbientMode active={ambient} wakeWord={wake.enabled} />
+      <Toasts />
     </main>
   );
 }

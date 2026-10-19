@@ -18,6 +18,8 @@ import { useHud } from '../lib/hudStore';
 import { MEMORY_RPC_METHOD, setMemoryTransport } from '../lib/memoryLink';
 import { describeMicrophone } from '../lib/microphone';
 import { parseHudRequest } from '../lib/panels';
+import { getPrefs, setPrefs } from '../lib/prefs';
+import { isTheme, THEMES } from '../lib/themes';
 import { PointerImages, withPointerImage } from '../lib/pointer';
 import { playCue, playHudEventSound } from '../lib/sounds';
 import { orderLines } from '../lib/transcript';
@@ -139,7 +141,15 @@ function handleHudEvent(event: HudEvent) {
   }
   if (event.type === 'model') {
     hud.setLiveModel(event.model);
-    if (event.previous) hud.addLog('warn', `Modelo trocado · ${event.previous} → ${event.model}${event.reason ? ` (${event.reason})` : ''}`);
+    if (event.previous) {
+      hud.addLog('warn', `Modelo trocado · ${event.previous} → ${event.model}${event.reason ? ` (${event.reason})` : ''}`);
+      hud.pushToast({
+        level: 'warn',
+        title: 'Modelo de reserva',
+        message: `${event.reason ? `${event.reason[0].toUpperCase()}${event.reason.slice(1)} em ${event.previous}. ` : ''}A conversa segue em ${event.model}.`,
+        code: 'NET',
+      });
+    }
     return;
   }
   if (event.type === 'latency') {
@@ -166,6 +176,7 @@ function handleHudEvent(event: HudEvent) {
       const existing = hud.cards.find((card) => card.kind === 'timer' && card.data.id === event.data.id);
       hud.pushCard('timer', { ...(existing?.data as typeof event.data), ...event.data });
       hud.addLog('warn', `Timer “${event.data.label}” finalizado`);
+      hud.pushToast({ level: 'warn', title: 'Timer finalizado', message: event.data.label, code: 'TMR-06' });
       return;
     }
     if (event.kind === 'pointer') {
@@ -174,6 +185,23 @@ function handleHudEvent(event: HudEvent) {
     }
     hud.pushCard(event.kind, event.data as never);
   }
+}
+
+/** "Jarvis, muda o tema para vermelho" / "modo cinema": what the HUD shows afterwards. */
+function applyAppearance(theme: string | null, cinema: boolean | null) {
+  const hud = useHud.getState();
+  if (theme !== null && !isTheme(theme)) {
+    return { error: `tema desconhecido: ${theme}`, themes: THEMES.map((item) => item.id) };
+  }
+  if (theme !== null && theme !== getPrefs().theme) {
+    setPrefs({ theme });
+    hud.addLog('info', `Tema · ${THEMES.find((item) => item.id === theme)?.label ?? theme}`);
+  }
+  if (cinema !== null && cinema !== hud.cinema) {
+    hud.setCinema(cinema);
+    hud.addLog('info', cinema ? 'Modo cinema ligado' : 'Modo cinema desligado');
+  }
+  return { theme: getPrefs().theme, cinema: useHud.getState().cinema };
 }
 
 function describeStartError(err: unknown): string {
@@ -241,6 +269,7 @@ export function useLiveJarvis(): LiveJarvis {
       const request = parseHudRequest(data.payload);
       const hud = useHud.getState();
       if (request.action === 'mic') return JSON.stringify({ mic: await microphoneReport(room) });
+      if (request.action === 'appearance') return JSON.stringify(applyAppearance(request.theme, request.cinema));
       if (request.action === 'end_session') {
         hud.addLog('info', 'Jarvis encerrou o link a seu pedido');
         window.setTimeout(() => void stopRef.current(), END_LINK_DELAY_MS);

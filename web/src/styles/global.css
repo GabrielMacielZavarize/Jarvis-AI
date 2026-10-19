@@ -1,6 +1,12 @@
 :root {
-  --c-primary-rgb: 95 244 255;
-  --c-accent-rgb: 255 182 72;
+  /* Theme tokens (lib/themes.ts): base colours, the "processing" pair and offline. */
+  --theme-primary: 95 244 255;
+  --theme-accent: 255 182 72;
+  --theme-think: 255 193 94;
+  --theme-think-accent: 95 244 255;
+  --theme-offline: 112 182 214;
+  --c-primary-rgb: var(--theme-primary);
+  --c-accent-rgb: var(--theme-accent);
   --c-danger: #ff5a5a;
   --c-ok: #52ffb0;
   --bg: #010409;
@@ -14,6 +20,40 @@
   --side: clamp(300px, 24vw, 430px);
   --cut: 14px;
   color-scheme: dark;
+}
+
+:root[data-theme='mark3'] {
+  --theme-primary: 255 190 80;
+  --theme-accent: 255 84 64;
+  --theme-think: 255 236 205;
+  --theme-think-accent: 255 190 80;
+  --theme-offline: 170 140 100;
+  --panel-bg: linear-gradient(160deg, rgb(52 22 8 / 0.55), rgb(22 6 2 / 0.35));
+  --text: #fff3e2;
+  --text-dim: rgb(255 243 226 / 0.6);
+  --text-faint: rgb(255 243 226 / 0.38);
+}
+:root[data-theme='friday'] {
+  --theme-primary: 190 150 255;
+  --theme-accent: 255 130 220;
+  --theme-think: 255 160 232;
+  --theme-think-accent: 190 150 255;
+  --theme-offline: 140 130 170;
+  --panel-bg: linear-gradient(160deg, rgb(36 18 62 / 0.55), rgb(14 6 28 / 0.35));
+  --text: #f4ecff;
+  --text-dim: rgb(244 236 255 / 0.6);
+  --text-faint: rgb(244 236 255 / 0.38);
+}
+:root[data-theme='stealth'] {
+  --theme-primary: 225 235 242;
+  --theme-accent: 95 224 200;
+  --theme-think: 95 224 200;
+  --theme-think-accent: 225 235 242;
+  --theme-offline: 140 152 160;
+  --panel-bg: linear-gradient(160deg, rgb(30 36 42 / 0.6), rgb(10 12 14 / 0.4));
+  --text: #f2f6f8;
+  --text-dim: rgb(242 246 248 / 0.6);
+  --text-faint: rgb(242 246 248 / 0.38);
 }
 
 /*
@@ -85,15 +125,15 @@ a {
 
 /* Mode-driven palette — kept in sync with the 3D scene colours. */
 .app[data-mode='thinking'] {
-  --c-primary-rgb: 255 193 94;
-  --c-accent-rgb: 95 244 255;
+  --c-primary-rgb: var(--theme-think);
+  --c-accent-rgb: var(--theme-think-accent);
 }
 .app[data-mode='error'] {
   --c-primary-rgb: 255 90 90;
   --c-accent-rgb: 255 160 75;
 }
 .app[data-mode='offline'] {
-  --c-primary-rgb: 112 182 214;
+  --c-primary-rgb: var(--theme-offline);
 }
 
 .app {
@@ -182,4 +222,36 @@ a {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* The labels drei draws over the 3D globe stay under the HUD panels. */
+.scene {
+  z-index: 0;
+}
+.globe-tag {
+  display: grid;
+  gap: 1px;
+  padding: 3px 8px 4px;
+  border-left: 2px solid var(--c-primary);
+  background: rgb(2 10 18 / 0.72);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: var(--text);
+  transform: translate(10px, -50%);
+  transition: opacity 0.2s;
+}
+.globe-tag b {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.globe-tag span {
+  color: var(--text-dim);
+}
+.globe-tag--source {
+  border-left-color: var(--c-accent);
 }

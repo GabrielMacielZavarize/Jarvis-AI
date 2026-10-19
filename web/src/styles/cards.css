@@ -1204,3 +1204,194 @@
   color: var(--text-faint);
   overflow-wrap: anywhere;
 }
+
+/* ───────────── Small charts (weather hours, live CPU/RAM) ───────────── */
+
+.spark {
+  position: relative;
+  width: 100%;
+}
+.spark svg {
+  display: block;
+  overflow: visible;
+  outline: none;
+  cursor: crosshair;
+}
+.spark svg:focus-visible {
+  outline: 1px solid var(--line-strong);
+  outline-offset: 2px;
+}
+.spark__base {
+  stroke: rgb(var(--c-primary-rgb) / 0.18);
+  stroke-width: 1;
+}
+.spark__area {
+  fill: rgb(var(--c-primary-rgb) / 0.1);
+}
+.spark__line {
+  fill: none;
+  stroke: var(--c-primary);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px rgb(var(--c-primary-rgb) / 0.6));
+}
+.spark__cross {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+}
+.spark__dot {
+  fill: var(--c-primary);
+  stroke: #04121c;
+  stroke-width: 2;
+}
+.spark__tip {
+  position: absolute;
+  z-index: 2;
+  padding: 3px 8px;
+  border: 1px solid var(--line-strong);
+  background: rgb(2 10 18 / 0.92);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text);
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+}
+.spark__ticks {
+  position: relative;
+  height: 14px;
+  margin-top: 3px;
+}
+.spark__ticks span {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  transform: translateX(-50%);
+}
+.spark__ticks span:first-child {
+  transform: none;
+}
+
+.wx__hourly {
+  margin-top: 12px;
+}
+.wx__hourly-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+.wx__hourly-head b {
+  font-weight: 400;
+  color: var(--text);
+}
+
+.diag-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.live-badge {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid rgb(82 255 176 / 0.55);
+  color: var(--c-ok);
+  animation: blink 1.6s steps(2) infinite;
+}
+.live-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 10px 0 4px;
+}
+.live-chart__head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+}
+.live-chart__head b {
+  font-weight: 400;
+  color: var(--text);
+}
+
+/* ───────────── Agenda: the day as a strip of hours ───────────── */
+
+.agd-line {
+  margin: 10px 0 12px;
+}
+.agd-line__track {
+  position: relative;
+  border-bottom: 1px solid rgb(var(--c-primary-rgb) / 0.18);
+  background: repeating-linear-gradient(90deg, rgb(var(--c-primary-rgb) / 0.05) 0 1px, transparent 1px 12.5%);
+}
+.agd-line__block {
+  position: absolute;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: rgb(var(--c-primary-rgb) / 0.45);
+  box-shadow: 0 0 0 2px #04121c;
+  cursor: pointer;
+}
+.agd-line__block:hover,
+.agd-line__block:focus-visible {
+  background: rgb(var(--c-primary-rgb) / 0.8);
+  outline: none;
+}
+.agd-line__block--hl {
+  background: rgb(var(--c-accent-rgb) / 0.75);
+}
+.agd-line__block--now {
+  background: var(--c-primary);
+  box-shadow:
+    0 0 0 2px #04121c,
+    0 0 10px rgb(var(--c-primary-rgb) / 0.7);
+}
+.agd-line__now {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--text);
+  box-shadow: 0 0 6px var(--text);
+}
+.agd-line__hours {
+  position: relative;
+  height: 14px;
+  margin-top: 3px;
+}
+.agd-line__hours span {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  transform: translateX(-50%);
+}
+.agd-line__hours span:first-child {
+  transform: none;
+}
+.agd-line__readout {
+  margin-top: 4px;
+  overflow: hidden;
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+.agd-line__readout time {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text);
+}

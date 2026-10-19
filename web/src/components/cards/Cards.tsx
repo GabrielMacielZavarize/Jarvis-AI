@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useClock } from '../../hooks/useClock';
+import { fitDomain } from '../../lib/chart';
 import { formatDuration, formatUptime, groupCode, hostnameOf, relativeTime, savedDate, weekdayShort } from '../../lib/format';
 import { useHud } from '../../lib/hudStore';
 import { forgetMemory, MemoryOfflineError } from '../../lib/memoryLink';
@@ -22,9 +23,42 @@ import type {
   TimeData,
   TimerData,
   WeatherData,
+  WeatherHour,
 } from '../../lib/types';
 import { HoloGlobe } from './HoloGlobe';
+import { Sparkline } from './Sparkline';
 import { WeatherGlyph } from './WeatherGlyph';
+
+const hourOf = (time: string) => `${time.slice(11, 13)}h`;
+
+/** Temperature over the next 24 h: the extremes written above, the rest in the crosshair. */
+function HourlyChart({ hours }: { hours: WeatherHour[] }) {
+  const temps = hours.map((hour) => hour.temp);
+  const high = temps.indexOf(Math.max(...temps));
+  const low = temps.indexOf(Math.min(...temps));
+  return (
+    <div className="wx__hourly">
+      <div className="wx__hourly-head">
+        <span>Próximas 24 h</span>
+        <span>
+          máx <b>{Math.round(temps[high])}°</b> às {hourOf(hours[high].time)} · mín <b>{Math.round(temps[low])}°</b> às{' '}
+          {hourOf(hours[low].time)}
+        </span>
+      </div>
+      <Sparkline
+        values={temps}
+        domain={fitDomain(temps)}
+        height={58}
+        label={`Temperatura das próximas ${hours.length} horas, de ${Math.round(Math.min(...temps))} a ${Math.round(Math.max(...temps))} graus`}
+        describe={(index) => {
+          const hour = hours[index];
+          return `${hourOf(hour.time)} · ${Math.round(hour.temp)}°${hour.rain != null ? ` · chuva ${hour.rain}%` : ''}`;
+        }}
+        ticks={hours.map((hour, index) => ({ index, text: hourOf(hour.time) })).filter((_, index) => index % 6 === 0)}
+      />
+    </div>
+  );
+}
 
 export function WeatherBody({ data, expanded = false }: { data: WeatherData; expanded?: boolean }) {
   const { current } = data;
@@ -52,6 +86,7 @@ export function WeatherBody({ data, expanded = false }: { data: WeatherData; exp
         </div>
         <HoloGlobe latitude={data.latitude} longitude={data.longitude} size={expanded ? 220 : 128} />
       </div>
+      {data.hourly && data.hourly.length > 2 && <HourlyChart hours={data.hourly} />}
       {data.daily.length > 0 && (
         <div className="wx__days">
           {data.daily.slice(0, 7).map((day, index) => (
@@ -186,17 +221,97 @@ function Gauge({ label, value, detail }: { label: string; value: number; detail:
   );
 }
 
+/** CPU and RAM read again every LIVE_MS while the panel is open (about a minute of history). */
+const LIVE_MS = 1500;
+const LIVE_POINTS = 40;
+
+interface LiveSample {
+  cpu: number;
+  memory: number;
+}
+
+function useLiveSystem(data: DiagnosticsData): LiveSample[] {
+  const demo = useHud((s) => s.demo);
+  const [samples, setSamples] = useState<LiveSample[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let first = true;
+    const read = async (): Promise<LiveSample | null> => {
+      if (demo) {
+        // The simulation is fictional end to end: it wobbles around its own numbers.
+        const wobble = (base: number, spread: number) => Math.max(1, Math.min(99, base + (Math.random() - 0.5) * spread));
+        return { cpu: wobble(data.cpu.percent, 14), memory: wobble(data.memory.percent, 2) };
+      }
+      try {
+        const response = await fetch('/api/system/live', { cache: 'no-store' });
+        if (!response.ok) return null;
+        const body = (await response.json()) as Partial<LiveSample>;
+        return typeof body.cpu === 'number' && typeof body.memory === 'number' ? { cpu: body.cpu, memory: body.memory } : null;
+      } catch {
+        return null;
+      }
+    };
+    const tick = async () => {
+      const sample = await read();
+      // psutil measures CPU since the previous reading: the first one has nothing to compare to.
+      if (first) {
+        first = false;
+        if (!demo) return;
+      }
+      if (sample && !cancelled) setSamples((previous) => [...previous, sample].slice(-LIVE_POINTS));
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), LIVE_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [demo, data.cpu.percent, data.memory.percent]);
+
+  return samples;
+}
+
+function LiveChart({ label, values }: { label: string; values: number[] }) {
+  const current = Math.round(values[values.length - 1]);
+  const seconds = Math.round(((values.length - 1) * LIVE_MS) / 1000);
+  return (
+    <div className="live-chart">
+      <div className="live-chart__head">
+        <span>{label}</span>
+        <b>{current}%</b>
+      </div>
+      <Sparkline
+        values={values}
+        domain={[0, 100]}
+        height={44}
+        label={`${label} nos últimos ${seconds} segundos, agora em ${current}%`}
+        describe={(index) => `${label} ${Math.round(values[index])}% · há ${Math.round(((values.length - 1 - index) * LIVE_MS) / 1000)} s`}
+      />
+    </div>
+  );
+}
+
 export function DiagnosticsBody({ data }: { data: DiagnosticsData }) {
+  const live = useLiveSystem(data);
+  const latest = live[live.length - 1];
   return (
     <>
-      <div className="card__sub" style={{ marginBottom: 8 }}>
+      <div className="card__sub diag-sub" style={{ marginBottom: 8 }}>
         {data.hostname} · {data.os}
+        {live.length >= 2 && <span className="live-badge">Ao vivo</span>}
       </div>
       <div className="gauges">
-        <Gauge label="CPU" value={data.cpu.percent} detail={`${data.cpu.cores} núcleos`} />
-        <Gauge label="RAM" value={data.memory.percent} detail={`${data.memory.used_gb}/${data.memory.total_gb} GB`} />
+        <Gauge label="CPU" value={Math.round(latest?.cpu ?? data.cpu.percent)} detail={`${data.cpu.cores} núcleos`} />
+        <Gauge label="RAM" value={Math.round(latest?.memory ?? data.memory.percent)} detail={`${data.memory.used_gb}/${data.memory.total_gb} GB`} />
         <Gauge label="DISCO" value={data.disk.percent} detail={`${data.disk.used_gb}/${data.disk.total_gb} GB`} />
       </div>
+      {live.length >= 2 && (
+        <div className="live-charts">
+          <LiveChart label="CPU" values={live.map((sample) => sample.cpu)} />
+          <LiveChart label="RAM" values={live.map((sample) => sample.memory)} />
+        </div>
+      )}
       <div className="cores" title="Carga por núcleo">
         {data.cpu.per_core.map((value, index) => (
           <i key={index} style={{ height: `${Math.max(4, value)}%` }} />

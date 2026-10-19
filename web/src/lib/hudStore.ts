@@ -16,9 +16,15 @@ import type {
   LogLevel,
   NetLink,
   PanelCommandResult,
+  SceneLevel,
+  Toast,
+  ToastLevel,
 } from './types';
 
 const MAX_CARDS = 4;
+const MAX_TOASTS = 4;
+/** How long a notification stays; critical ones wait for a click. */
+const TOAST_MS: Record<ToastLevel, number> = { info: 6000, ok: 6000, warn: 9000, critical: 0 };
 const MAX_LOG = 40;
 const MAX_LINKS = 14;
 const MAX_VOICE_STARTS = 60;
@@ -80,6 +86,13 @@ interface HudState {
   liveModel: string | null;
   /** Response time of the recent turns. */
   latency: LatencyStats | null;
+  /** Cinema mode: only the core and the caption, no panels. */
+  cinema: boolean;
+  /** Ambient mode: idle screen with the big clock, core at low power. */
+  ambient: boolean;
+  /** Quality the 3D scene is rendering at and the frame rate measured. */
+  sceneQuality: { level: SceneLevel; fps: number | null };
+  toasts: Toast[];
   setMode: (mode: JarvisMode) => void;
   setActiveTool: (name: string | null, detail?: string | null) => void;
   setDemo: (demo: boolean) => void;
@@ -107,6 +120,12 @@ interface HudState {
   setDictation: (dictation: DictationState | null) => void;
   setLiveModel: (model: string | null) => void;
   recordLatency: (seconds: number) => void;
+  setCinema: (cinema: boolean) => void;
+  setAmbient: (ambient: boolean) => void;
+  setSceneQuality: (level: SceneLevel, fps: number | null) => void;
+  /** Holographic notification on the right edge; returns its id. */
+  pushToast: (toast: Omit<Toast, 'id' | 'createdAt' | 'ttl'>) => string;
+  dismissToast: (id: string) => void;
   /** Opens the Câmera panel unless it is already on screen (keeps the analysed frame). */
   openCamera: () => void;
 }
@@ -127,6 +146,10 @@ export const useHud = create<HudState>((set, get) => ({
   dictation: null,
   liveModel: null,
   latency: null,
+  cinema: false,
+  ambient: false,
+  sceneQuality: { level: 'high', fps: null },
+  toasts: [],
   setMode: (mode) => set((s) => (s.mode === mode ? s : { mode })),
   setActiveTool: (activeTool, detail = null) => set({ activeTool, activeToolDetail: activeTool ? detail : null }),
   setDemo: (demo) => set({ demo }),
@@ -225,6 +248,18 @@ export const useHud = create<HudState>((set, get) => ({
   setDictation: (dictation) => set({ dictation }),
   setLiveModel: (liveModel) => set({ liveModel }),
   recordLatency: (seconds) => set((s) => ({ latency: addLatency(s.latency, seconds) })),
+  setCinema: (cinema) => set({ cinema }),
+  setAmbient: (ambient) => set((s) => (s.ambient === ambient ? s : { ambient })),
+  setSceneQuality: (level, fps) =>
+    set((s) => (s.sceneQuality.level === level && s.sceneQuality.fps === fps ? s : { sceneQuality: { level, fps } })),
+  pushToast: (toast) => {
+    const id = nextId('toast');
+    set((s) => ({
+      toasts: [{ ...toast, id, createdAt: Date.now(), ttl: TOAST_MS[toast.level] }, ...s.toasts].slice(0, MAX_TOASTS),
+    }));
+    return id;
+  },
+  dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((toast) => toast.id !== id) })),
   openCamera: () => {
     if (!get().cards.some((card) => card.kind === 'camera')) get().pushCard('camera', {});
   },

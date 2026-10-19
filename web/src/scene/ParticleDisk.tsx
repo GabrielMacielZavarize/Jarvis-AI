@@ -1,9 +1,8 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, type ShaderMaterial } from 'three';
 import { scene } from './sceneState';
 
-const COUNT = 2600;
 
 const vertex = /* glsl */ `
   attribute float aRadius;
@@ -38,27 +37,28 @@ const fragment = /* glsl */ `
 `;
 
 /** Tilted accretion disk of particles orbiting the core with differential speed. */
-export function ParticleDisk() {
+export function ParticleDisk({ count = 2600 }: { count?: number }) {
   const material = useRef<ShaderMaterial>(null);
   const geometry = useMemo(() => {
     const geo = new BufferGeometry();
-    const radius = new Float32Array(COUNT);
-    const angle = new Float32Array(COUNT);
-    const speed = new Float32Array(COUNT);
-    const seed = new Float32Array(COUNT);
-    for (let i = 0; i < COUNT; i++) {
+    const radius = new Float32Array(count);
+    const angle = new Float32Array(count);
+    const speed = new Float32Array(count);
+    const seed = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
       radius[i] = 1.55 + Math.pow(Math.random(), 1.6) * 2.0;
       angle[i] = Math.random() * Math.PI * 2;
       speed[i] = 0.5 + Math.random() * 0.9;
       seed[i] = Math.random();
     }
-    geo.setAttribute('position', new BufferAttribute(new Float32Array(COUNT * 3), 3));
+    geo.setAttribute('position', new BufferAttribute(new Float32Array(count * 3), 3));
     geo.setAttribute('aRadius', new BufferAttribute(radius, 1));
     geo.setAttribute('aAngle', new BufferAttribute(angle, 1));
     geo.setAttribute('aSpeed', new BufferAttribute(speed, 1));
     geo.setAttribute('aSeed', new BufferAttribute(seed, 1));
     return geo;
-  }, []);
+  }, [count]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
   const uniforms = useMemo(
     () => ({
       uPhase: { value: 0 },
