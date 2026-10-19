@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextvars
+import dataclasses
 import hashlib
 import logging
 import os
@@ -37,11 +38,15 @@ from typing import Any, Literal
 import numpy as np
 from livekit.agents import RunContext, function_tool, get_job_context
 
+import gesture_actions
 import gesture_mapping
-from gesture_actions import DesktopActions, DryRunActions, GestureActionError, Target, describe_direction
-from gesture_engine import Command, GestureMachine, Hand, Pose, State, Status, Tuning, classify, hand_row
+import win_desktop
+from gesture_actions import DesktopActions, DryRunActions, GestureActionError, Target, describe_direction, monitor_label
+from gesture_engine import Command, Filter2D, GestureMachine, Hand, Pose, State, Status, Tuning, classify, hand_row
+from gesture_map import MapDrag, MapWindow, PanelFrame, uv_to_real, virtual_bounds, window_at
 from gesture_mapping import Binding, MappingError
 from gesture_overlay import Overlay, OverlayView
+from gesture_panel import GesturePanel
 
 logger = logging.getLogger("jarvis-gestures")
 
@@ -65,6 +70,7 @@ ACTION_LABELS = {
     "close": "Fechando",
     "tab": "Trocando de aba",
     "screen": "Mandando para a tela",
+    "drop": "Movendo a janela",
 }
 # Câmera tapada pela palma: imagem escura ou quase lisa (desvio-padrão do cinza baixo).
 COVER_FLAT_STD = 9.0
@@ -73,6 +79,9 @@ COVER_DARK_STD = 18.0
 HINT_ARMED = "punho: pegar janela · polegar ↓: fechar · 2 dedos: abas · indicador parado: mouse"
 HINT_GRAB = "mova e abra a mão: outro monitor · abra parado: estender · 1, 2 ou 3 dedos: tela"
 HINT_MOUSE = "pinça ou fechar a mão: clique · segurar: arrastar · palma parada: sair"
+HINT_MAP = "mão sobre uma janela do mapa e punho: pegar · leve a outra tela e abra a mão"
+HINT_MAP_GRAB = "leve até outra tela no mapa e abra a mão para soltar"
+PANEL_CAMERA_WIDTH = 220  # a câmera do painel é pequena: o motor entrega uma cópia reduzida
 
 
 class CameraError(RuntimeError):
@@ -356,6 +365,8 @@ class GestureEngine:
         trace: Any | None = None,
         bindings: Callable[[str], Binding | None] = gesture_mapping.binding_for,
         mic: Callable[[], str] | None = None,
+        panel: Any | None = None,
+        show_panel: bool = False,
     ) -> None:
         self.frames = frames
         self.actions = actions
@@ -380,12 +391,24 @@ class GestureEngine:
         self._focus: tuple[Any, float] | None = None
         self._last_t: float | None = None
         self._stopping = False
+        # Painel de gestos (câmera + mapa das telas): cursor da mão no mapa e janela arrastada.
+        self.panel = panel
+        self._map_filter = Filter2D(min_cutoff=0.8, beta=4.0)
+        self._map_cursor: tuple[float, float] | None = None
+        self._hover: MapWindow | None = None
+        self._drag: MapDrag | None = None
+        self._mouse_uv: tuple[float, float] | None = None
+        self._hand_release = False  # o quadro atual soltou a janela com a mão à vista (não perdeu a mão)
         if armed:
             self.request("arm")
         if mouse:
             self.request("mouse_on")
+        if show_panel:
+            self.request("panel_on")
 
-    def request(self, action: Literal["arm", "disarm", "mouse_on", "mouse_off", "quit"]) -> None:
+    def request(
+        self, action: Literal["arm", "disarm", "mouse_on", "mouse_off", "panel_on", "panel_off", "panel_toggle", "quit"]
+    ) -> None:
         """Thread-safe control (voice tool, preview keys); applied on the next frame."""
         self._requests.put(action)
 
@@ -393,11 +416,17 @@ class GestureEngine:
     def status(self) -> Status:
         return self.machine.status(self.clock())
 
+    @property
+    def panel_visible(self) -> bool:
+        return bool(self.panel is not None and self.panel.visible)
+
     def run(self, stop_event: threading.Event) -> None:
         owns_tracker = self.tracker is None
         self.tracker = self.tracker or HandTracker()
         if self.overlay:
             self.overlay.start()
+        if self.panel is not None:
+            self.panel.start()
         first = True
         try:
             for frame in self.frames:
@@ -424,6 +453,9 @@ class GestureEngine:
                 self.tracker.close()
             if self.overlay:
                 self.overlay.close()
+            if self.panel is not None:
+                self.panel.set_visible(False)
+                self.panel.close()
             self._executor.shutdown(wait=True)
             if self.preview:
                 import cv2
@@ -438,15 +470,20 @@ class GestureEngine:
         self._apply_requests(t)
         image = _prepare(frame)
         self.hand = self.tracker.detect(image, t)
+        holding = self.machine.state == State.GRAB
         others = self.tracker.other_hands() if self.hand is not None and hasattr(self.tracker, "other_hands") else []
         if others:
             commands = self.machine.step_pair(t, self.hand, others[0])
         else:
             commands = self.machine.step(t, self.hand)
         commands += self.machine.cover(t, self.hand is None and camera_covered(image))
+        self._hand_release = holding and self.hand is not None and all(c.kind != "disarmed" for c in commands)
+        self._update_map(t)
         for command in commands:
             self._dispatch(command, t)
+        self._hand_release = False
         self._refresh_overlay(t)
+        self._refresh_panel(image)
         if self.trace is not None:
             self._write_trace(t, commands)
         return image
@@ -483,6 +520,9 @@ class GestureEngine:
             if action == "quit":
                 self._stopping = True
                 continue
+            if action.startswith("panel_"):
+                self._set_panel({"panel_on": True, "panel_off": False}.get(action, not self.panel_visible), t)
+                continue
             commands = {
                 "arm": lambda: self.machine.arm(t),
                 "disarm": lambda: self.machine.disarm(t),
@@ -496,23 +536,35 @@ class GestureEngine:
         kind = command.kind
         try:
             if kind == "mouse_move" and command.point:
+                self._mouse_uv = command.point
                 self.actions.mouse_move(*command.point)
             elif kind in ("mouse_down", "mouse_up", "click"):
                 getattr(self.actions, kind)()
             elif kind == "grab":
                 self._grab(t)
+            elif kind == "panel":
+                self._set_panel(not self.panel_visible, t)
+            elif kind == "aim" and self._drag is not None:
+                return  # no mapa o destino é a tela sob a mão, não a direção do movimento
             elif kind == "aim":
                 label = None
                 if command.direction and self._target is not None:
                     label = self.actions.aim(self._target, command.direction, command.vector)
                 self._aim = (command.direction, label)
                 self._emit("aim", direction=command.direction, target=label)
+            elif kind in ("throw", "maximize", "cancel") and self._drag is not None:
+                if kind != "cancel" or self._hand_release:
+                    self._drop(t)
+                else:
+                    self._drag = None
+                    self._dispatch(command, t)
             elif kind == "cancel":
                 self._target = None
                 self._aim = (None, None)
                 self._flash = ("Cancelado", "info", t + 1.2)
                 self._emit("cancel")
             elif kind in ("throw", "maximize", "close"):
+                self._drag = None
                 target, self._target = self._target, None
                 self._aim = (None, None)
                 if target is None:
@@ -534,12 +586,25 @@ class GestureEngine:
                 state = {"armed": "armed", "disarmed": "idle", "mouse_on": "mouse", "mouse_off": "armed"}[kind]
                 if kind == "disarmed":
                     self._target = None
+                    self._drag = None
                 logger.info("Gestos: %s", kind)
                 self._emit("state", state=state)
         except Exception:
             logger.exception("Falha ao tratar o gesto '%s'.", kind)
 
     def _grab(self, t: float) -> None:
+        hover = self._hover if self.panel_visible else None
+        if hover is not None and self._map_cursor is not None:
+            # Modo mapa: o punho pega a janela que está sob a mão no mapa, não a que está em foco.
+            screens = self.panel.desktop().monitors
+            source = win_desktop.monitor_for_rect(hover.rect, list(screens))
+            self._drag = MapDrag(item=hover, source=source, grab_point=self._map_cursor)
+            self._drag.update(self._map_cursor, screens)
+            browser = hover.process in gesture_actions._pc().BROWSER_PROCESSES
+            self._target = Target(window=hover.window, monitor=source, browser=browser)
+            self._aim = (None, None)
+            self._emit("grab", title=self._target.title, browser=browser, map=True)
+            return
         target = self.actions.grab()
         if target is None:
             self.machine.abort(t)
@@ -587,6 +652,88 @@ class GestureEngine:
         label = binding.label
         self._submit(gesture, call[0], *call[1], label=label[0].upper() + label[1:])
 
+    def _drop(self, t: float) -> None:
+        drag, self._drag = self._drag, None
+        target, self._target = self._target, None
+        self._aim = (None, None)
+        if drag is None or target is None:
+            return
+        if not drag.moves or drag.dest is None:
+            self._flash = ("Ficou no mesmo monitor", "info", t + 1.2)
+            self._emit("cancel")
+            return
+        self._submit("drop", self.actions.drop, target, drag.dest, title=target.title)
+
+    # ── painel de gestos (câmera + mapa das telas) ──
+
+    def _set_panel(self, on: bool, t: float) -> None:
+        if self.panel is None:
+            self._flash = ("Painel de gestos indisponível", "warn", t + FLASH_SECONDS)
+            return
+        if on == self.panel.visible:
+            return
+        self.panel.set_visible(on)
+        if not on:
+            self._hover = None
+            self._map_cursor = None
+            if self._drag is not None:  # esconder o painel no meio do arrasto cancela
+                self._drag = None
+                self._target = None
+                self.machine.abort(t)
+        self._flash = ("Painel de gestos " + ("aberto" if on else "fechado"), "info", t + 1.2)
+        logger.info("Painel de gestos %s.", "aberto" if on else "fechado")
+        self._emit("panel", visible=on)
+
+    def _update_map(self, t: float) -> None:
+        """Move the hand cursor on the map (only with the panel open and outside the air mouse)."""
+        state = self.machine.state
+        shape = self.machine.shape
+        if not self.panel_visible or state not in (State.ARMED, State.GRAB, State.CLOSE):
+            self._map_cursor = None
+            self._hover = None
+            self._map_filter.reset()
+            return
+        if self.hand is None or shape is None:
+            self._hover = None if self._drag is None else self._hover
+            return
+        px, py = self._map_filter(t, shape.pointer)
+        x0, y0, x1, y1 = self.machine.tuning.mouse_box
+        u = min(1.0, max(0.0, (px - x0) / (x1 - x0)))
+        v = min(1.0, max(0.0, (py - y0) / (y1 - y0)))
+        desktop = self.panel.desktop()
+        self._map_cursor = point = uv_to_real(u, v, virtual_bounds(desktop.monitors))
+        if self._drag is not None:
+            self._drag.update(point, desktop.monitors)
+        elif state == State.ARMED:
+            self._hover = window_at(point, desktop.windows)
+
+    def _refresh_panel(self, image: np.ndarray) -> None:
+        if not self.panel_visible:
+            return
+        t = self.clock()
+        status = self.machine.status(t)
+        step = max(1, image.shape[1] // PANEL_CAMERA_WIDTH)
+        camera = np.ascontiguousarray(image[::step, ::step, ::-1])  # BGR → RGB, cópia pequena
+        mouse = None
+        if status.state == State.MOUSE and self._mouse_uv is not None:
+            mouse = uv_to_real(*self._mouse_uv, virtual_bounds(self.panel.desktop().monitors))
+        hint = HINT_MOUSE if status.state == State.MOUSE else HINT_MAP
+        self.panel.show(
+            PanelFrame(
+                view=self.view(t),
+                state=status.state.value,
+                camera=camera,
+                hand=None if self.hand is None else np.array(self.hand.points[:, :2]),
+                cursor=self._map_cursor,
+                closed=status.state == State.GRAB,
+                mouse=mouse,
+                hover=self._hover.hwnd if self._hover is not None else None,
+                drag=dataclasses.replace(self._drag) if self._drag is not None else None,
+                fps=self.fps,
+                hint=hint,
+            )
+        )
+
     def _submit(
         self, name: str, func: Callable[..., str], *args: Any, title: str | None = None, label: str | None = None
     ) -> None:
@@ -623,6 +770,13 @@ class GestureEngine:
             return OverlayView(f"FECHAR {what}? {target.title}", "segure o polegar para baixo · solte para cancelar", status.progress, "danger")
         if status.state == State.GRAB and target is not None and status.charging == "screen" and status.screen:
             return OverlayView(f"→ TELA {status.screen}", f"segure os dedos parados · {target.title}", status.progress, "armed")
+        if status.state == State.GRAB and target is not None and self._drag is not None:
+            drag = self._drag
+            if drag.moves and drag.dest is not None:
+                screens = list(self.panel.desktop().monitors) if self.panel is not None else []
+                label = monitor_label(drag.dest, screens)
+                return OverlayView(f"→ {label.upper()}", f"abra a mão para soltar · {target.title}", None, "armed")
+            return OverlayView(f"SEGURANDO · {target.title}", HINT_MAP_GRAB, None, "info")
         if status.state == State.GRAB and target is not None:
             direction, label = self._aim
             if direction and label:
@@ -645,6 +799,11 @@ class GestureEngine:
         if status.state == State.ARMED:
             if status.charging == "mouse_on":
                 return OverlayView("MOUSE NO AR…", "continue apontando", status.progress, "info")
+            if status.charging == "panel":
+                what = "FECHANDO" if self.panel_visible else "ABRINDO"
+                return OverlayView(f"{what} O PAINEL…", "mantenha os dois dedos parados", status.progress, "info")
+            if self._hover is not None:
+                return OverlayView("GESTOS ATIVOS", f"punho: pegar '{self._hover.title}'", None, "armed")
             return OverlayView("GESTOS ATIVOS", HINT_ARMED, None, "armed")
         if status.charging == "arm" and (status.progress or 0) > 0.15:
             return OverlayView("ARMANDO GESTOS…", "mantenha a mão aberta parada", status.progress, "info")
@@ -711,10 +870,12 @@ class GestureEngine:
             self.request("disarm")
         elif key == ord("m"):
             self.request("mouse_off" if status.state == State.MOUSE else "mouse_on")
+        elif key == ord("p"):
+            self.request("panel_toggle")
         return True
 
 
-PREVIEW_TITLE = "Jarvis - gestos (q sai, a arma, d desarma, m mouse)"
+PREVIEW_TITLE = "Jarvis - gestos (q sai, a arma, d desarma, m mouse, p painel)"
 HAND_CONNECTIONS = (
     (0, 1), (1, 2), (2, 3), (3, 4), (0, 5), (5, 6), (6, 7), (7, 8), (5, 9), (9, 10), (10, 11), (11, 12),
     (9, 13), (13, 14), (14, 15), (15, 16), (13, 17), (0, 17), (17, 18), (18, 19), (19, 20),
@@ -776,11 +937,13 @@ class GestureService:
         actions_factory: Callable[[], Any] = DesktopActions,
         overlay_factory: Callable[[], Overlay | None] = Overlay,
         tracker_factory: Callable[[], Any] = HandTracker,
+        panel_factory: Callable[[], Any | None] = GesturePanel,
     ) -> None:
         self.frames_factory = frames_factory
         self.actions_factory = actions_factory
         self.overlay_factory = overlay_factory
         self.tracker_factory = tracker_factory
+        self.panel_factory = panel_factory
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -807,9 +970,12 @@ class GestureService:
             except Exception:
                 logger.debug("Falha num ouvinte de gestos.", exc_info=True)
 
-    def start(self, mouse: bool = False, wait: float = 15.0) -> str:
+    def start(self, mouse: bool = False, wait: float = 15.0, panel: bool = False) -> str:
         with self._lock:
             if self.running and self._engine is not None:
+                if panel:
+                    self._engine.request("panel_on")
+                    return "Os gestos já estavam ligados; abri o painel de gestos."
                 if mouse:
                     self._engine.request("mouse_on")
                     return "Os gestos já estavam ligados; liguei o mouse no ar."
@@ -818,7 +984,7 @@ class GestureService:
             self._error = None
             self._stop = threading.Event()
             self._ready = threading.Event()
-            self._thread = threading.Thread(target=self._run, args=(mouse,), name="gestures", daemon=True)
+            self._thread = threading.Thread(target=self._run, args=(mouse, panel), name="gestures", daemon=True)
             self._thread.start()
         self._ready.wait(wait)
         if self._error:
@@ -828,13 +994,19 @@ class GestureService:
         if self._engine is None or not self._ready.is_set():
             return "Estou ligando a câmera dos gestos; pode levar alguns segundos."
         mode = " com o mouse no ar" if mouse else ""
+        if panel:
+            return (
+                f"Gestos ligados (câmera: {self._source}) com o painel de gestos no canto: ele mostra a "
+                "câmera e o mapa das telas. Ponha a mão sobre uma janela do mapa, feche a mão para pegá-la, "
+                "leve até outra tela e abra a mão para soltar. Dois dedos parados por um segundo fecham o painel."
+            )
         return (
             f"Gestos ligados{mode} (câmera: {self._source}) e já armados. Punho pega a janela em foco; "
             "mova e abra a mão para jogá-la no monitor daquele lado. Sem uso, desarmam sozinhos; "
             "para rearmar, mão aberta parada por um segundo."
         )
 
-    def _run(self, mouse: bool) -> None:
+    def _run(self, mouse: bool, panel: bool = False) -> None:
         try:
             tracker = self.tracker_factory()
             frames, self._source = self.frames_factory()
@@ -847,6 +1019,8 @@ class GestureService:
                 armed=True,
                 mouse=mouse,
                 on_ready=self._ready.set,
+                panel=self.panel_factory(),
+                show_panel=panel,
             )
             self._engine = engine
             try:
@@ -880,6 +1054,17 @@ class GestureService:
         self._engine.request("mouse_on" if on else "mouse_off")
         return "Mouse no ar ligado: o indicador move o cursor e a pinça clica." if on else "Mouse no ar desligado."
 
+    def set_panel(self, on: bool) -> str:
+        """Show/hide the corner panel (webcam + map of the screens); showing it starts the gestures."""
+        if not self.running or self._engine is None:
+            return self.start(panel=True) if on else "Os gestos estão desligados, então o painel também."
+        if self._engine.panel is None:
+            return "O painel de gestos não está disponível nesta sessão."
+        self._engine.request("panel_on" if on else "panel_off")
+        if on:
+            return "Painel de gestos aberto no canto, com a câmera e o mapa das telas."
+        return "Painel de gestos fechado; os gestos continuam ligados."
+
     def describe(self) -> str:
         engine = self._engine
         if not self.running or engine is None:
@@ -894,7 +1079,8 @@ class GestureService:
             State.MOUSE: "no modo mouse no ar",
         }
         hand = "vendo sua mão" if status.hand else "sem mão no quadro"
-        return f"Gestos {states[status.state]}; câmera: {self._source}, {hand}, {engine.fps:.0f} quadros/s."
+        panel = ", painel aberto" if engine.panel_visible else ""
+        return f"Gestos {states[status.state]}; câmera: {self._source}, {hand}, {engine.fps:.0f} quadros/s{panel}."
 
 
 SERVICE = GestureService()
@@ -910,6 +1096,10 @@ def voice_action(action: str, service: GestureService | None = None) -> str:
         return service.set_mouse(True)
     if action == "mouse_off":
         return service.set_mouse(False)
+    if action == "panel_on":
+        return service.set_panel(True)
+    if action == "panel_off":
+        return service.set_panel(False)
     return service.describe()
 
 
@@ -965,18 +1155,20 @@ def build_gesture_tools() -> list[Any]:
     @function_tool()
     async def gesture_control(
         context: RunContext,
-        action: Literal["on", "off", "status", "mouse_on", "mouse_off"],
+        action: Literal["on", "off", "status", "mouse_on", "mouse_off", "panel_on", "panel_off"],
     ) -> str:
-        """Turn on/off the hand-gesture control of windows through the webcam, or the air mouse.
+        """Turn on/off the hand-gesture control of windows through the webcam, the air mouse or the gesture panel.
 
         Only when the user asks ("liga os gestos", "desliga o controle por gestos", "liga o mouse
-        no ar", "os gestos estão ligados?"). The gestures themselves are made by the user's hand
-        in front of the camera, never by you. Report exactly what the result says (e.g. that the
-        webcam is busy).
+        no ar", "mostra o painel de gestos", "esconde o painel de gestos", "os gestos estão
+        ligados?"). The gestures themselves are made by the user's hand in front of the camera,
+        never by you. Report exactly what the result says (e.g. that the webcam is busy).
 
         Args:
             action: on (start the camera and arm the gestures), off (stop and free the webcam),
-                status, mouse_on (index finger moves the cursor, pinch clicks) or mouse_off.
+                status, mouse_on (index finger moves the cursor, pinch clicks), mouse_off,
+                panel_on (corner panel with the webcam and a map of the screens, where the hand
+                drags windows between monitors; starts the gestures if needed) or panel_off.
         """
         attach_hud(asyncio.get_running_loop())
         job = get_job_context(required=False)
@@ -1124,6 +1316,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--camera", type=int, default=None, help="Índice da webcam (padrão: a primeira colorida).")
     parser.add_argument("--mouse", action="store_true", help="Já começa no modo mouse no ar.")
     parser.add_argument("--no-overlay", action="store_true", help="Sem o aviso flutuante na tela.")
+    parser.add_argument("--panel", action="store_true", help="Abre o painel de gestos (câmera + mapa das telas) no canto.")
     parser.add_argument("--trace", type=Path, help="Grava os números de cada quadro (sem imagens) para calibrar.")
     parser.add_argument("--calibrate", action="store_true", help="Calibração guiada: mede cada pose e grava gestos_calibracao.json.")
     args = parser.parse_args(argv)
@@ -1153,6 +1346,8 @@ def main(argv: list[str] | None = None) -> int:
             preview=args.preview,
             mouse=args.mouse,
             trace=trace,
+            panel=GesturePanel(),
+            show_panel=args.panel,
         )
         print("Gestos rodando. Mão aberta parada por ~1 s arma; Ctrl+C (ou q no preview) encerra.")
         engine.run(threading.Event())

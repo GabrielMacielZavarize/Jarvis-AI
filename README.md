@@ -70,7 +70,7 @@ flowchart LR
 | LAY-21 | `manage_layouts` / `arrange_windows` — salva e aplica layouts de janelas (abre os apps que faltam e põe cada janela na tela e posição salvas), junta tudo numa tela, leva as janelas de uma tela para outra, mostra a área de trabalho e desfaz tudo de uma vez | "Salva esse layout como modo trabalho." · "Modo trabalho." · "Organiza tudo pro notebook." · "Manda tudo do notebook pro monitor de cima." · "Mostra a área de trabalho." · "Desfaz." |
 
 Os protocolos MED, PC, WEB, AUD, JAN, VIS e LAY só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`; CAM só com `JARVIS_ENABLE_CAMERA=true`.
-| GST-18 | `gesture_control` / `gesture_shortcuts` — liga/desliga o controle de janelas por gestos das mãos (webcam) e o mouse no ar; lista, explica e muda o que cada gesto personalizável faz | "Liga os gestos." · "Liga o mouse no ar." · "Os gestos estão ligados?" · "Lista meus gestos." · "O que faz o rock?" · "Quando eu fizer joinha, pausa a música." |
+| GST-18 | `gesture_control` / `gesture_shortcuts` — liga/desliga o controle de janelas por gestos das mãos (webcam), o mouse no ar e o painel de gestos (câmera + mapa das telas); lista, explica e muda o que cada gesto personalizável faz | "Liga os gestos." · "Liga o mouse no ar." · "Mostra o painel de gestos." · "Os gestos estão ligados?" · "Lista meus gestos." · "O que faz o rock?" · "Quando eu fizer joinha, pausa a música." |
 
 Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`; GST só com `JARVIS_ENABLE_GESTURES=true` (ou `python jarvis.py --gestures`).
 | MOU-20 | `click_on_screen` / `move_mouse` / `type_text` / `press_keys` / `scroll` / `do_on_screen` / `confirm_screen_action` / `cancel_screen_action` — mouse e teclado de verdade: acha o elemento num print com o Gemini, desliza o cursor até ele e clica; digita, usa atalhos liberados e rola; tarefas curtas de até 8 passos. Cliques que enviam, compram, pagam, publicam, apagam ou confirmam pedem código | "Clica no botão de play." · "Digita olá no bloco de notas." · "Rola a página." · "Abre o menu de configurações do Discord." |
@@ -130,6 +130,7 @@ Controle as janelas só com a mão na frente da webcam (MediaPipe Hands, tudo lo
 | 🖐 "Apagar o quadro" (palma de um lado para o outro, 3 traços em até 2 s) | **Desfaz** o último movimento: a janela volta para onde estava, com a mesma memória de "volta pra onde estava" da voz. |
 | 👎 Polegar para baixo segurado ~1,2 s (a mão pode ficar meio fechada) | **Fecha** a janela em foco, com contagem visível; soltar antes cancela. No navegador fecha só a **aba ativa** (nunca a do HUD). |
 | ✌ Dois dedos para a direita / esquerda | **Próxima / anterior aba**, só com o navegador em foco. O movimento de volta é ignorado. |
+| ✌ Dois dedos parados ~1 s | Abre/fecha o **painel de gestos** (câmera + mapa das telas, veja abaixo). Também por voz: "mostra/esconde o painel de gestos". |
 | ☝ Indicador parado ~1 s | Entra no **mouse no ar**: a mão move o cursor por todos os monitores (inclusive o vertical, à esquerda). Pinça ou fechar a mão rápido = clique; segurado = arrastar; palma aberta parada ~1 s = sai. Também por voz: "liga/desliga o mouse no ar". |
 | ✊ → ☝ / ✌ / 3 dedos parados ~0,5 s | Com a janela pega, **manda para a tela 1, 2 ou 3** (os números do "Identificar" do Windows). O aviso mostra "→ TELA 2" enquanto conta. |
 
@@ -170,7 +171,42 @@ python gestures.py --preview --dry-run   # reconhece tudo, mas não mexe em nenh
 python gestures.py --calibrate           # mede a sua mão em cada pose (grava gestos_calibracao.json)
 ```
 
-No preview: `q` sai, `a` arma, `d` desarma, `m` liga/desliga o mouse no ar. Se a webcam errada abrir, use `JARVIS_CAMERA_INDEX=1`. Na primeira execução o modelo de mãos do MediaPipe (≈8 MB) é baixado para `.cache/models/` e conferido por SHA-256.
+No preview: `q` sai, `a` arma, `d` desarma, `m` liga/desliga o mouse no ar, `p` abre/fecha o painel de gestos (`python gestures.py --panel` já abre com ele). Se a webcam errada abrir, use `JARVIS_CAMERA_INDEX=1`. Na primeira execução o modelo de mãos do MediaPipe (≈8 MB) é baixado para `.cache/models/` e conferido por SHA-256.
+
+#### Painel de gestos: câmera e mapa das telas
+
+"Mostra o painel de gestos" (ou ✌ dois dedos parados ~1 s, com os gestos armados) abre um painel pequeno no canto (padrão: inferior direito do notebook, ~360×260, escalado pelo DPI daquele monitor). Ele mostra:
+
+1. **A webcam** com os pontos da mão e o estado do gesto (o mesmo texto do aviso do topo), com os quadros por segundo.
+2. **O mapa dos monitores** na disposição real do Windows (as mesmas coordenadas das Configurações: o de cima, o notebook embaixo e o vertical à esquerda, com x negativo), numerados como no "Identificar", com as janelas abertas dentro de cada monitor e miniaturas delas.
+3. **Um cursor da mão** sobre o mapa. Ponha a mão sobre uma janela (ela fica com borda azul), **feche a mão** para pegá-la, leve até outro monitor (ele fica verde e o aviso diz "→ monitor de cima") e **abra a mão** para soltar. A janela vai para aquele monitor na **mesma posição e tamanho relativos** que tinha no de origem (metade esquerda continua metade esquerda, inclusive entre monitores com DPI diferente); maximizada continua maximizada. Soltar no mesmo monitor não muda nada, e o gesto "apagar o quadro" desfaz como sempre.
+
+Como o modo mapa convive com o resto:
+
+- **Só com o painel aberto e os gestos armados.** O cursor da mão percorre o mapa inteiro com a mesma região da câmera do mouse no ar (o centro do quadro), então não é preciso esticar o braço.
+- **Punho fora de qualquer janela do mapa** continua pegando a janela em foco, com o arremesso por direção de sempre. Os outros gestos (minimizar, desfazer, abas, fechar) não mudam.
+- **Mouse no ar tem prioridade.** Com o mouse no ar ligado o modo mapa fica suspenso: o mapa só mostra onde o cursor real está (seta amarela) e o punho/pinça clica como sempre. Ao sair do mouse no ar (palma parada ~1 s), o cursor da mão volta ao mapa. O painel não captura cliques do mouse de verdade (é "transparente"); quem mexe nele é a mão.
+- Esconder o painel no meio de um arrasto cancela o arrasto. Desligar os gestos fecha o painel.
+
+Desempenho e privacidade: o motor dos gestos só entrega ao painel uma cópia pequena do quadro (~220 px) e o desenho acontece em outra thread, no máximo 15 vezes por segundo e só quando algo mudou, então o loop dos gestos não perde quadros. A lista de janelas é relida a cada 1 s e as miniaturas (PrintWindow) são tiradas uma por vez, cada janela no máximo a cada 1,5 s, numa thread de prioridade baixa; apps que o PrintWindow não consegue desenhar (alguns jogos/vídeos com GPU) aparecem como um retângulo colorido com a inicial. Quadros e miniaturas ficam só na memória: **nada é gravado nem enviado**. O painel, como o aviso, fica fora dos prints do `look_at_screen`.
+
+Configuração no `.env`:
+
+| Variável | Padrão | O que faz |
+| --- | --- | --- |
+| `JARVIS_GESTURE_PANEL_CORNER` | `inferior-direito` | Canto: `inferior-direito`, `inferior-esquerdo`, `superior-direito` ou `superior-esquerdo` |
+| `JARVIS_GESTURE_PANEL_MONITOR` | `notebook` | Monitor do painel: número ou nome da tela ("2", "de cima", um apelido). Sem esse monitor, vai para a tela do notebook ou a principal |
+| `JARVIS_GESTURE_PANEL_OPACITY` | `0.92` | Opacidade de 0,3 a 1 |
+| `JARVIS_GESTURE_PANEL_SIZE` | `360x260` | Tamanho em pixels lógicos (multiplicado pela escala do monitor) |
+
+Roteiro de teste ao vivo (Windows, 3 monitores):
+
+1. `python gestures.py --preview --dry-run --panel`: o painel aparece no canto inferior direito do notebook, com a câmera e a mão desenhada. Confira se o mapa tem o vertical à esquerda, o de cima e o notebook embaixo, com os números do "Identificar".
+2. Abra 3–4 janelas em monitores diferentes: elas aparecem no lugar certo do mapa em até ~1 s, com miniaturas em até ~2 s. Mova uma janela com o mouse e veja o mapa acompanhar.
+3. Mão aberta parada para armar; passe a mão sobre uma janela do mapa (borda azul), feche a mão, leve até o monitor de cima (fica verde, aviso "→ monitor de cima") e abra a mão: no terminal sai "(simulação) ... na mesma posição relativa". Repita para o vertical.
+4. Sem `--dry-run`: arraste uma janela que ocupa a metade esquerda do notebook para o de cima e confira que ela ocupa a metade esquerda dele; depois "apague o quadro" para desfazer. Teste uma janela maximizada e uma do vertical para o notebook (DPIs diferentes).
+5. ☝ indicador parado para o mouse no ar: o mapa mostra a seta amarela seguindo o cursor real e o punho clica sem pegar janelas do mapa; palma parada sai.
+6. ✌ dois dedos parados ~1 s fecham o painel; "Jarvis, mostra o painel de gestos" abre de novo. Com o painel aberto, o preview deve continuar perto de 30 fps.
 
 #### Precisão e calibração
 
@@ -494,6 +530,7 @@ O que continua possível, e por isso o padrão é desligado: um clique "inofensi
 
 - Desligados por padrão (`JARVIS_ENABLE_GESTURES=false`). Com eles ligados, a webcam fica acesa; "desliga os gestos" a libera.
 - **Nada é gravado nem enviado**: cada quadro é processado na memória, neste computador, e descartado. O modelo do MediaPipe roda localmente; só eventos curtos ("janela → monitor de cima") vão para o HUD local.
+- O painel de gestos mostra a sua câmera e miniaturas das suas janelas só no seu monitor; nada disso é gravado nem enviado, e ele fica fora dos prints que o Jarvis tira da tela.
 - Os gestos são um conjunto fechado de ações, as mesmas da voz: mover, estender, minimizar, desfazer, fechar, trocar de aba, o mouse no ar e, nos personalizáveis, mídia, volume, microfone do Jarvis, layouts, abrir um app/site e atalhos de teclado. Não existe gesto para digitar, apagar ou rodar comandos, e atalhos que fecham ou apagam são recusados.
 - Fechar por gesto exige polegar para baixo segurado com contagem visível e respeita as mesmas proteções da voz: processos do sistema, o terminal e o Python do Jarvis e a aba do HUD não fecham.
 - O agente só liga ou desliga os gestos (`gesture_control`) e muda o mapeamento a seu pedido (`gesture_shortcuts`); quem faz o gesto é a sua mão. Cada ação aparece no registro do HUD e no terminal.
@@ -582,7 +619,9 @@ gesture_engine.py     Poses, filtro One Euro, qualidade dos quadros, histerese, 
 gesture_calibration.py Calibração guiada (--calibrate): mede cada pose e grava gestos_calibracao.json
 gesture_actions.py    O que cada gesto faz: monitor vizinho, janelas, abas, mouse no ar, mídia e atalhos (SendInput)
 gesture_mapping.py    Gestos personalizáveis: gesto → ação (gestos.json), padrões e bloqueio de ações perigosas
-gesture_overlay.py    Aviso flutuante Win32 (sempre no topo, sem foco e sem cliques)
+gesture_overlay.py    Aviso flutuante Win32 (sempre no topo, sem foco e sem cliques) e a janela em camadas reaproveitada pelo painel
+gesture_map.py        Painel de gestos: geometria do mapa das telas, arrastar e soltar e o desenho (lógica pura)
+gesture_panel.py      Painel de gestos no Windows: janela no canto, lista de janelas e miniaturas (PrintWindow)
 prompts.py            Persona e saudação por horário
 server.py             FastAPI: serve web/dist, emite tokens LiveKit e serve a câmera
 prompts.py            Persona, saudação por horário e resumo das memórias

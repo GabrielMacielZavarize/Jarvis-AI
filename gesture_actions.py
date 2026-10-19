@@ -23,6 +23,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import win_desktop
+from gesture_map import relative_rect, uv_to_real
+from gesture_map import virtual_bounds as _virtual_bounds
 
 logger = logging.getLogger("jarvis-gestures")
 
@@ -356,6 +358,27 @@ class DesktopActions:
             raise GestureActionError(f"Tentei levar '{target.title}', mas ela não saiu do lugar.")
         return f"'{target.title}' → {monitor_label(screen, win_desktop.monitors())}."
 
+    def drop(self, target: Target, screen: win_desktop.Monitor) -> str:
+        """Painel de gestos: solta a janela em `screen`, na mesma posição relativa que tinha."""
+        hwnd = target.window.hwnd
+        if not _window_exists(hwnd):
+            raise GestureActionError("A janela fechou antes de eu movê-la.")
+        screens = win_desktop.monitors()
+        rect = win_desktop.window_rect(hwnd)
+        source = win_desktop.monitor_for_rect(rect, screens) or target.monitor
+        if same_monitor(source, screen):
+            raise GestureActionError(f"'{target.title}' já está nesse monitor.")
+        _pc()._remember_position(hwnd)
+        maximized = _is_maximized(hwnd)
+        if maximized or source is None:
+            win_desktop.move_to_monitor(hwnd, screen, maximize=maximized or None)
+        else:
+            win_desktop.place_window(hwnd, relative_rect(rect, source.work, screen.work))
+        landed = win_desktop.window_monitor(hwnd)
+        if not same_monitor(landed, screen):
+            raise GestureActionError(f"Tentei levar '{target.title}', mas ela não saiu do lugar.")
+        return f"'{target.title}' → {monitor_label(screen, screens)}."
+
     def maximize(self, target: Target) -> str:
         """'Estender': maximize the window, or restore it when it already is maximized."""
         hwnd = target.window.hwnd
@@ -500,20 +523,12 @@ class DesktopActions:
         if self._bounds is None or now - self._bounds_at > BOUNDS_CACHE_SECONDS:
             screens = win_desktop.monitors()
             if screens:
-                self._bounds = (
-                    min(m.left for m in screens),
-                    min(m.top for m in screens),
-                    max(m.right for m in screens),
-                    max(m.bottom for m in screens),
-                )
+                self._bounds = _virtual_bounds(screens)
                 self._bounds_at = now
         return self._bounds or (0, 0, 1920, 1080)
 
     def mouse_move(self, u: float, v: float) -> None:
-        left, top, right, bottom = self.virtual_bounds()
-        x = round(left + min(max(u, 0.0), 1.0) * (right - left - 1))
-        y = round(top + min(max(v, 0.0), 1.0) * (bottom - top - 1))
-        self.input.move(x, y)
+        self.input.move(*uv_to_real(u, v, self.virtual_bounds()))
 
     def mouse_down(self) -> None:
         self.input.button(True)
@@ -542,6 +557,11 @@ class DryRunActions(DesktopActions):
         if screen is None:
             raise GestureActionError(f"Não há {describe_direction(direction)}.")
         return f"(simulação) '{target.title}' → {monitor_label(screen, win_desktop.monitors())}."
+
+    def drop(self, target: Target, screen: win_desktop.Monitor) -> str:
+        if same_monitor(target.monitor, screen):
+            raise GestureActionError(f"'{target.title}' já está nesse monitor.")
+        return f"(simulação) '{target.title}' → {monitor_label(screen, win_desktop.monitors())}, na mesma posição relativa."
 
     def maximize(self, target: Target) -> str:
         return f"(simulação) estender '{target.title}'."
