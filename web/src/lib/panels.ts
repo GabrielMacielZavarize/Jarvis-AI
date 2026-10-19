@@ -20,6 +20,7 @@ export const PANEL_META: Record<CardKind, { code: string; title: string; aliases
   camera: { code: 'CAM-19', title: 'Câmera', aliases: ['webcam', 'camara', 'cam', 'feed', 'visao', 'olho'] },
   pointer: { code: 'MOU-20', title: 'Mouse e teclado', aliases: ['mouse', 'teclado', 'clique', 'cursor', 'digitacao', 'atalho'] },
   memory: { code: 'MEM-23', title: 'Memória', aliases: ['memorias', 'lembranca', 'lembrancas', 'perfil', 'sobre mim'] },
+  routine: { code: 'ROT-24', title: 'Rotina', aliases: ['rotinas', 'modo', 'passos', 'sequencia'] },
 };
 
 const PANEL_ACTIONS: HudPanelAction[] = ['list', 'close', 'close_all', 'expand', 'collapse'];
@@ -75,6 +76,10 @@ export function panelDetail(card: HudCard, now = Date.now()): string {
       const { query, total } = card.data;
       const count = `${total} ${total === 1 ? 'memória' : 'memórias'}`;
       return query ? `"${query}" · ${count}` : count;
+    }
+    case 'routine': {
+      const done = card.data.steps.filter((step) => step.status === 'ok').length;
+      return `${card.data.name} · ${done}/${card.data.steps.length}`;
     }
   }
 }

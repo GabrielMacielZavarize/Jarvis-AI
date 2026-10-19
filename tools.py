@@ -783,6 +783,7 @@ HUD_PANEL_KINDS = {
     "camera": "Câmera",
     "pointer": "Mouse e teclado",
     "memory": "Memória",
+    "routine": "Rotina",
 }
 LAST_PANEL = "last"
 MAX_PANEL_TARGETS = 6
@@ -1321,6 +1322,10 @@ def build_tools(settings: Settings) -> list[Any]:
         from memory import build_memory_tools
 
         tools.extend(build_memory_tools())
+    if settings.routines_enabled:
+        from routines import build_routine_tools
+
+        tools.extend(build_routine_tools())
     if settings.pc_control_enabled:
         from pc_control import build_pc_tools
 

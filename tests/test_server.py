@@ -7,12 +7,20 @@ from unittest.mock import patch
 import jwt
 from fastapi.testclient import TestClient
 
-from server import EMAIL_TOOL_NAMES, INSTALL_TOOL_NAMES, MEMORY_TOOL_NAMES, PC_TOOL_NAMES, TOOL_NAMES, create_app
+from server import (
+    EMAIL_TOOL_NAMES,
+    INSTALL_TOOL_NAMES,
+    MEMORY_TOOL_NAMES,
+    PC_TOOL_NAMES,
+    ROUTINE_TOOL_NAMES,
+    TOOL_NAMES,
+    create_app,
+)
 from settings import load_settings
 from tools import build_tools
 
 # A memória vem ligada por padrão (JARVIS_ENABLE_MEMORY=true).
-DEFAULT_TOOLS = TOOL_NAMES + MEMORY_TOOL_NAMES
+DEFAULT_TOOLS = TOOL_NAMES + MEMORY_TOOL_NAMES + ROUTINE_TOOL_NAMES
 
 LIVEKIT_ENV = {
     "GOOGLE_API_KEY": "test-key",

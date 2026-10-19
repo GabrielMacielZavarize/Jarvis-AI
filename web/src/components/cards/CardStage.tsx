@@ -15,6 +15,7 @@ import {
   NewsBody,
   NoteBody,
   PointerBody,
+  RoutineBody,
   ScreenBody,
   SearchBody,
   TimeBody,
@@ -53,6 +54,8 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <PointerBody data={card.data} />;
     case 'memory':
       return <MemoryBody id={card.id} data={card.data} />;
+    case 'routine':
+      return <RoutineBody data={card.data} />;
   }
 }
 

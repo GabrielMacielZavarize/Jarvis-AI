@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 import camera
 from camera import CameraError, CameraHub, pick_camera
-from server import CAMERA_TOOL_NAMES, MEMORY_TOOL_NAMES, TOOL_NAMES, create_app
+from server import CAMERA_TOOL_NAMES, MEMORY_TOOL_NAMES, ROUTINE_TOOL_NAMES, TOOL_NAMES, create_app
 
 LOCAL = "http://127.0.0.1:8000"
 
@@ -254,7 +254,7 @@ class CameraServerTests(unittest.TestCase):
     def test_status_lists_camera_tools_only_when_enabled(self) -> None:
         body = self.client(CAMERA_ENV).get("/api/status").json()
         self.assertTrue(body["camera"])
-        self.assertEqual(body["tools"], TOOL_NAMES + MEMORY_TOOL_NAMES + CAMERA_TOOL_NAMES)
+        self.assertEqual(body["tools"], TOOL_NAMES + MEMORY_TOOL_NAMES + ROUTINE_TOOL_NAMES + CAMERA_TOOL_NAMES)
         self.assertFalse(self.client({"GOOGLE_API_KEY": "x"}).get("/api/status").json()["camera"])
 
     def test_disabled_camera_never_turns_on(self) -> None:

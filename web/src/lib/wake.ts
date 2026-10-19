@@ -4,7 +4,8 @@ import type { HudCard, JarvisMode } from './types';
 export type WakeEvent =
   | { type: 'config'; enabled: boolean; silence_s: number }
   | { type: 'status'; detector: boolean; listening: boolean; mic_silent?: boolean }
-  | { type: 'wake'; score: number };
+  /** routine: a scheduled routine (ROT-24) opened the link, not a heard "Jarvis". */
+  | { type: 'wake'; score: number; routine?: string };
 
 export function parseWakeEvent(raw: string): WakeEvent | null {
   try {
@@ -26,13 +27,14 @@ export function micLabelFor(deviceId: string, devices: Pick<MediaDeviceInfo, 'de
 
 /**
  * Work that needs the link open: a timer Jarvis will announce out loud, a code waiting for
- * "confirmar …", or an install whose result he will report.
+ * "confirmar …", an install whose result he will report, or a routine still running.
  */
 export function hasPendingWork(cards: HudCard[], now: number): boolean {
   return cards.some((card) => {
     if (card.kind === 'timer') return card.data.status === 'running' && (card.data.ends_at == null || card.data.ends_at > now);
     if (card.kind === 'email') return card.data.status === 'draft';
     if (card.kind === 'install') return card.data.status === 'pending' || card.data.status === 'installing';
+    if (card.kind === 'routine') return card.data.status === 'running' || card.data.status === 'confirm';
     return false;
   });
 }

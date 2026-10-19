@@ -29,6 +29,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'look_at_camera', code: 'CAM-19', label: 'Câmera', hint: '“O que você está vendo?” · “Mostra a câmera.”' },
   { id: 'click_on_screen', code: 'MOU-20', label: 'Mouse & teclado', hint: '“Clica no botão de play.” · “Rola a página.”' },
   { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
+  { id: 'run_routine', code: 'ROT-24', label: 'Rotinas', hint: '“Bom dia, Jarvis.” · “Modo foco.” · “Todo dia útil às 8h roda o bom dia.”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -44,6 +45,12 @@ export const TOOL_LABELS: Record<string, string> = {
   remember: 'Gravando memória',
   recall: 'Consulta de memória',
   forget: 'Apagando memória',
+  list_routines: 'Rotinas salvas',
+  run_routine: 'Executando rotina',
+  confirm_routine_step: 'Passo confirmado',
+  save_routine: 'Gravando rotina',
+  delete_routine: 'Apagando rotina',
+  schedule_routine: 'Agendando rotina',
   show_on_hud: 'Projeção no HUD',
   check_email_address: 'Conferência de endereço',
   draft_email: 'Rascunho de email',

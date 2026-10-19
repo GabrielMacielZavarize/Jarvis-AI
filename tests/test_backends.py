@@ -19,6 +19,12 @@ BASE_TOOLS = [
     "remember",
     "recall",
     "forget",
+    "list_routines",
+    "run_routine",
+    "confirm_routine_step",
+    "save_routine",
+    "delete_routine",
+    "schedule_routine",
 ]
 
 

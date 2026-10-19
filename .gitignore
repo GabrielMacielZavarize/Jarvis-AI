@@ -20,3 +20,6 @@ memoria*.json
 memoria.json.tmp
 # Configurações pessoais da IDE
 .idea/
+# Rotinas do Jarvis (bom dia, modo foco...) e seus horários
+rotinas.json
+rotinas.json.tmp

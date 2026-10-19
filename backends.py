@@ -65,11 +65,30 @@ def _memory_summary() -> str | None:
         return None
 
 
+def _routines_summary() -> str | None:
+    """Saved routines (rotinas.json) with their schedules, so "bom dia, Jarvis" runs one."""
+    try:
+        from routines import summary_for_prompt
+
+        return summary_for_prompt()
+    except Exception:
+        return None
+
+
 class JarvisAgent(Agent):
     def __init__(self, instructions: str | None = None) -> None:
         super().__init__(instructions=instructions or build_agent_instructions())
+        # Scheduled routine (ROT-24) that opened this link: it replaces the opening greeting.
+        self.startup_routine: str | None = None
 
     async def on_enter(self) -> None:
+        if self.startup_routine:
+            import asyncio
+
+            from routines import run_scheduled
+
+            self._startup_task = asyncio.create_task(run_scheduled(self.session, self.startup_routine))
+            return
         self.session.generate_reply(instructions=build_initial_reply_instruction())
 
 
@@ -170,6 +189,7 @@ def build_runtime(settings: Settings, *, load_vad: bool = True) -> JarvisRuntime
             home_city=settings.home_city,
             monitors=_monitor_layout() if settings.pc_control_enabled or settings.computer_use_enabled else None,
             memories=_memory_summary() if settings.memory_enabled else None,
+            routines=_routines_summary() if settings.routines_enabled else None,
         )
     )
     room_options = room_io.RoomOptions(

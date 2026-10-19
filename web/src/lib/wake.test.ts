@@ -8,6 +8,7 @@ const card = (partial: Pick<HudCard, 'kind' | 'data'>) => ({ id: 'c1', createdAt
 describe('parseWakeEvent', () => {
   it('reads the events sent by the server', () => {
     expect(parseWakeEvent('{"type":"wake","score":0.91}')).toEqual({ type: 'wake', score: 0.91 });
+    expect(parseWakeEvent('{"type":"wake","score":1,"routine":"bom dia"}')).toEqual({ type: 'wake', score: 1, routine: 'bom dia' });
     expect(parseWakeEvent('{"type":"config","enabled":true,"silence_s":30}')).toEqual({
       type: 'config',
       enabled: true,
@@ -44,6 +45,15 @@ describe('hasPendingWork', () => {
     expect(hasPendingWork([card({ kind: 'timer', data: { id: 't', label: 'Café', status: 'running', ends_at: NOW + 60_000 } })], NOW)).toBe(true);
     expect(hasPendingWork([card({ kind: 'email', data: { status: 'draft', to: 'a@b.com', code: '482913' } })], NOW)).toBe(true);
     expect(hasPendingWork([card({ kind: 'install', data: { status: 'installing' } })], NOW)).toBe(true);
+  });
+
+  it('keeps the link open while a routine runs or waits for the user\'s yes', () => {
+    const routine = (status: 'running' | 'confirm' | 'done' | 'partial') =>
+      card({ kind: 'routine', data: { id: 'r', name: 'Boa noite', trigger: 'voz', status, started_at: NOW, steps: [] } });
+    expect(hasPendingWork([routine('running')], NOW)).toBe(true);
+    expect(hasPendingWork([routine('confirm')], NOW)).toBe(true);
+    expect(hasPendingWork([routine('done')], NOW)).toBe(false);
+    expect(hasPendingWork([routine('partial')], NOW)).toBe(false);
   });
 
   it('does not wait for finished work or plain panels', () => {
