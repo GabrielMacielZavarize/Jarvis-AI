@@ -21,7 +21,8 @@ export type CardKind =
   | 'install'
   | 'camera'
   | 'pointer'
-  | 'memory';
+  | 'memory'
+  | 'explain';
 
 export interface WeatherDay {
   date: string;
@@ -156,6 +157,36 @@ export interface MemoryData {
   message?: string | null;
 }
 
+export interface ExplainBlock {
+  language: string;
+  code: string;
+  /** Where it goes ("Linha 42 de UserController.php"). */
+  label?: string;
+}
+
+/** Screen assistant (TEL-31): what Jarvis read on screen and its explanation, with code to copy. */
+export interface ExplainData {
+  /** reading/thinking = in progress; raw = no text model, the text went to the voice session. */
+  status: 'reading' | 'thinking' | 'done' | 'empty' | 'raw' | 'refused' | 'error';
+  task: 'explain_error' | 'whats_wrong' | 'explain_code' | 'summarize' | 'translate' | 'explain';
+  task_label: string;
+  /** "janela 'PhpStorm'", "seleção em janela 'Chrome'"... */
+  source: string;
+  /** "texto selecionado", "texto da janela", "print perto do cursor"... */
+  via: string;
+  title: string;
+  explanation: string;
+  cause: string;
+  fix: string;
+  blocks: ExplainBlock[];
+  message: string;
+  /** How many secrets were masked before the text left the computer. */
+  redacted?: number;
+  /** Index of the block "copia a correção" put on the clipboard. */
+  copied?: number | null;
+  injection?: boolean;
+}
+
 export interface MediaData {
   service: string;
   title: string;
@@ -274,6 +305,7 @@ export interface CardDataMap {
   camera: CameraData;
   pointer: PointerData;
   memory: MemoryData;
+  explain: ExplainData;
 }
 
 export type HudCard = {

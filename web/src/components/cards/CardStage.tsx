@@ -6,6 +6,7 @@ import { PANEL_META, panelTitle } from '../../lib/panels';
 import type { HudCard } from '../../lib/types';
 import { ProtocolsPanel } from '../ProtocolsPanel';
 import { CameraBody } from './CameraFeed';
+import { ExplainBody } from './ExplainCard';
 import {
   DiagnosticsBody,
   EmailBody,
@@ -53,6 +54,8 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <PointerBody data={card.data} />;
     case 'memory':
       return <MemoryBody id={card.id} data={card.data} />;
+    case 'explain':
+      return <ExplainBody data={card.data} />;
   }
 }
 

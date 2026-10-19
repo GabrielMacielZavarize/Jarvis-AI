@@ -15,6 +15,7 @@ Short English summary: real-time voice assistant built on LiveKit Agents (Gemini
 - **Globo 3D com conexões**: enquanto pensa ou busca algo, o núcleo vira um globo holográfico que desenha arcos da sua cidade até os serviços consultados.
 - **Seletor de microfone** e diagnóstico de captação no HUD.
 - **Visão pela webcam** (opcional): o Jarvis olha pela câmera quando você pede e o HUD mostra o feed ao vivo num painel holográfico, com o aviso CÂMERA ATIVA sempre visível.
+- **Assistente de tela para dev** (TEL-31): "explica esse erro", "o que tem de errado aqui?", "o que esse código faz?", "resume essa página", "traduz isso" e "copia a correção", com painel de explicação e blocos de código com destaque e botão de copiar.
 - **Palavra de ativação** (opcional): diga "Jarvis" e o link abre sozinho; o silêncio o encerra para poupar a cota do Gemini. Detecção local, sem enviar áudio antes da ativação.
 - **Um comando para subir tudo**: `python jarvis.py`.
 - Ferramentas de rede agora rodam fora do event loop (`asyncio.to_thread`), então o áudio não engasga durante uma pesquisa.
@@ -77,8 +78,9 @@ Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CON
 
 Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`; MOU só com `JARVIS_ENABLE_COMPUTER_USE=true`.
 | MEM-23 | `remember` / `recall` / `forget` — memória entre conversas em `memoria.json`; o painel Memória lista e apaga | "Lembra que minha reunião de segunda é às 9." · "O que você sabe sobre mim?" · "Esquece isso." |
+| TEL-31 | `explain_screen` — lê a seleção, o texto da janela em foco ou o trecho perto do cursor (print só sem texto) e explica no painel Assistente de tela · `copy_fix` — coloca o código sugerido na área de transferência | "Explica esse erro." · "O que tem de errado aqui?" · "O que esse código faz?" · "Resume essa página." · "Traduz isso pro inglês." · "Copia a correção." |
 
-Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`. MEM vem ligado e some com `JARVIS_ENABLE_MEMORY=false`.
+Os protocolos MED, PC, WEB, AUD, JAN, VIS e TEL só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`. MEM vem ligado e some com `JARVIS_ENABLE_MEMORY=false`.
 
 ### Memória entre conversas
 
@@ -284,6 +286,28 @@ O Jarvis passa a clicar, digitar, rolar e usar atalhos por você ("clica no bot�
 - Cada ação abre o painel **MOU-20** no HUD com o print, o alvo desenhado (caixa ciano e mira laranja) e o registro das últimas ações; o terminal registra a mesma linha com `[MOU-20]`.
 
 As travas estão em [Segurança](#mouse-e-teclado).
+
+### Assistente de tela (TEL-31)
+
+Vem junto com o controle do PC (`JARVIS_ENABLE_PC_CONTROL=true`) e usa a `GOOGLE_API_KEY` com o modelo de `JARVIS_COMPUTER_USE_MODEL` (padrão `gemini-3.8-flash`, pela API normal, como o MOU-20), mesmo que a voz seja outro backend.
+
+- "Explica esse erro" / "o que esse código faz?" / "resume essa página" / "traduz isso": o Jarvis lê a **janela em foco**. "O que tem de errado **aqui**?" lê o trecho **perto do cursor do mouse** (umas 25 linhas acima e abaixo).
+- Ordem de leitura: **texto selecionado** → **texto da janela** por UI Automation (terminal do Windows, navegador, VS Code, Bloco de Notas...) → **print** da janela ou de uma região de ~1100×650 px em volta do cursor, só quando não há texto (o PhpStorm expõe pouco texto ao UI Automation, então lá costuma ir o print; selecionar o trecho, ou copiar e dizer "explica o que eu copiei", dá a leitura mais precisa).
+- Se o HUD estiver em foco, o Jarvis lê a janela embaixo do mouse.
+- O painel **Assistente de tela (TEL-31)** mostra de onde leu (ex.: "texto da janela · janela 'PowerShell'"), causa, correção, a explicação e os blocos de código com destaque de sintaxe (PHP, JS/TS, Python, SQL, shell, JSON, HTML, CSS) e botão **Copiar**. Por voz, o Jarvis fala só o resumo; ele nunca lê código em voz alta.
+- "Copia a correção" (ou "copia o segundo bloco") coloca o código na área de transferência do Windows. Ele **nunca digita nem cola sozinho**: você cola com Ctrl+V onde quiser.
+- Sem `GOOGLE_API_KEY` (ou se o modelo falhar), o texto lido vai para a própria sessão de voz responder, e o print, quando é o caso, vai como imagem.
+
+#### Roteiro de teste ao vivo (TEL-31)
+
+1. `python jarvis.py --rebuild`, conecte e confira o protocolo TEL-31 no painel Protocolos.
+2. No PowerShell, rode `python -c "import json; json.loads('{')"`. Com o terminal em foco: "Jarvis, explica esse erro". Esperado: painel com "texto da janela", causa (`JSONDecodeError`) e correção.
+3. Com o mouse em cima da mensagem de erro e o HUD em foco: "o que tem de errado aqui?". Esperado: "texto perto do cursor" (ou "print perto do cursor") e a leitura da janela certa, inclusive no monitor vertical (x negativo).
+4. No PhpStorm, selecione uma função PHP: "o que esse código faz?". Esperado: "texto selecionado"; sem seleção, "print da janela".
+5. "Copia a correção" e cole com Ctrl+V num arquivo de rascunho: tem que vir exatamente o bloco 1 do painel, sem nada digitado pelo Jarvis. Teste também o botão **Copiar** do painel.
+6. Numa página em inglês no navegador: "resume essa página" e depois "traduz isso" com um parágrafo selecionado.
+7. Abra o `.env` no Bloco de Notas e peça "explica isso": o painel avisa que segredos foram ocultados e a chave não aparece em lugar nenhum.
+8. Com o KeePass/Bitwarden em foco: o Jarvis recusa ler.
 ### Palavra de ativação "Jarvis" (WAK-22)
 
 ```env
@@ -457,6 +481,8 @@ Uma memória falsa plantada por uma página seria um prompt injection persistent
 
 `look_at_screen` só roda quando você pede. O print aparece no HUD e é **enviado ao Gemini (Google)** para análise, incluindo tudo o que estiver visível naquela tela ou janela. Feche arquivos sensíveis (como o `.env`) antes de pedir. O Jarvis é instruído a nunca ler senhas, chaves ou tokens em voz alta.
 
+O assistente de tela (TEL-31) também só roda quando você pede e envia ao Gemini o texto lido (ou o print, quando não há texto). Antes de sair do computador, chaves de API, tokens, chaves privadas e linhas de `.env` como `DB_PASSWORD=...` viram `[segredo oculto]`. Gerenciadores de senhas, o UAC, janelas de credenciais e a tela de bloqueio nunca são lidos. Nada fica salvo em disco: a última explicação vive só na memória da sessão (30 minutos) para o "copia a correção", que só escreve na área de transferência. O texto da tela é tratado como dado: se ele tentar dar ordens ao Jarvis, o painel avisa e nada é executado.
+
 ### Câmera
 
 - Desligada por padrão (`JARVIS_ENABLE_CAMERA=false`); com ela desligada o servidor nunca abre a webcam e recusa os endpoints da câmera.
@@ -500,6 +526,8 @@ Cobertura: settings, seleção de backend, registro de ferramentas, clima e prev
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), memória (pedido na última fala, recusa de senhas/documentos/cartões, resumo na sessão seguinte, painel MEM-23), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa), palavra de ativação (microfone pelo nome que o navegador mostra, detector, pausa durante o link, aviso ao HUD e encerramento por silêncio) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador, nem abrem o microfone.
 
+Assistente de tela (TEL-31): ordem de leitura (seleção, área de transferência, texto da janela ou do cursor e print só sem texto), HUD em foco, recusa de cofres de senha, ocultação de segredos, região do cursor nos monitores de x negativo, prompt e parse do modelo, queda para a sessão de voz e cópia sem digitar, com UI Automation, prints, área de transferência e modelo falsos; no HUD, o destaque de sintaxe e o painel.
+
 ## Estrutura
 
 ```
@@ -510,6 +538,7 @@ hud.py                Ponte ferramentas → HUD (data channel "jarvis.hud")
 pc_control.py         Ações seguras no computador (apps, sites, abas, janelas, mídia, volume, tela)
 installer.py          Busca e instalação de apps pelo winget, com confirmação por código
 computer_use.py       Mouse e teclado (MOU-20): visão com box_2d, SendInput/SetCursorPos e as travas
+screen_assist.py      Assistente de tela (TEL-31): lê seleção/janela/cursor por UI Automation e explica com o Gemini
 confirmation.py       Frase "confirmar <código>" tolerante à transcrição de voz
 memory.py             Memória entre conversas (memoria.json), filtro de segredos e painel MEM-23
 win_desktop.py        Monitores, janelas e captura de tela via Win32

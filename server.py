@@ -71,6 +71,8 @@ PC_TOOL_NAMES = [
     "arrange_windows",
     "look_at_screen",
     "save_shortcut",
+    "explain_screen",
+    "copy_fix",
 ]
 MEMORY_TOOL_NAMES = ["remember", "recall", "forget"]
 EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", "cancel_pending_email"]

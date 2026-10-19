@@ -28,6 +28,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'end_session', code: 'PWR-17', label: 'Encerrar sessão', hint: '“Tchau, Jarvis.” · “Pode desligar.”' },
   { id: 'look_at_camera', code: 'CAM-19', label: 'Câmera', hint: '“O que você está vendo?” · “Mostra a câmera.”' },
   { id: 'click_on_screen', code: 'MOU-20', label: 'Mouse & teclado', hint: '“Clica no botão de play.” · “Rola a página.”' },
+  { id: 'explain_screen', code: 'TEL-31', label: 'Assistente de tela', hint: '“Explica esse erro.” · “Copia a correção.”' },
   { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
 ];
 
@@ -56,6 +57,8 @@ export const TOOL_LABELS: Record<string, string> = {
   manage_hud_panels: 'Painéis do HUD',
   manage_window: 'Janelas',
   look_at_screen: 'Leitura de tela',
+  explain_screen: 'Assistente de tela',
+  copy_fix: 'Copiando a correção',
   save_shortcut: 'Atalho salvo',
   open_website: 'Abrindo site',
   play_youtube: 'YouTube',
