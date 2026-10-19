@@ -1,9 +1,10 @@
 # Roteiro de testes em casa (Windows)
 
-Checklist único dos recursos novos. Os testes automáticos (`python -m pytest` e, em `web/`,
-`npm test`) cobrem a lógica com simulações; o que está aqui só dá para conferir na máquina real:
-webcam, microfone, os 3 monitores, o Google e o celular. O passo a passo detalhado de cada item
-está na seção do README indicada.
+Checklist único dos recursos novos, de todos os branches já juntados na `main`. Os testes
+automáticos (`python -m pytest` e, em `web/`, `npm test`) cobrem a lógica com simulações; o que
+está aqui só dá para conferir na máquina real: webcam, microfone, os 3 monitores, o Google, o
+Gemini de verdade e o celular. O passo a passo detalhado de cada item está na seção do README
+indicada.
 
 ## 0. Preparar
 
@@ -27,7 +28,17 @@ JARVIS_PROACTIVE=true
 JARVIS_ENABLE_CALENDAR=true      # só depois do login do Google (item 8)
 JARVIS_PRESENCE=true             # veja o aviso do item 6
 JARVIS_HOME_CITY=Criciúma
+
+# Link e modelos (item 12). Se o seu .env tem JARVIS_WAKE_SILENCE_SECONDS=30, troque para 0:
+# o valor do .env vale mais que o padrão do código.
+JARVIS_WAKE_SILENCE_SECONDS=0
+GOOGLE_FALLBACK_MODELS=gemini-3.1-flash-live-preview,gemini-2.5-flash-native-audio-preview-12-2025
+JARVIS_MODEL_ROTATION=fallback
+JARVIS_END_OF_SPEECH_MS=0
 ```
+
+Confira no `doctor.py` as linhas "Link fecha sozinho: nunca" e a lista de modelos, todos "livre".
+Não há dependência nova de Python; o `--rebuild` é obrigatório para o HUD novo.
 
 Teste um grupo por vez. Se algo falhar, copie a linha do terminal com a tag do protocolo
 (`[GST-18]`, `[MOU-20]`, `[DIT-29]`...) e, nos gestos, grave um trace com `--trace`.
@@ -76,6 +87,9 @@ Teste um grupo por vez. Se algo falhar, copie a linha do terminal com a tag do p
 > Aviso: os gestos ainda abrem a webcam por conta própria. Com presença e gestos ligados ao
 > mesmo tempo, o Windows pode recusar a segunda abertura ("câmera em uso"). Teste a presença
 > com os gestos desligados, e depois os dois juntos para ver se a sua webcam aguenta.
+>
+> Com `JARVIS_WAKE_SILENCE_SECONDS=0`, o link que a presença abre também só fecha com
+> "tchau, Jarvis" ou o botão.
 
 - [ ] (Opcional) com o Jarvis fechado: `python presence.py --enroll` e `python presence.py --test`.
 - [ ] Saia da frente do PC por mais de 5 min: a mídia pausa (e o PC bloqueia, se `JARVIS_PRESENCE_LOCK=true`).
@@ -115,3 +129,30 @@ Teste um grupo por vez. Se algo falhar, copie a linha do terminal com a tag do p
 - [ ] No celular, aceite o certificado (passo a passo do Android/iPhone no README), pareie e fale com o Jarvis.
 - [ ] Peça algo no PC pelo celular ("abre o YouTube no monitor de cima").
 - [ ] Revogue o aparelho no HUD: o celular perde o acesso na hora, inclusive ao feed da câmera.
+
+## 12. Link, modelos e tempo de resposta (README → "Modelos, cota e tempo de resposta")
+
+- [ ] Abra o link e fique 20 min sem falar: ele continua aberto e responde na hora quando você volta (a sessão passa dos 15 min graças à compressão de contexto).
+- [ ] Converse alguns turnos: o painel Sistema mostra "Tempo de resposta" (verde até 1,5 s) com a média, e o terminal do agente registra "Resposta em X s (modelo)".
+- [ ] Troca de modelo: ponha `GOOGLE_MODEL=gemini-teste-live` (não existe), abra o link: ele conversa pelo próximo modelo, a notificação "Modelo de reserva" aparece e o painel mostra "Modelo · reserva". `python doctor.py` lista o modelo falso "em pausa". Depois volte o `GOOGLE_MODEL` de antes.
+- [ ] Depois de uma troca de modelo, "troca sua voz para Orus" continua valendo na hora.
+- [ ] `JARVIS_MODEL_ROTATION=rotate`: abra e feche o link 3 vezes; o painel Sistema mostra um modelo diferente a cada link.
+- [ ] (Opcional) `JARVIS_END_OF_SPEECH_MS=500` e compare o tempo de resposta; se ele cortar a sua frase, suba para 900.
+
+## 13. Visual do HUD (README → "Visual do HUD")
+
+- [ ] Boot: o anel do reator se completa, aparece "Todos os sistemas online" e os painéis entram em cascata.
+- [ ] Ao processar, o HUD inteiro fica âmbar; numa falha, vermelho.
+- [ ] "Como está o tempo em Lisboa?": a placa sobre o núcleo mostra `WX-01 · Varredura meteorológica · Lisboa` e depois "✓ Concluído"; o painel tem o gráfico das próximas 24 h (passe o mouse).
+- [ ] A legenda da fala do Jarvis aparece palavra por palavra embaixo do núcleo e some alguns segundos depois (desliga em Ajustes).
+- [ ] Ajustes → Tema: os quatro temas mudam HUD e cena 3D. Por voz: "muda o tema para vermelho", "deixa roxo", "volta ao normal".
+- [ ] Modo cinema: tecla `F`, o botão ao lado do dock e "modo cinema" por voz; `Esc` ou "mostra os painéis de novo" voltam.
+- [ ] "Pesquise sobre fusão nuclear": o globo cresce, os anéis recuam e cada destino ganha cidade e site.
+- [ ] "Rode um diagnóstico": aparece "Ao vivo" e CPU/RAM se mexem (abra um app pesado para ver subir).
+- [ ] "O que eu tenho hoje?" (com a agenda ligada): o dia em blocos, com o marcador de agora; passe o mouse nos blocos.
+- [ ] Notificações à direita: um timer de 1 min acabando, um lembrete do item 9 e um download concluído.
+- [ ] Arraste o painel Registro pelo cabeçalho para a coluna da esquerda; F5 e ele continua lá; "Restaurar painéis" em Ajustes desfaz.
+- [ ] Modo ambiente: feche o link e não mexa em nada por 3 min: relógio grande, clima da `JARVIS_HOME_CITY` e a próxima reunião. Mexer o mouse ou dizer "Jarvis" volta ao HUD.
+- [ ] Ajustes → Qualidade: mostra o nível e os fps. Em "Automática" num PC mais fraco, ela desce sozinha.
+- [ ] Ajustes → Som do reator: com o link aberto, o zumbido cresce quando o Jarvis fala.
+- [ ] No celular pareado (item 11): tema, legenda e modo cinema funcionam; os painéis não se arrastam no celular, de propósito.
