@@ -1,6 +1,19 @@
-import type { HudCard, JarvisMode } from './types';
+import type { HudCard, JarvisMode, LogLevel, NoteData } from './types';
 
-/** Events of /api/wake/events (WAK-22). */
+export type NoticePriority = 'low' | 'normal' | 'high' | 'critical';
+
+/** PRO-28: a reminder or monitor speaking up. route: spoken now, opening the link, or HUD only. */
+export interface NoticeEvent {
+  type: 'notice';
+  id: string;
+  topic: string;
+  priority: NoticePriority;
+  title: string;
+  message: string;
+  route: 'speak' | 'wake' | 'hud';
+}
+
+/** Events of /api/wake/events (WAK-22, plus the PRO-28 notices). */
 export type WakeEvent =
   | {
       type: 'config';
@@ -9,14 +22,23 @@ export type WakeEvent =
       /** AGD-27: meeting reminders also wake the HUD; then wake_word says if the detector exists. */
       reminders?: boolean;
       wake_word?: boolean;
+      /** PRO-28: proactive notices arrive on this stream and may open the link. */
+      proactive?: boolean;
     }
   | { type: 'status'; detector: boolean; listening: boolean; mic_silent?: boolean }
-  /** routine: a scheduled routine (ROT-24) opened the link; reason: why it woke (AGD-27 reminders). */
-  | { type: 'wake'; score: number; routine?: string; reason?: 'calendar' };
+  /**
+   * routine: a scheduled routine (ROT-24) opened the link; reason: why it woke instead of a heard
+   * "Jarvis" (calendar = AGD-27 meeting reminder, notice = PRO-28 proactive notice).
+   */
+  | { type: 'wake'; score: number; routine?: string; reason?: 'calendar' | 'notice' }
+  | NoticeEvent;
 
 export function parseWakeEvent(raw: string): WakeEvent | null {
   try {
     const event = JSON.parse(raw) as Partial<WakeEvent> | null;
+    if (event?.type === 'notice') {
+      return typeof event.title === 'string' && typeof event.message === 'string' ? (event as NoticeEvent) : null;
+    }
     if (event?.type === 'config' || event?.type === 'status' || event?.type === 'wake') return event as WakeEvent;
   } catch {
     // A malformed line is ignored; the stream keeps going.
@@ -66,4 +88,14 @@ export const ACTIVE_MODES: ReadonlySet<JarvisMode> = new Set(['thinking', 'speak
 export function silenceLeft({ now, lastActivityAt, silenceMs, mode, pendingWork }: SilenceInput): number | null {
   if (silenceMs <= 0 || ACTIVE_MODES.has(mode) || pendingWork) return null;
   return Math.max(0, lastActivityAt + silenceMs - now);
+}
+
+/** The panel a notice opens on the HUD: one per subject, so a new battery notice replaces the last. */
+export function noticeCard(notice: NoticeEvent): NoteData {
+  const quiet = notice.route === 'hud' && notice.priority !== 'low' ? ' · sem voz' : '';
+  return { title: `Aviso · ${notice.title}${quiet}`, content: notice.message };
+}
+
+export function noticeLogLevel(priority: NoticePriority): LogLevel {
+  return priority === 'critical' || priority === 'high' ? 'warn' : 'info';
 }

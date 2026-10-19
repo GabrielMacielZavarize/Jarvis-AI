@@ -126,6 +126,7 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
     // Scheduled routines (ROT-24) and meeting reminders (AGD-27) open the link through the same
     // stream, even without the wake word.
     enabled: Boolean(server?.wake_word?.enabled || server?.routines?.enabled || server?.calendar?.reminders),
+    proactive: server?.proactive ?? false,
     canConnect,
     ready: canConnect && live !== OFFLINE_LIVE,
     connected: live.connected,

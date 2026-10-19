@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { playSleepChime, playWakeChime } from '../lib/chime';
 import { useHud } from '../lib/hudStore';
 import type { JarvisMode } from '../lib/types';
-import { ACTIVE_MODES, hasPendingWork, parseWakeEvent, silenceLeft } from '../lib/wake';
+import { ACTIVE_MODES, hasPendingWork, noticeCard, noticeLogLevel, parseWakeEvent, silenceLeft } from '../lib/wake';
 
 /** A wake heard while a freshly opened tab is still booting waits this long for the link. */
 const WAKE_TTL_MS = 40_000;
@@ -26,6 +26,8 @@ export interface WakeWord {
 interface WakeOptions {
   /** /api/status says JARVIS_WAKE_WORD=true. */
   enabled: boolean;
+  /** /api/status says JARVIS_PROACTIVE=true: notices arrive on the same stream and may open the link. */
+  proactive: boolean;
   /** LiveKit is configured. */
   canConnect: boolean;
   /** The LiveKit session is mounted, so start() really connects. */
@@ -57,11 +59,14 @@ const isVisible = () => typeof document === 'undefined' || document.visibilitySt
  * ROT-24: a scheduled routine that came due arrives as the same wake, with its name.
  */
 export function useWakeWord(options: WakeOptions): WakeWord {
-  const { enabled, canConnect, ready, connected, busy, demo, mode, error, lineCount, micLabel } = options;
+  const { enabled, proactive, canConnect, ready, connected, busy, demo, mode, error, lineCount, micLabel } = options;
   const [clientId] = useState(() => crypto.randomUUID());
   const [subscribed, setSubscribed] = useState(false);
   // False when the stream is open only for meeting reminders (AGD-27), without the detector.
   const [wakeWord, setWakeWord] = useState(true);
+  const [noticesOn, setNoticesOn] = useState(false);
+  /** This link was opened by a notice: it closes after the silence even without the wake word. */
+  const [noticeLink, setNoticeLink] = useState(false);
   const [reports, setReports] = useState(0);
   const [detector, setDetector] = useState({ online: false, listening: false, micSilent: false });
   const [silenceS, setSilenceS] = useState(0);
@@ -80,7 +85,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const report = useCallback((result: 'connected' | 'failed' | 'ignored') => post('/api/wake/result', { client: clientId, result }), [clientId]);
 
   const onWake = useCallback(
-    (score: number, routine?: string, reason?: string) => {
+    (score: number, routine?: string, reason?: 'calendar' | 'notice') => {
       const state = latest.current;
       const hud = useHud.getState();
       if (state.sessionActive || state.demo) {
@@ -95,15 +100,18 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       playWakeChime();
       if (routine) hud.addLog('ok', `Rotina agendada · “${routine}”`);
       else if (reason === 'calendar') hud.addLog('ok', 'Aviso da agenda · reunião chegando');
-      else hud.addLog('ok', `Palavra de ativação · “Jarvis” (${Math.round(score * 100)}%)`);
+      else if (reason === 'notice') {
+        hud.addLog('ok', 'Aviso do Jarvis · abrindo o link');
+        setNoticeLink(true);
+      } else hud.addLog('ok', `Palavra de ativação · “Jarvis” (${Math.round(score * 100)}%)`);
       setWakeAt(Date.now());
     },
     [report],
   );
 
-  // The server's stream: config, detector status and wakes.
+  // The server's stream: config, detector status, wakes and proactive notices.
   useEffect(() => {
-    if (!enabled || typeof EventSource === 'undefined') return;
+    if ((!enabled && !proactive) || typeof EventSource === 'undefined') return;
     const source = new EventSource(`/api/wake/events?client=${clientId}`);
     source.onmessage = (message) => {
       const event = parseWakeEvent(message.data);
@@ -111,11 +119,16 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       if (event.type === 'config') {
         setSubscribed(event.enabled);
         setWakeWord(event.wake_word ?? true);
+        setNoticesOn(event.proactive ?? false);
         setSilenceS(event.silence_s);
         // The server knows this tab now: (re)send its state, also after a server restart.
         setReports((count) => count + 1);
       } else if (event.type === 'status') {
         setDetector({ online: event.detector, listening: event.listening, micSilent: event.mic_silent ?? false });
+      } else if (event.type === 'notice') {
+        const hud = useHud.getState();
+        hud.pushCard('note', noticeCard(event));
+        hud.addLog(noticeLogLevel(event.priority), `${event.title} · ${event.message}`);
       } else {
         onWake(event.score, event.routine, event.reason);
       }
@@ -125,8 +138,9 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       source.close();
       setSubscribed(false);
       setWakeWord(true);
+      setNoticesOn(false);
     };
-  }, [enabled, clientId, onWake]);
+  }, [enabled, proactive, clientId, onWake]);
 
   useEffect(() => {
     const onChange = () => setVisible(isVisible());
@@ -135,10 +149,11 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   }, []);
 
   // While a link is open (or opening) the detector releases the microphone.
+  // A notice only opens the link when no conversation is already open (or opening) in this tab.
   useEffect(() => {
-    if (!subscribed || reports === 0) return;
+    if ((!subscribed && !noticesOn) || reports === 0) return;
     void post('/api/wake/hud', { client: clientId, session_active: sessionActive, visible, mic_label: micLabel });
-  }, [subscribed, reports, clientId, sessionActive, visible, micLabel]);
+  }, [subscribed, noticesOn, reports, clientId, sessionActive, visible, micLabel]);
 
   // Connect as soon as this tab can (a tab the server just opened is still booting).
   useEffect(() => {
@@ -162,6 +177,10 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   }, [wakeAt, ready, busy, connected, report]);
 
   useEffect(() => {
+    if (!connected && !busy && wakeAt === null) setNoticeLink(false);
+  }, [connected, busy, wakeAt]);
+
+  useEffect(() => {
     if (!attempt.current) return;
     if (connected) {
       attempt.current = false;
@@ -181,7 +200,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
 
   useEffect(() => {
     setClosingIn(null);
-    if (!subscribed || silenceS <= 0 || !connected || demo) return;
+    if ((!subscribed && !noticeLink) || silenceS <= 0 || !connected || demo) return;
     const timer = window.setInterval(() => {
       const now = Date.now();
       const current = latest.current.mode;
@@ -205,7 +224,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       }
     }, TICK_MS);
     return () => window.clearInterval(timer);
-  }, [subscribed, silenceS, connected, demo]);
+  }, [subscribed, noticeLink, silenceS, connected, demo]);
 
   return {
     enabled: subscribed && wakeWord,

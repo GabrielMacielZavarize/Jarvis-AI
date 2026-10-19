@@ -81,7 +81,7 @@ def _start_agent(mode: str, hud_url: str) -> subprocess.Popen[bytes] | None:
         return None
 
     print(f"[AGENTE] Iniciando worker LiveKit ({mode}) com backend {settings.backend}...")
-    # O worker é outro processo: pede a webcam (dona: o servidor do HUD) por HTTP nesse endereço.
+    # O worker é outro processo: pede a webcam e os avisos (donos: o servidor do HUD) por HTTP.
     env = {**os.environ, "JARVIS_HUD_URL": hud_url}
     return subprocess.Popen([sys.executable, str(ROOT / "agent.py"), mode], cwd=ROOT, env=env)
 
@@ -141,6 +141,8 @@ def main() -> int:
         os.environ["JARVIS_ENABLE_GESTURES"] = "true"
         os.environ["JARVIS_GESTURES_AUTOSTART"] = "true"
     url = _local_url(args.host, args.port)
+    # O agente pede a câmera e os avisos proativos neste endereço; o servidor abre o HUD nele.
+    os.environ["JARVIS_HUD_URL"] = url
     agent_process = None if args.no_agent else _start_agent(args.agent_mode, url)
     gestures_here = args.gestures and agent_process is None
     if gestures_here:

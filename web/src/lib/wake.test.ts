@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { HudCard } from './types';
-import { hasPendingWork, micLabelFor, parseWakeEvent, silenceLeft } from './wake';
+import { hasPendingWork, micLabelFor, noticeCard, noticeLogLevel, parseWakeEvent, silenceLeft } from './wake';
 
 const NOW = 1_000_000;
 const card = (partial: Pick<HudCard, 'kind' | 'data'>) => ({ id: 'c1', createdAt: NOW, ...partial }) as HudCard;
@@ -14,6 +14,15 @@ describe('parseWakeEvent', () => {
       enabled: true,
       silence_s: 30,
     });
+  });
+
+  it('reads a wake opened by a proactive notice and the notices themselves (PRO-28)', () => {
+    expect(parseWakeEvent('{"type":"wake","score":1,"reason":"notice"}')).toEqual({ type: 'wake', score: 1, reason: 'notice' });
+    const notice = parseWakeEvent(
+      '{"type":"notice","id":"a1","topic":"battery","priority":"high","title":"Bateria baixa","message":"Bateria em 18%.","route":"hud"}',
+    );
+    expect(notice).toMatchObject({ type: 'notice', title: 'Bateria baixa', route: 'hud' });
+    expect(parseWakeEvent('{"type":"notice","title":3}')).toBeNull();
   });
 
   it('ignores anything else', () => {
@@ -85,5 +94,21 @@ describe('silenceLeft', () => {
 
   it('is off with JARVIS_WAKE_SILENCE_SECONDS=0', () => {
     expect(silenceLeft({ ...base, silenceMs: 0 })).toBeNull();
+  });
+});
+
+describe('noticeCard', () => {
+  const base = { type: 'notice', id: 'n', topic: 'battery', title: 'Bateria baixa', message: 'Bateria em 18%.' } as const;
+
+  it('shows the notice as a panel, saying when it stayed silent', () => {
+    expect(noticeCard({ ...base, priority: 'high', route: 'speak' })).toEqual({ title: 'Aviso · Bateria baixa', content: 'Bateria em 18%.' });
+    expect(noticeCard({ ...base, priority: 'high', route: 'hud' }).title).toBe('Aviso · Bateria baixa · sem voz');
+    expect(noticeCard({ ...base, priority: 'low', route: 'hud' }).title).toBe('Aviso · Bateria baixa');
+  });
+
+  it('highlights the important ones in the activity log', () => {
+    expect(noticeLogLevel('critical')).toBe('warn');
+    expect(noticeLogLevel('high')).toBe('warn');
+    expect(noticeLogLevel('normal')).toBe('info');
   });
 });

@@ -81,6 +81,8 @@ class JarvisAgent(Agent):
         super().__init__(instructions=instructions or build_agent_instructions())
         # Scheduled routine (ROT-24) that opened this link: it replaces the opening greeting.
         self.startup_routine: str | None = None
+        # Link aberto por um aviso proativo (PRO-28): a primeira fala é o aviso, não a saudação.
+        self.first_reply_instruction: str | None = None
 
     async def on_enter(self) -> None:
         if self.startup_routine:
@@ -90,7 +92,7 @@ class JarvisAgent(Agent):
 
             self._startup_task = asyncio.create_task(run_scheduled(self.session, self.startup_routine))
             return
-        self.session.generate_reply(instructions=build_initial_reply_instruction())
+        self.session.generate_reply(instructions=self.first_reply_instruction or build_initial_reply_instruction())
 
 
 def build_backend_components(settings: Settings) -> BackendComponents:

@@ -143,6 +143,12 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
             <dd className={wakeLabel(wake, connected).ok ? 'ok-text' : undefined}>{wakeLabel(wake, connected).text}</dd>
           </div>
         )}
+        {server?.proactive && !demo && (
+          <div className="stat" style={{ gridColumn: '1 / -1' }}>
+            <dt>Avisos proativos · PRO-28</dt>
+            <dd className="ok-text">Lembretes, bateria, CPU/RAM, downloads e disco</dd>
+          </div>
+        )}
         {live && (
           <div className="stat" style={{ gridColumn: '1 / -1' }}>
             <dt>Captação no agente</dt>

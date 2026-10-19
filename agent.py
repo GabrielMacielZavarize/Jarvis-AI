@@ -25,12 +25,18 @@ async def jarvis_agent(ctx: agents.JobContext):
         watch_dictation(runtime.session)
 
     if settings.routines_enabled:
-        import asyncio
-
         from routines import claim_scheduled
 
         # ROT-24: o link foi aberto por uma rotina agendada? Ela roda no lugar do cumprimento.
         runtime.agent.startup_routine = await asyncio.to_thread(claim_scheduled, settings.hud_url)
+
+    if settings.proactive_enabled:
+        from proactive import announcement_instruction, fetch_notices
+
+        # Link aberto por um aviso (PRO-28): ele vira a primeira fala, no lugar da saudação.
+        waiting = await asyncio.to_thread(fetch_notices, settings.hud_url)
+        if waiting:
+            runtime.agent.first_reply_instruction = announcement_instruction(waiting)
 
     await runtime.session.start(
         room=ctx.room,
@@ -47,6 +53,12 @@ async def jarvis_agent(ctx: agents.JobContext):
         from routines import watch_scheduled_routines
 
         watch_scheduled_routines(runtime.session, settings.hud_url)
+
+    if settings.proactive_enabled:
+        from proactive import announce_loop
+
+        task = asyncio.create_task(announce_loop(runtime.session, settings.hud_url))
+        ctx.add_shutdown_callback(lambda: _cancel(task))
 
     if settings.calendar_enabled and settings.calendar_reminder_minutes > 0:
         # Avisos de reunião que o servidor do HUD guardou (inclusive o que abriu este link).
@@ -66,6 +78,10 @@ async def jarvis_agent(ctx: agents.JobContext):
         ctx.add_shutdown_callback(unbind_mic)
         if autostart_requested():  # python jarvis.py --gestures
             await start_for_session(ctx)
+
+
+async def _cancel(task: asyncio.Task[None]) -> None:
+    task.cancel()
 
 
 def _validate_startup() -> None:

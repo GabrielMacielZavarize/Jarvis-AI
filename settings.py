@@ -36,6 +36,9 @@ DEFAULT_WAKE_SILENCE_SECONDS = 30
 # Voz do Gemini Live: grave e calma, a mais parecida com o Jarvis do filme (lista em voices.py).
 DEFAULT_VOICE = "Charon"
 DEFAULT_CALENDAR_REMINDER_MINUTES = 10
+# Horário de silêncio dos avisos proativos (PRO-28): só o crítico fala.
+DEFAULT_QUIET_HOURS = "23:00-07:00"
+CLOCK_RANGE = re.compile(r"^\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*(?:-|a|as|às|até|ate)\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*$", re.IGNORECASE)
 
 
 class SettingsError(ValueError):
@@ -100,6 +103,32 @@ def _parse_voice(env_map: Mapping[str, str]) -> str:
     from voices import canonical_voice
 
     return canonical_voice(raw) or raw
+
+
+def parse_clock_range(raw_value: str) -> tuple[int, int] | None:
+    """"23:00-07:00", "23h-7h" or "23-7" -> (1380, 420) in minutes; None when it is not a range."""
+    match = CLOCK_RANGE.match(raw_value)
+    if not match:
+        return None
+    start_h, start_m, end_h, end_m = (int(group or 0) for group in match.groups())
+    if start_h > 23 or end_h > 23 or start_m > 59 or end_m > 59:
+        return None
+    start, end = start_h * 60 + start_m, end_h * 60 + end_m
+    return (start, end) if start != end else None
+
+
+def _parse_quiet_hours(raw_value: str | None) -> tuple[int, int] | None:
+    """None turns the quiet hours off ("off", "false", "0")."""
+    env_name = "JARVIS_QUIET_HOURS"
+    cleaned = _clean_optional(raw_value)
+    if cleaned is None:
+        cleaned = DEFAULT_QUIET_HOURS
+    if cleaned.lower() in FALSY_VALUES or cleaned.lower() in {"nenhum", "desligado"}:
+        return None
+    window = parse_clock_range(cleaned)
+    if window is None:
+        raise SettingsError(f"Valor inválido em {env_name}: {raw_value!r}. Use algo como 23:00-07:00 ou off.")
+    return window
 
 
 def _parse_csv(raw_value: str | None) -> tuple[str, ...]:
@@ -170,6 +199,9 @@ class Settings:
     wake_threshold: float = DEFAULT_WAKE_THRESHOLD
     wake_silence_seconds: int = DEFAULT_WAKE_SILENCE_SECONDS
     wake_mic: str | None = None
+    proactive_enabled: bool = False
+    quiet_hours: tuple[int, int] | None = (23 * 60, 7 * 60)
+    downloads_dir: str | None = None
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -282,6 +314,9 @@ class Settings:
             ),
             wake_silence_seconds=_parse_wake_silence(env_map.get("JARVIS_WAKE_SILENCE_SECONDS")),
             wake_mic=_clean_optional(env_map.get("JARVIS_WAKE_MIC")),
+            proactive_enabled=_parse_bool(env_map.get("JARVIS_PROACTIVE"), "JARVIS_PROACTIVE", default=False),
+            quiet_hours=_parse_quiet_hours(env_map.get("JARVIS_QUIET_HOURS")),
+            downloads_dir=_clean_optional(env_map.get("JARVIS_DOWNLOADS_DIR")),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),

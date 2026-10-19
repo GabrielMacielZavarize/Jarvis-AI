@@ -1364,4 +1364,9 @@ def build_tools(settings: Settings) -> list[Any]:
         from dictation import build_dictation_tools
 
         tools.extend(build_dictation_tools())
+
+    if settings.proactive_enabled:
+        from proactive import build_proactive_tools
+
+        tools.extend(build_proactive_tools())
     return tools

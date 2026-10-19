@@ -475,5 +475,7 @@ export interface ServerStatus {
   wake_word?: { enabled: boolean; silence_s: number };
   /** ROT-24: with routines on, the HUD listens for the wake of a scheduled one; scheduled = how many. */
   routines?: { enabled: boolean; scheduled: number };
+  /** PRO-28: reminders and background monitors speak up on their own. */
+  proactive?: boolean;
   errors: string[];
 }

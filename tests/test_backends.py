@@ -123,6 +123,7 @@ class ToolSchemaTests(unittest.TestCase):
                 "JARVIS_ENABLE_GESTURES": "true",
                 "JARVIS_ENABLE_COMPUTER_USE": "true",
                 "JARVIS_ENABLE_CALENDAR": "true",
+                "JARVIS_PROACTIVE": "true",
             }
         )
 

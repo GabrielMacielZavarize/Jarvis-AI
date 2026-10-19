@@ -18,6 +18,10 @@ layouts.json
 # Memórias pessoais do Jarvis (lembra que...), cópias de segurança e temporários
 memoria*.json
 memoria.json.tmp
+# Lembretes e preferências dos avisos proativos (PRO-28), cópias e temporários
+lembretes*.json
+lembretes.json.tmp
+lembretes.json.lock
 # Configurações pessoais da IDE
 .idea/
 # Limiares pessoais medidos por python gestures.py --calibrate

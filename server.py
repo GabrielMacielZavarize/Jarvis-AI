@@ -30,6 +30,7 @@ import camera
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
 from routines import RoutineScheduler
+from proactive import ProactiveEngine, build_proactive_router
 from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
 from wake_hub import WakeHub, build_wake_router
@@ -103,6 +104,7 @@ CALENDAR_TOOL_NAMES = [
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 NO_STORE = {"Cache-Control": "no-store"}
 MJPEG_BOUNDARY = "frame"
+PROACTIVE_TOOL_NAMES = ["set_reminder", "list_reminders", "cancel_reminder", "configure_alerts"]
 COMPUTER_USE_TOOL_NAMES = [
     "click_on_screen",
     "move_mouse",
@@ -234,23 +236,42 @@ def create_app(
     open_browser: Callable[[str], Any] = webbrowser.open,
     routine_scheduler: RoutineScheduler | None = None,
     calendar_reminders: bool = True,
+    proactive: Callable[[WakeHub], ProactiveEngine | None] | None = None,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
     ``camera_hub`` replaces the real webcam (tests); ``open_browser`` opens the HUD when
     "Jarvis" is heard (or a meeting is about to start) and no tab is open. ``routine_scheduler``
     replaces the clock-driven scheduler of the routines (tests); ``calendar_reminders=False``
-    turns off the meeting reminders loop (tests)."""
+    turns off the meeting reminders loop (tests); ``proactive`` builds the PRO-28 notice engine
+    (tests); by default it runs when JARVIS_PROACTIVE=true."""
+
+    def default_engine(wake_hub: WakeHub) -> ProactiveEngine | None:
+        try:
+            settings = current_settings()
+        except SettingsError:
+            return None
+        if not settings.proactive_enabled:
+            return None
+        # webbrowser.open pode demorar: fora do loop do servidor.
+        opener = lambda url: threading.Thread(target=open_browser, args=(url,), daemon=True).start()  # noqa: E731
+        return ProactiveEngine.for_settings(settings, wake_hub, open_browser=opener)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         # ROT-24: as rotinas agendadas vencem aqui, no processo do servidor.
         scheduler_task = asyncio.create_task(app.state.routines.run_forever(routines_enabled))
         reminders = asyncio.create_task(_calendar_reminders()) if calendar_reminders else None
+        engine = (proactive or default_engine)(app.state.wake_hub)
+        app.state.proactive = engine
+        if engine is not None:
+            engine.start()
         yield
         scheduler_task.cancel()
         if reminders is not None:
             reminders.cancel()
+        if engine is not None:
+            await engine.stop()
         # Ao encerrar o servidor a webcam é solta na hora (a luz apaga).
         if camera_hub is not None:
             camera_hub.off()
@@ -322,6 +343,7 @@ def create_app(
             + (CAMERA_TOOL_NAMES if settings.camera_enabled else [])
             + (CALENDAR_TOOL_NAMES if settings.calendar_enabled else [])
             + (COMPUTER_USE_TOOL_NAMES if settings.computer_use_enabled else [])
+            + (PROACTIVE_TOOL_NAMES if settings.proactive_enabled else [])
         )
         return {
             "version": APP_VERSION,
@@ -343,6 +365,7 @@ def create_app(
                 "scheduled": app.state.routines.scheduled_count() if settings.routines_enabled else 0,
             },
             "calendar": _calendar_status(settings),
+            "proactive": settings.proactive_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "errors": backend_errors + livekit_errors,
@@ -427,6 +450,8 @@ def create_app(
 
     app.state.wake_hub = WakeHub()
     app.state.base_url = None
+    app.state.proactive = None
+    app.include_router(build_proactive_router(lambda: app.state.proactive))
     app.include_router(
         build_wake_router(
             app.state.wake_hub,

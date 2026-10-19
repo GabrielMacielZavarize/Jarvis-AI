@@ -41,6 +41,8 @@ CLIENT_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 MAX_LABEL = 160
 # Avisos da agenda que ninguém buscou somem depois deste tempo (a reunião já começou).
 REMINDER_TTL_S = 15 * 60
+# Avisos proativos (PRO-28) que chegaram sem nenhuma aba aberta: entregues à próxima que conectar.
+NOTICE_BACKLOG = 10
 
 
 @dataclass(eq=False)
@@ -66,6 +68,7 @@ class WakeHub:
         self.undelivered_reason = "wake"
         # Calendar reminders waiting for the agent: (expires_at, payload).
         self.reminders: list[tuple[float, dict[str, Any]]] = []
+        self.notice_backlog: list[dict[str, Any]] = []
         self.detector_seen_at: float | None = None
         # The detector's open microphone has delivered only silence (muted in Windows?).
         self.mic_silent = False
@@ -77,6 +80,9 @@ class WakeHub:
         self.clients[client_id] = client
         if self.undelivered_score is not None and self._pending():
             self._deliver(client, self.undelivered_score, self.undelivered_reason, self.undelivered_routine)
+        for event in self.notice_backlog:
+            client.queue.put_nowait(event)
+        self.notice_backlog = []
         return client
 
     def close(self) -> None:
@@ -115,7 +121,9 @@ class WakeHub:
         return self.detector_seen_at is not None and self._clock() - self.detector_seen_at < DETECTOR_STALE_S
 
     def trigger(self, score: float, reason: str = "wake") -> dict[str, Any]:
-        """Hand the wake to one HUD tab, or ask for a browser when none is open."""
+        """Hand the wake to one HUD tab, or ask for a browser when none is open.
+
+        ``reason`` "notice": a proactive notice (PRO-28) opens the link, not the user's voice."""
         if not self.listening():
             return {"accepted": False, "opened_browser": False}
         target = self._pick_client()
@@ -163,6 +171,16 @@ class WakeHub:
         fresh = [reminder for expires, reminder in self.reminders if expires > now]
         self.reminders = []
         return fresh
+
+    # --- Avisos proativos (PRO-28) ---------------------------------------------------------------
+
+    def notify(self, event: dict[str, Any]) -> None:
+        """A proactive notice for every open HUD tab (kept for the next one if none is open)."""
+        if not self.clients:
+            self.notice_backlog = [*self.notice_backlog, event][-NOTICE_BACKLOG:]
+            return
+        for client in self.clients.values():
+            client.queue.put_nowait(event)
 
     def status(self) -> dict[str, Any]:
         listening = self.detector_online() and self.listening()
@@ -223,6 +241,7 @@ def _config_event(settings: Settings) -> dict[str, Any]:
         "type": "config",
         "enabled": settings.wake_word_enabled,
         "silence_s": settings.wake_silence_seconds,
+        "proactive": settings.proactive_enabled,
     }
     if settings.calendar_enabled and settings.calendar_reminder_minutes > 0:
         # Os avisos da agenda também acordam o HUD; sem a palavra de ativação o link não fecha
