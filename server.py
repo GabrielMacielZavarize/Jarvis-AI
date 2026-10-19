@@ -52,6 +52,7 @@ TOOL_NAMES = [
     "manage_hud_panels",
     "check_microphone",
     "end_session",
+    "change_voice",
 ]
 PC_TOOL_NAMES = [
     "open_website",
@@ -184,6 +185,15 @@ def _requested_agent_name(body: TokenRequest) -> str:
     return DEFAULT_AGENT_NAME
 
 
+def _active_voice(settings: Settings) -> str | None:
+    """Voice the next Gemini session starts with (VOZ-30), for the Sistema panel."""
+    if settings.backend != "gemini-realtime":
+        return None
+    from voices import effective_voice
+
+    return effective_voice(settings.google_voice)
+
+
 def create_app(
     *,
     reload_env: bool = True,
@@ -264,6 +274,7 @@ def create_app(
             "gestures": settings.gestures_enabled,
             "computer_use": settings.computer_use_enabled,
             "memory": settings.memory_enabled,
+            "voice": _active_voice(settings),
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "errors": backend_errors + livekit_errors,

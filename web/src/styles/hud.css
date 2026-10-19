@@ -323,6 +323,57 @@
 .meter {
   grid-column: 1 / -1;
 }
+.sound-controls__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 96px;
+  cursor: pointer;
+}
+.toggle input {
+  accent-color: var(--c-primary);
+}
+.range {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--c-primary);
+}
+.range:disabled {
+  opacity: 0.4;
+}
+.sound-controls__value {
+  width: 38px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  text-align: right;
+}
+.chip-btn {
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.chip-btn:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--c-primary);
+}
+.chip-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 .meter__bar {
   position: relative;
   height: 6px;

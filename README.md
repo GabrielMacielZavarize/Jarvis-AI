@@ -17,6 +17,7 @@ Short English summary: real-time voice assistant built on LiveKit Agents (Gemini
 - **Visão pela webcam** (opcional): o Jarvis olha pela câmera quando você pede e o HUD mostra o feed ao vivo num painel holográfico, com o aviso CÂMERA ATIVA sempre visível.
 - **Assistente de tela para dev** (TEL-31): "explica esse erro", "o que tem de errado aqui?", "o que esse código faz?", "resume essa página", "traduz isso" e "copia a correção", com painel de explicação e blocos de código com destaque e botão de copiar.
 - **Palavra de ativação** (opcional): diga "Jarvis" e o link abre sozinho; o silêncio o encerra para poupar a cota do Gemini. Detecção local, sem enviar áudio antes da ativação.
+- **Voz e jeito do filme (VOZ-30)**: voz grave e calma configurável (`JARVIS_VOICE`, troca por comando de voz), persona de mordomo britânico com humor seco, sons de interface gerados no navegador e animações de "pensando" e "executando" no núcleo 3D.
 - **Um comando para subir tudo**: `python jarvis.py`.
 - Ferramentas de rede agora rodam fora do event loop (`asyncio.to_thread`), então o áudio não engasga durante uma pesquisa.
 
@@ -80,6 +81,7 @@ Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CON
 Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`; MOU e DIT só com `JARVIS_ENABLE_COMPUTER_USE=true`.
 | MEM-23 | `remember` / `recall` / `forget` — memória entre conversas em `memoria.json`; o painel Memória lista e apaga | "Lembra que minha reunião de segunda é às 9." · "O que você sabe sobre mim?" · "Esquece isso." |
 | TEL-31 | `explain_screen` — lê a seleção, o texto da janela em foco ou o trecho perto do cursor (print só sem texto) e explica no painel Assistente de tela · `copy_fix` — coloca o código sugerido na área de transferência | "Explica esse erro." · "O que tem de errado aqui?" · "O que esse código faz?" · "Resume essa página." · "Traduz isso pro inglês." · "Copia a correção." |
+| VOZ-30 | `change_voice` — troca a voz do Jarvis (vozes do Gemini Live), lista as vozes no HUD e volta à padrão | "Troca sua voz para Orus." · "Quais vozes você tem?" · "Volta pra sua voz normal." |
 
 Os protocolos MED, PC, WEB, AUD, JAN, VIS e TEL só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`. MEM vem ligado e some com `JARVIS_ENABLE_MEMORY=false`.
 
@@ -306,8 +308,10 @@ Para gerar a chave gratuita:
 JARVIS_BACKEND=gemini-realtime
 GOOGLE_API_KEY=sua-chave-google
 GOOGLE_MODEL=gemini-3.8-live
-GOOGLE_VOICE=Charon
+JARVIS_VOICE=Charon
 ```
+
+`JARVIS_VOICE` escolhe a voz (veja [Voz, persona e sons](#voz-persona-e-sons-voz-30)); o antigo `GOOGLE_VOICE` continua aceito.
 
 Observações do plano gratuito:
 
@@ -467,6 +471,41 @@ Limitações:
 - Numa aba que o navegador abriu sozinho, sem nenhum clique, o Chrome pode bloquear o som: aparece o botão "Clique para ouvir o Jarvis".
 - Os modelos pré-treinados do openWakeWord são licenciados como CC BY-NC-SA 4.0 (uso pessoal, não comercial).
 - No Linux o `openwakeword` depende do `tflite-runtime`, que não tem wheel para o Python 3.12; lá, instale-o com `pip install openwakeword --no-deps` mais `onnxruntime tqdm requests`.
+
+### Voz, persona e sons (VOZ-30)
+
+**Voz.** `JARVIS_VOICE` escolhe uma das 30 vozes do Gemini Live. A padrão é **Charon**, grave, calma e informativa, a mais próxima do Jarvis do filme. Outras que combinam: **Orus** (grave e firme), **Iapetus** (clara e serena), **Rasalgethi** (de narrador), **Algieba** (suave) e **Sadaltager** (culta). Um nome que não existe aparece como erro em `python doctor.py` e no painel Sistema.
+
+```env
+JARVIS_VOICE=Charon
+```
+
+Também dá para trocar falando:
+
+- "Jarvis, quais vozes você tem?": ele diz a atual e as recomendadas, e a lista completa aparece num painel.
+- "Troca sua voz para Orus": ele confirma com a voz antiga e já responde a próxima com a nova. O plugin do Gemini reabre a conexão em um instante, sem perder a conversa. A escolha fica salva em `voz.json` (fora do git) e vale sobre o `.env` nas próximas sessões.
+- "Volta pra sua voz normal": apaga `voz.json` e volta para `JARVIS_VOICE`.
+
+A troca por comando só existe com o Gemini Live. Na OpenAI, a voz é a de `OPENAI_VOICE`.
+
+**Persona.** O prompt (`prompts.py`) dá ao Jarvis o tom do filme: mordomo britânico educado, que chama você de "senhor", fica calmo quando algo dá errado, tem humor seco e responde em no máximo duas frases. As regras das ferramentas não mudaram.
+
+**Sons de interface.** O HUD gera os sons por código (Web Audio, sem arquivos de terceiros): link abrindo e fechando, ferramenta começando e terminando, confirmação por código aceita, erro e timer acabando. No painel **Sistema**, em "Sons da interface", dá para ligar ou desligar, ajustar o volume e tocar um teste. A escolha fica salva no navegador. O bipe da palavra de ativação segue a mesma configuração, e quando o silêncio encerra o link toca um som só.
+
+**Núcleo 3D.** Quando o Gemini está pensando, três arcos de varredura giram em volta do plasma e quatro "bits" orbitam o núcleo. Enquanto uma ferramenta roda, aparecem um anel de marcações girando e um giroscópio duplo, e ao fim dela uma onda de choque se expande do núcleo (vermelha se a ferramenta falhou). O modo Simulação também mostra as animações e toca os sons.
+
+**Roteiro de teste ao vivo** (com fone, para ouvir bem os sons):
+
+1. `python jarvis.py`, abra o HUD e confira no painel Sistema a linha "Voz · VOZ-30" (Charon) e "Sons da interface" ligado. Clique em **Testar**: três notas subindo.
+2. Inicialize o link: ao ficar online toca o som de abertura. A saudação deve ser no tom do mordomo ("Boa noite, senhor...").
+3. "Como está o tempo em Lisboa?": bipe curto ao começar a ferramenta, anel girando e giroscópio no núcleo, bipe duplo e onda de choque ao terminar.
+4. Faça uma pergunta que exija pensar ("explica em uma frase o que é fusão nuclear"): os arcos de varredura giram enquanto ele pensa.
+5. "Quais vozes você tem?" (painel com a lista) e depois "troca sua voz para Orus": ele confirma e a resposta seguinte já sai na voz nova. Encerre e reabra o link: continua Orus. "Volta pra sua voz normal" devolve a Charon.
+6. "Timer de 10 segundos": ao acabar, três bipes de alarme.
+7. Desligue os sons no painel Sistema, recarregue a página (F5) e confira que continuam desligados. Religue, baixe o volume e repita o passo 3.
+8. "Tchau, Jarvis": som de link fechando (um só, mesmo com a palavra de ativação ligada).
+
+Se algo soar alto demais ou repetitivo, me diga qual som; os tons ficam em `web/src/lib/sounds.ts` (`SOUND_CUES`).
 
 Confira tudo com:
 
@@ -668,8 +707,8 @@ Cobertura: settings, seleção de backend, registro de ferramentas, clima e prev
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa), palavra de ativação (microfone pelo nome que o navegador mostra, detector, pausa durante o link, aviso ao HUD e encerramento por silêncio) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador, nem abrem o microfone.
 
 Assistente de tela (TEL-31): ordem de leitura (seleção, área de transferência, texto da janela ou do cursor e print só sem texto), HUD em foco, recusa de cofres de senha, ocultação de segredos, região do cursor nos monitores de x negativo, prompt e parse do modelo, queda para a sessão de voz e cópia sem digitar, com UI Automation, prints, área de transferência e modelo falsos; no HUD, o destaque de sintaxe e o painel.
-
 Modo ditado (DIT-29): a normalização (comandos falados → texto/teclas, pontuação automática, maiúsculas, "ponto"/"vírgula" como palavras) e a máquina de estados (parciais e final do Gemini, a fala que ligou o modo nunca digitada, silêncio do Jarvis, fim do ditado, desfazer, Shift+Enter em apps de conversa, recusas, ESC, mouse, silêncio e troca de campo), com teclado falso.
+Voz e sons (VOZ-30): `tests/test_voices.py` confere `JARVIS_VOICE`, a lista de vozes contra a do plugin, `voz.json`, a ferramenta `change_voice` (troca na hora depois da resposta) e o tom do prompt; `web/src/lib/sounds.test.ts` e `coreActivity.test.ts` cobrem qual som cada evento toca, o volume salvo no navegador e os estados "pensando"/"executando" do núcleo.
 
 ## Estrutura
 
@@ -685,6 +724,7 @@ screen_assist.py      Assistente de tela (TEL-31): lê seleção/janela/cursor p
 dictation.py          Modo ditado (DIT-29): transcrições da fala → comandos falados → teclado do MOU-20
 confirmation.py       Frase "confirmar <código>" tolerante à transcrição de voz
 memory.py             Memória entre conversas (memoria.json), filtro de segredos e painel MEM-23
+voices.py             Voz do Jarvis (VOZ-30): vozes do Gemini Live, voz.json e a ferramenta change_voice
 win_desktop.py        Monitores, janelas e captura de tela via Win32
 camera.py             Dono único da webcam (CameraHub): captura, feed MJPEG, fotos
 vision.py             Ferramentas de visão: look_at_camera, camera_view e envio de imagens ao modelo
@@ -708,7 +748,7 @@ web/
   src/scene/          Cena 3D (núcleo, anéis, espectro, órbitas, partículas, grade)
   src/components/     Painéis do HUD e cartões holográficos
   src/hooks/          Sessão LiveKit, simulação, status do servidor
-  src/lib/            Estado do HUD, áudio, catálogo de protocolos
+  src/lib/            Estado do HUD, áudio, catálogo de protocolos, sons de interface (sounds.ts)
 ```
 
 ## Troubleshooting

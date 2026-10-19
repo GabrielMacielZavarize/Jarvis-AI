@@ -11,6 +11,7 @@ from livekit.plugins import google, noise_cancellation, openai, silero
 from prompts import build_agent_instructions, build_initial_reply_instruction
 from settings import Settings
 from tools import PENDING_EMAIL_KEY, build_tools
+from voices import effective_voice
 
 
 def _compact_kwargs(**kwargs: Any) -> dict[str, Any]:
@@ -81,7 +82,7 @@ def build_backend_components(settings: Settings) -> BackendComponents:
             **_compact_kwargs(
                 api_key=settings.google_api_key,
                 model=settings.google_model,
-                voice=settings.google_voice,
+                voice=effective_voice(settings.google_voice),
                 temperature=0.8,
                 # Espera o resultado da ferramenta antes de falar: uma resposta por ação,
                 # sem "vou fazer..." seguido de um "feito" atrasado.

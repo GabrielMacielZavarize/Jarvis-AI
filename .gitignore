@@ -26,3 +26,6 @@ gestos_calibracao.tmp
 # O que cada gesto personalizável faz (gesto → ação), salvo pelo Jarvis
 gestos.json
 gestos.json.tmp
+
+# Escolha de voz feita por voz ("troca sua voz para X")
+voz.json

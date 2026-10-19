@@ -1,5 +1,6 @@
 import { Color } from 'three';
 import { levels, sampleAudio } from '../lib/audio';
+import { coreActivity, flashLevel, lastToolResult } from '../lib/coreActivity';
 import { useHud } from '../lib/hudStore';
 import type { JarvisMode } from '../lib/types';
 
@@ -42,6 +43,13 @@ export const scene = {
   surge: 0,
   /** 0 → 1 while the globe shows network connections (driven by EarthGlobe). */
   network: 0,
+  /** 0 → 1 while the model is working on a reply (VOZ-30). */
+  thinking: 0,
+  /** 0 → 1 while a tool runs. */
+  executing: 0,
+  /** 1 → 0 right after a tool finishes; `flashOk` false paints it red. */
+  flash: 0,
+  flashOk: true,
   mode: 'standby' as JarvisMode,
 };
 
@@ -78,4 +86,12 @@ export function updateScene(time: number, delta: number) {
   scene.energy += (energyTarget - scene.energy) * (1 - Math.exp(-delta * 10));
   scene.phase += delta * scene.speed;
   scene.surge = Math.max(0, scene.surge - delta * 1.4);
+
+  const activity = coreActivity(mode, activeTool);
+  const ka = 1 - Math.exp(-delta * 5);
+  scene.thinking += ((activity === 'thinking' ? 1 : 0) - scene.thinking) * ka;
+  scene.executing += ((activity === 'executing' ? 1 : 0) - scene.executing) * ka;
+  const result = lastToolResult();
+  scene.flash = flashLevel(result, Date.now());
+  scene.flashOk = result?.ok ?? true;
 }
