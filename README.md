@@ -70,7 +70,7 @@ flowchart LR
 | LAY-21 | `manage_layouts` / `arrange_windows` — salva e aplica layouts de janelas (abre os apps que faltam e põe cada janela na tela e posição salvas), junta tudo numa tela, leva as janelas de uma tela para outra, mostra a área de trabalho e desfaz tudo de uma vez | "Salva esse layout como modo trabalho." · "Modo trabalho." · "Organiza tudo pro notebook." · "Manda tudo do notebook pro monitor de cima." · "Mostra a área de trabalho." · "Desfaz." |
 
 Os protocolos MED, PC, WEB, AUD, JAN, VIS e LAY só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`; CAM só com `JARVIS_ENABLE_CAMERA=true`.
-| GST-18 | `gesture_control` — liga/desliga o controle de janelas por gestos das mãos (webcam) e o mouse no ar | "Liga os gestos." · "Liga o mouse no ar." · "Os gestos estão ligados?" |
+| GST-18 | `gesture_control` / `gesture_shortcuts` — liga/desliga o controle de janelas por gestos das mãos (webcam) e o mouse no ar; lista, explica e muda o que cada gesto personalizável faz | "Liga os gestos." · "Liga o mouse no ar." · "Os gestos estão ligados?" · "Lista meus gestos." · "O que faz o rock?" · "Quando eu fizer joinha, pausa a música." |
 
 Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`; GST só com `JARVIS_ENABLE_GESTURES=true` (ou `python jarvis.py --gestures`).
 | MOU-20 | `click_on_screen` / `move_mouse` / `type_text` / `press_keys` / `scroll` / `do_on_screen` / `confirm_screen_action` / `cancel_screen_action` — mouse e teclado de verdade: acha o elemento num print com o Gemini, desliza o cursor até ele e clica; digita, usa atalhos liberados e rola; tarefas curtas de até 8 passos. Cliques que enviam, compram, pagam, publicam, apagam ou confirmam pedem código | "Clica no botão de play." · "Digita olá no bloco de notas." · "Rola a página." · "Abre o menu de configurações do Discord." |
@@ -131,6 +131,36 @@ Controle as janelas só com a mão na frente da webcam (MediaPipe Hands, tudo lo
 | 👎 Polegar para baixo segurado ~1,2 s (a mão pode ficar meio fechada) | **Fecha** a janela em foco, com contagem visível; soltar antes cancela. No navegador fecha só a **aba ativa** (nunca a do HUD). |
 | ✌ Dois dedos para a direita / esquerda | **Próxima / anterior aba**, só com o navegador em foco. O movimento de volta é ignorado. |
 | ☝ Indicador parado ~1 s | Entra no **mouse no ar**: a mão move o cursor por todos os monitores (inclusive o vertical, à esquerda). Pinça ou fechar a mão rápido = clique; segurado = arrastar; palma aberta parada ~1 s = sai. Também por voz: "liga/desliga o mouse no ar". |
+| ✊ → ☝ / ✌ / 3 dedos parados ~0,5 s | Com a janela pega, **manda para a tela 1, 2 ou 3** (os números do "Identificar" do Windows). O aviso mostra "→ TELA 2" enquanto conta. |
+
+#### Gestos personalizáveis
+
+Estes gestos disparam uma ação configurável, guardada em `gestos.json` (ignorado pelo git; só guarda o que você mudou). Os que exigem segurar mostram no aviso **o nome da ação com uma contagem** antes de executar; soltar antes cancela. Os rápidos (pinça, duas mãos) mostram o nome da ação enquanto ela roda.
+
+| Gesto | Padrão |
+| --- | --- |
+| 👌 OK parado ~0,8 s (polegar no indicador, os outros três dedos esticados) | Tocar/pausar a mídia |
+| 🤏 Pinça subindo / descendo | Volume +5% / −5% por degrau (cada ~1/3 de palma de movimento) |
+| 🤘 Rock parado ~0,7 s (indicador e mindinho) | Aplicar o layout **"trabalho"** (salve um antes: "salva esse layout como modo trabalho") |
+| 👍 Joinha parado ~0,7 s | Nada (livre para você ligar) |
+| ✋📷 Palma tapando a câmera ~1 s | Mutar/desmutar o **microfone do Jarvis** na conversa de voz. Funciona mesmo desarmado; tape de novo para ele voltar a ouvir (mudo, ele não escuta "desmuta"). |
+| 🙌 Duas palmas abertas se afastando / aproximando | Estender / restaurar a janela em foco |
+
+O 🤫 "indicador nos lábios" não entrou: o detector só vê mãos (não o rosto), e um indicador parado já liga o mouse no ar. Tapar a câmera faz o mesmo papel sem confusão.
+
+Por voz ("lista meus gestos", "o que faz o rock?", "quando eu fizer joinha, pausa a música", "o rock abre o Spotify", "o OK aperta ctrl+shift+m", "volta o rock ao padrão") ou editando o arquivo:
+
+```json
+{
+  "joinha": {"tipo": "acao", "acao": "play_pause"},
+  "rock": {"tipo": "app", "nome": "spotify"},
+  "ok": {"tipo": "atalho", "teclas": "ctrl+shift+m"},
+  "maos_afastam": {"tipo": "site", "url": "youtube.com"},
+  "tapar_camera": {"tipo": "nada"}
+}
+```
+
+Gestos: `ok`, `pinca_sobe`, `pinca_desce`, `rock`, `joinha`, `tapar_camera`, `maos_afastam`, `maos_aproximam`. Tipos: `acao` (`play_pause`, `next`, `previous`, `volume_up`, `volume_down`, `mute`, `unmute`, `mic_toggle`, `maximize`, `restore`, `minimize`, `undo`, `show_desktop`, `next_tab`, `previous_tab`), `layout`, `app`, `site`, `atalho` e `nada`. **Fechar, apagar e digitar nunca ficam num gesto**: atalhos como Alt+F4, Ctrl+W e Shift+Delete, teclas soltas (que digitariam) e instaladores são recusados, por voz e no arquivo; para fechar continua o polegar para baixo, que pede confirmação segurando.
 
 Para testar e calibrar sem o agente:
 
@@ -140,6 +170,16 @@ python gestures.py --preview --dry-run   # reconhece tudo, mas não mexe em nenh
 ```
 
 No preview: `q` sai, `a` arma, `d` desarma, `m` liga/desliga o mouse no ar. Se a webcam errada abrir, use `JARVIS_CAMERA_INDEX=1`. Na primeira execução o modelo de mãos do MediaPipe (≈8 MB) é baixado para `.cache/models/` e conferido por SHA-256.
+
+Roteiro de teste ao vivo dos gestos personalizáveis (primeiro com `--preview --dry-run`, depois de verdade):
+
+1. Arme (mão aberta parada) e faça 👌 parado: o aviso mostra "TOCAR/PAUSAR A MÍDIA" com contagem; com um vídeo tocando, ele pausa e volta no segundo 👌.
+2. Pinça (com os outros dedos meio dobrados) e suba/desça a mão devagar: o volume muda de 5 em 5%. Veja se um 👌 parado nunca mexe no volume.
+3. Salve um layout ("salva esse layout como modo trabalho"), bagunce as janelas e faça 🤘 parado: as janelas voltam.
+4. Pegue uma janela (punho) e mostre 1, 2 e 3 dedos parados: ela vai para a tela com aquele número do "Identificar". Confira que abrir a mão ainda estende e que mover + abrir ainda joga para o lado.
+5. Com a conversa de voz ligada, tape a webcam com a palma por ~1 s: o Jarvis para de ouvir; tape de novo e ele volta. Apague a luz do quarto sem a mão na frente: nada deve acontecer.
+6. Duas palmas abertas se afastando estendem a janela em foco; se aproximando, restauram.
+7. Por voz: "quando eu fizer joinha, pausa a música", "o que faz o rock?", "lista meus gestos" e "o rock fecha a janela" (deve recusar). Confira o `gestos.json` criado ao lado do projeto.
 
 ## Pré-requisitos
 
@@ -433,9 +473,10 @@ O que continua possível, e por isso o padrão é desligado: um clique "inofensi
 
 - Desligados por padrão (`JARVIS_ENABLE_GESTURES=false`). Com eles ligados, a webcam fica acesa; "desliga os gestos" a libera.
 - **Nada é gravado nem enviado**: cada quadro é processado na memória, neste computador, e descartado. O modelo do MediaPipe roda localmente; só eventos curtos ("janela → monitor de cima") vão para o HUD local.
-- Os gestos são um conjunto fechado de ações, as mesmas da voz: mover, estender, minimizar, desfazer, fechar, trocar de aba e o mouse no ar. Não existe gesto para digitar, abrir programas ou rodar comandos.
+- Os gestos são um conjunto fechado de ações, as mesmas da voz: mover, estender, minimizar, desfazer, fechar, trocar de aba, o mouse no ar e, nos personalizáveis, mídia, volume, microfone do Jarvis, layouts, abrir um app/site e atalhos de teclado. Não existe gesto para digitar, apagar ou rodar comandos, e atalhos que fecham ou apagam são recusados.
 - Fechar por gesto exige polegar para baixo segurado com contagem visível e respeita as mesmas proteções da voz: processos do sistema, o terminal e o Python do Jarvis e a aba do HUD não fecham.
-- O agente só liga ou desliga os gestos (`gesture_control`); quem faz o gesto é a sua mão. Cada ação aparece no registro do HUD e no terminal.
+- O agente só liga ou desliga os gestos (`gesture_control`) e muda o mapeamento a seu pedido (`gesture_shortcuts`); quem faz o gesto é a sua mão. Cada ação aparece no registro do HUD e no terminal.
+- Tapar a câmera é o único gesto que vale desarmado, e só quando a mão apareceu logo antes e a imagem estava normal: apagar a luz ou começar com a tampa fechada não muta nada.
 
 ### Memória
 
@@ -495,7 +536,7 @@ cd web && npm test && npm run build
 ```
 
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores (numeração das Configurações, nomes, apelidos, layouts e desfazer em lote), câmera (hub com webcam falsa e vários consumidores, contagem de referência, endpoints e as ferramentas de visão), mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
-Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, gestos das mãos (mãos sintéticas: poses, máquina de estados, monitor vizinho com a geometria real dos 3 monitores e as ações com mocks), mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
+Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, gestos das mãos (mãos sintéticas: poses, máquina de estados, monitor vizinho com a geometria real dos 3 monitores, os gestos personalizáveis com o gestos.json e as ações com mocks), mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, mouse e teclado (conversão de coordenadas com os três monitores reais, DPI, allowlist de atalhos, recusa de senhas e janelas do sistema, confirmação de cliques, parse da resposta do modelo de visão), janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem, não clicam nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), memória (pedido na última fala, recusa de senhas/documentos/cartões, resumo na sessão seguinte, painel MEM-23), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa), palavra de ativação (microfone pelo nome que o navegador mostra, detector, pausa durante o link, aviso ao HUD e encerramento por silêncio) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador, nem abrem o microfone.
@@ -517,7 +558,8 @@ camera.py             Dono único da webcam (CameraHub): captura, feed MJPEG, fo
 vision.py             Ferramentas de visão: look_at_camera, camera_view e envio de imagens ao modelo
 gestures.py           Gestos das mãos: detector MediaPipe, motor, serviço, ferramenta de voz e runner --preview
 gesture_engine.py     Poses, filtro One Euro e máquina de estados dos gestos (lógica pura)
-gesture_actions.py    O que cada gesto faz: monitor vizinho, janelas, abas e mouse no ar (SendInput)
+gesture_actions.py    O que cada gesto faz: monitor vizinho, janelas, abas, mouse no ar, mídia e atalhos (SendInput)
+gesture_mapping.py    Gestos personalizáveis: gesto → ação (gestos.json), padrões e bloqueio de ações perigosas
 gesture_overlay.py    Aviso flutuante Win32 (sempre no topo, sem foco e sem cliques)
 prompts.py            Persona e saudação por horário
 server.py             FastAPI: serve web/dist, emite tokens LiveKit e serve a câmera

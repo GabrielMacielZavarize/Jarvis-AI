@@ -20,3 +20,6 @@ memoria*.json
 memoria.json.tmp
 # Configurações pessoais da IDE
 .idea/
+# O que cada gesto personalizável faz (gesto → ação), salvo pelo Jarvis
+gestos.json
+gestos.json.tmp

@@ -815,7 +815,7 @@ class ToolAndSettingsTests(unittest.TestCase):
         self.assertEqual([tool.__name__ for tool in build_tools(settings)], TOOL_NAMES + MEMORY_TOOL_NAMES + GESTURE_TOOL_NAMES)
 
     def test_voice_tool_calls_the_service(self) -> None:
-        (gesture_control,) = gestures.build_gesture_tools()
+        gesture_control, _shortcuts = gestures.build_gesture_tools()
         with patch("gestures.voice_action", return_value="Gestos ligados (teste).") as action:
             result = asyncio.run(gesture_control(FakeRunContext(), action="on"))
         action.assert_called_once_with("on")
