@@ -80,7 +80,7 @@ def main() -> int:
             + (f", aviso {reminder} min antes das reuniões" if reminder else ", sem aviso de reuniões")
         )
         if not is_connected():
-            step = "python calendar_tools.py --login" if CREDENTIALS_FILE.exists() else "veja 'Google Agenda' no README"
+            step = "python calendar_tools.py --login" if CREDENTIALS_FILE.exists() else "veja docs/agenda.md"
             print(f"Aviso: conecte a agenda com: {step}")
     else:
         print("Google Agenda (AGD-27): desativado")

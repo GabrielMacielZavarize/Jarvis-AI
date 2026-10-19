@@ -100,7 +100,7 @@ export function PairingScreen({ revoked, onPaired }: PairingScreenProps) {
             {busy ? 'Pareando…' : 'Parear'}
           </button>
           <p className="pairing__foot">
-            Aviso de certificado? Instale o <a href="/api/lan/ca.crt">certificado do Jarvis</a> (passo a passo no README).
+            Aviso de certificado? Instale o <a href="/api/lan/ca.crt">certificado do Jarvis</a> (passo a passo em docs/celular.md).
           </p>
         </div>
       </form>
