@@ -11,11 +11,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { attachTrack, lastUserSignalAt } from '../lib/audio';
 import { TOOL_LABELS } from '../lib/catalog';
+import { markToolResult } from '../lib/coreActivity';
 import { useHud } from '../lib/hudStore';
 import { MEMORY_RPC_METHOD, setMemoryTransport } from '../lib/memoryLink';
 import { describeMicrophone } from '../lib/microphone';
 import { parseHudRequest } from '../lib/panels';
 import { PointerImages, withPointerImage } from '../lib/pointer';
+import { playCue, playHudEventSound } from '../lib/sounds';
 import { orderLines } from '../lib/transcript';
 import type { ChatLine, HudEvent, JarvisMode, MicReport } from '../lib/types';
 
@@ -106,7 +108,9 @@ async function microphoneReport(room: Room): Promise<MicReport> {
 
 function handleHudEvent(event: HudEvent) {
   const hud = useHud.getState();
+  playHudEventSound(event);
   if (event.type === 'tool') {
+    if (event.status !== 'running') markToolResult(event.status);
     const label = TOOL_LABELS[event.name] ?? event.name;
     const detail = event.detail ? ` · ${event.detail}` : '';
     if (event.status === 'running') {
@@ -314,14 +318,18 @@ export function useLiveJarvis(): LiveJarvis {
     const hud = useHud.getState();
     const key = `${connectionState}:${agent.state === 'failed' ? 'failed' : agent.isConnected ? 'agent' : 'wait'}`;
     if (key === announced.current) return;
+    const wasLinked = announced.current !== '' && !announced.current.startsWith(ConnectionState.Disconnected);
     announced.current = key;
+    if (wasLinked && connectionState === ConnectionState.Disconnected) playCue('linkClose');
     if (connectionState === ConnectionState.Connected && agent.isConnected) {
+      playCue('linkOpen');
       hud.addLog('ok', 'J.A.R.V.I.S. online');
       hud.addLinks(['livekit.cloud'], 'link');
     }
     else if (connectionState === ConnectionState.Connected) hud.addLog('info', 'Link estabelecido · aguardando agente');
     else if (connectionState === ConnectionState.Reconnecting) hud.addLog('warn', 'Reconectando…');
     if (agent.state === 'failed') {
+      playCue('error');
       const reasons = agent.failureReasons?.join(' ') || 'O agente não respondeu.';
       setError(`${reasons} Verifique se o worker está rodando (python agent.py dev).`);
       hud.addLog('error', 'Agente não respondeu');

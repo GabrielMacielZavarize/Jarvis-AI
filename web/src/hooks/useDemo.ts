@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { setSynthetic } from '../lib/audio';
 import { TOOL_LABELS } from '../lib/catalog';
+import { markToolResult } from '../lib/coreActivity';
 import { DEMO_SCRIPT, speakingMs } from '../lib/demo';
 import { useHud } from '../lib/hudStore';
+import { playCue } from '../lib/sounds';
 import type { ChatLine, JarvisMode } from '../lib/types';
 
 const voice = { agentUntil: 0, userUntil: 0 };
@@ -103,6 +105,7 @@ export function useDemo(): DemoState {
           case 'tool':
             setMode('thinking');
             hud.setActiveTool(beat.name);
+            playCue('toolStart');
             hud.addLog('tool', `${TOOL_LABELS[beat.name] ?? beat.name}${beat.detail ? ` · ${beat.detail}` : ''}`);
             if (beat.hosts) hud.addLinks(beat.hosts, 'request');
             if (beat.sources) {
@@ -117,6 +120,8 @@ export function useDemo(): DemoState {
             hud.pushCard(beat.card.kind, beat.card.data() as never);
             hud.addLog('ok', `${TOOL_LABELS[useHud.getState().activeTool ?? ''] ?? 'Protocolo'} concluído`);
             hud.setActiveTool(null);
+            markToolResult('done');
+            playCue('toolDone');
             await wait(350);
             break;
         }

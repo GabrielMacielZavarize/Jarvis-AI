@@ -1,43 +1,13 @@
 /**
- * Short synthesized tones for the wake word (WAK-22): a rising chirp when "Jarvis" is heard and a
- * falling one when the link closes for silence. No audio files; Web Audio only.
+ * Tones for the wake word (WAK-22): a rising chirp when "Jarvis" is heard and a falling one when
+ * the link closes for silence. They follow the HUD sound settings (VOZ-30, lib/sounds.ts).
  */
-let context: AudioContext | null = null;
-
-function audioContext(): AudioContext | null {
-  if (typeof AudioContext === 'undefined') return null;
-  context ??= new AudioContext();
-  // Without a click on the page yet the browser may keep it suspended; the tone is then skipped.
-  if (context.state === 'suspended') void context.resume().catch(() => undefined);
-  return context;
-}
-
-function tone(ctx: AudioContext, start: number, from: number, to: number, duration: number, gain: number) {
-  const osc = ctx.createOscillator();
-  const env = ctx.createGain();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(from, start);
-  osc.frequency.exponentialRampToValueAtTime(to, start + duration);
-  env.gain.setValueAtTime(0.0001, start);
-  env.gain.exponentialRampToValueAtTime(gain, start + 0.012);
-  env.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-  osc.connect(env).connect(ctx.destination);
-  osc.start(start);
-  osc.stop(start + duration + 0.02);
-}
+import { playCue } from './sounds';
 
 export function playWakeChime() {
-  const ctx = audioContext();
-  if (!ctx) return;
-  const now = ctx.currentTime + 0.01;
-  tone(ctx, now, 660, 990, 0.09, 0.16);
-  tone(ctx, now + 0.1, 990, 1480, 0.14, 0.14);
+  playCue('wake');
 }
 
 export function playSleepChime() {
-  const ctx = audioContext();
-  if (!ctx) return;
-  const now = ctx.currentTime + 0.01;
-  tone(ctx, now, 990, 660, 0.12, 0.1);
-  tone(ctx, now + 0.13, 660, 440, 0.18, 0.08);
+  playCue('sleep');
 }

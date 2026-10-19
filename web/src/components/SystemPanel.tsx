@@ -7,6 +7,7 @@ import { useHud } from '../lib/hudStore';
 import type { JarvisMode } from '../lib/types';
 import type { WakeWord } from '../hooks/useWakeWord';
 import { Panel } from './Panel';
+import { SoundControls } from './SoundControls';
 
 /** Voice level meter updated through a ref — no React renders per audio frame. */
 function VoiceMeter({ channel, label }: { channel: 'agent' | 'user'; label: string }) {
@@ -106,6 +107,12 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
           <dt>Modelo</dt>
           <dd title={server?.model}>{demo ? 'jarvis-demo' : (server?.model ?? '—')}</dd>
         </div>
+        {server?.voice && !demo && (
+          <div className="stat" style={{ gridColumn: '1 / -1' }}>
+            <dt>Voz · VOZ-30</dt>
+            <dd title="JARVIS_VOICE ou “Jarvis, troca sua voz para…”">{server.voice}</dd>
+          </div>
+        )}
         <VoiceMeter channel="agent" label="Saída de voz · Jarvis" />
         <VoiceMeter channel="user" label="Entrada de voz · Você" />
         {!demo && inputs.length > 0 && (
@@ -129,6 +136,7 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
             </dd>
           </div>
         )}
+        <SoundControls />
         {wake && !demo && (
           <div className="stat" style={{ gridColumn: '1 / -1' }}>
             <dt>Ativação por voz · WAK-22</dt>
