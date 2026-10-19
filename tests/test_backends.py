@@ -16,6 +16,7 @@ BASE_TOOLS = [
     "manage_hud_panels",
     "check_microphone",
     "end_session",
+    "change_voice",
     "remember",
     "recall",
     "forget",

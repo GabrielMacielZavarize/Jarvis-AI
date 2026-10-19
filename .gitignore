@@ -20,3 +20,6 @@ memoria*.json
 memoria.json.tmp
 # Configurações pessoais da IDE
 .idea/
+
+# Escolha de voz feita por voz ("troca sua voz para X")
+voz.json

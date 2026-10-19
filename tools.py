@@ -1317,6 +1317,9 @@ def build_tools(settings: Settings) -> list[Any]:
         check_microphone,
         end_session,
     ]
+    from voices import build_voice_tools
+
+    tools.extend(build_voice_tools(settings))
     if settings.memory_enabled:
         from memory import build_memory_tools
 

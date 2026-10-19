@@ -33,6 +33,8 @@ TRUTHY_VALUES = {"1", "true", "yes", "on"}
 FALSY_VALUES = {"0", "false", "no", "off"}
 DEFAULT_WAKE_THRESHOLD = 0.5
 DEFAULT_WAKE_SILENCE_SECONDS = 30
+# Voz do Gemini Live: grave e calma, a mais parecida com o Jarvis do filme (lista em voices.py).
+DEFAULT_VOICE = "Charon"
 
 
 class SettingsError(ValueError):
@@ -89,6 +91,16 @@ def _parse_wake_silence(raw_value: str | None) -> int:
     return seconds
 
 
+def _parse_voice(env_map: Mapping[str, str]) -> str:
+    """JARVIS_VOICE (VOZ-30) wins over the older GOOGLE_VOICE; names are fixed to the exact case."""
+    raw = _clean_optional(env_map.get("JARVIS_VOICE")) or _clean_optional(env_map.get("GOOGLE_VOICE"))
+    if raw is None:
+        return DEFAULT_VOICE
+    from voices import canonical_voice
+
+    return canonical_voice(raw) or raw
+
+
 def _parse_csv(raw_value: str | None) -> tuple[str, ...]:
     if raw_value is None:
         return ()
@@ -129,7 +141,7 @@ class Settings:
     backend: str = "gemini-realtime"
     google_api_key: str | None = None
     google_model: str = DEFAULT_GOOGLE_MODEL
-    google_voice: str = "Charon"
+    google_voice: str = DEFAULT_VOICE
     openai_api_key: str | None = None
     openai_base_url: str | None = None
     openai_realtime_model: str = "gpt-realtime"
@@ -179,7 +191,7 @@ class Settings:
                 _clean_optional(env_map.get("GOOGLE_MODEL"))
                 or DEFAULT_GOOGLE_MODEL
             ),
-            google_voice=_clean_optional(env_map.get("GOOGLE_VOICE")) or "Charon",
+            google_voice=_parse_voice(env_map),
             openai_api_key=_clean_optional(env_map.get("OPENAI_API_KEY")),
             openai_base_url=_clean_optional(env_map.get("OPENAI_BASE_URL")),
             openai_realtime_model=(
@@ -275,6 +287,15 @@ class Settings:
                 f"Use '{DEFAULT_GOOGLE_MODEL}' ou outro modelo com 'live' ou "
                 "'-native-audio' no nome."
             )
+
+        if self.backend == "gemini-realtime":
+            from voices import GEMINI_VOICES, canonical_voice
+
+            if canonical_voice(self.google_voice) is None:
+                errors.append(
+                    f"JARVIS_VOICE inválida: {self.google_voice!r}. Vozes do Gemini Live: "
+                    f"{', '.join(GEMINI_VOICES)}."
+                )
 
         if self.computer_use_enabled and not self.google_api_key:
             errors.append(
