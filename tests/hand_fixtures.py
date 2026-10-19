@@ -44,6 +44,15 @@ POSES = {
     "loose_fist": (set(), "pinch"),  # punho frouxo, polegar encostado na ponta do indicador
     "thumb_down_relaxed": (set(), "out"),  # como saiu na webcam: dedos semidobrados, polegar ~20° abaixo
 }
+# Poses dos gestos personalizáveis (gesture_engine.refine), fora de POSES para não misturar
+# com o classify: o 👌 é a mesma mão da pinça; o rock vale com o polegar dobrado ou para fora.
+EXTRA_POSES = {
+    "three": ({"index", "middle", "ring"}, "tucked"),
+    "rock": ({"index", "pinky"}, "tucked"),
+    "rock_thumb": ({"index", "pinky"}, "out"),
+    "ok": ({"middle", "ring", "pinky"}, "pinch"),
+    "pinch_curled": (set(), "pinch"),  # pinça com os outros dedos meio dobrados: muda volume, não é 👌
+}
 # Giro que deixa o polegar esticado apontando para baixo / para cima no quadro.
 THUMB_ANGLE = math.degrees(math.atan2(THUMB_OUT[1], THUMB_OUT[0]))
 ROLLS = {"thumb_down": 270 - THUMB_ANGLE, "thumb_up": 90 - THUMB_ANGLE, "thumb_down_relaxed": 200 - THUMB_ANGLE}
@@ -81,11 +90,13 @@ def _thumb(mode: str, index_tip: np.ndarray) -> list[np.ndarray]:
 
 def hand_space(pose: str) -> np.ndarray:
     """(21, 3) points of a pose in hand space (y up)."""
-    straight, thumb = POSES[pose]
+    straight, thumb = {**POSES, **EXTRA_POSES}[pose]
     curls: dict[str, tuple[float, float, float]] = {}
     for name in FINGER_BASES:
-        if pose == "pinch" and name == "index":
+        if pose in ("pinch", "ok", "pinch_curled") and name == "index":
             curls[name] = (30, 40, 20)
+        elif pose == "pinch_curled":
+            curls[name] = (50, 60, 30)
         elif pose == "loose_fist":
             curls[name] = (50, 45, 30) if name == "pinky" else (70, 80, 45)
         elif pose == "thumb_down_relaxed":
@@ -170,6 +181,25 @@ def move(
         k = path(i / (frames - 1))
         point = (origin[0] + (end[0] - origin[0]) * k, origin[1] + (end[1] - origin[1]) * k)
         timeline.append((start + i / FPS, make_hand(pose, point, **kwargs)))
+    return timeline
+
+
+def pair(
+    start: float,
+    seconds: float,
+    gap_from: float,
+    gap_to: float,
+    pose: str = "open",
+    y: float = 0.5,
+) -> list[tuple[float, Hand, Hand]]:
+    """Two hands side by side whose centers go from `gap_from` to `gap_to` apart (frame widths)."""
+    frames = max(2, round(seconds * FPS))
+    timeline = []
+    for i in range(frames):
+        gap = gap_from + (gap_to - gap_from) * i / (frames - 1)
+        left = make_hand(pose, (0.5 - gap / 2, y), size=0.14)
+        right = make_hand(pose, (0.5 + gap / 2, y), size=0.14)
+        timeline.append((start + i / FPS, left, right))
     return timeline
 
 

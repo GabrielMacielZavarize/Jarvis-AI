@@ -313,6 +313,7 @@ class TraceFormatTests(unittest.TestCase):
         hands = [hand for _, hand in timeline]
         tracker = MagicMock()
         tracker.detect.side_effect = hands
+        tracker.other_hands.return_value = []
         clock = {"t": 0.0}
 
         def frames() -> Any:

@@ -12,6 +12,9 @@ ferramenta de voz gesture_control (JARVIS_ENABLE_GESTURES=true).
 
 Privacidade: os quadros são processados na memória, neste computador, e descartados. Nada é
 gravado nem enviado; só os eventos (ex.: "janela → monitor de cima") vão para o HUD local.
+
+Gestos personalizáveis (OK, pinça, rock, joinha, tapar a câmera, duas mãos): o que cada um faz
+está no gestos.json (gesture_mapping) e muda por voz com a ferramenta gesture_shortcuts.
 """
 
 from __future__ import annotations
@@ -34,8 +37,10 @@ from typing import Any, Literal
 import numpy as np
 from livekit.agents import RunContext, function_tool, get_job_context
 
+import gesture_mapping
 from gesture_actions import DesktopActions, DryRunActions, GestureActionError, Target, describe_direction
 from gesture_engine import Command, GestureMachine, Hand, Pose, State, Status, Tuning, classify, hand_row
+from gesture_mapping import Binding, MappingError
 from gesture_overlay import Overlay, OverlayView
 
 logger = logging.getLogger("jarvis-gestures")
@@ -59,9 +64,14 @@ ACTION_LABELS = {
     "undo": "Desfazendo",
     "close": "Fechando",
     "tab": "Trocando de aba",
+    "screen": "Mandando para a tela",
 }
+# Câmera tapada pela palma: imagem escura ou quase lisa (desvio-padrão do cinza baixo).
+COVER_FLAT_STD = 9.0
+COVER_DARK_MEAN = 35.0
+COVER_DARK_STD = 18.0
 HINT_ARMED = "punho: pegar janela · polegar ↓: fechar · 2 dedos: abas · indicador parado: mouse"
-HINT_GRAB = "mova e abra a mão: outro monitor · abra parado: estender"
+HINT_GRAB = "mova e abra a mão: outro monitor · abra parado: estender · 1, 2 ou 3 dedos: tela"
 HINT_MOUSE = "pinça ou fechar a mão: clique · segurar: arrastar · palma parada: sair"
 
 
@@ -102,7 +112,7 @@ def ensure_model(path: Path = MODEL_PATH) -> Path:
 
 
 class HandTracker:
-    """MediaPipe HandLandmarker (Tasks API) in video mode: one hand per frame."""
+    """MediaPipe HandLandmarker (Tasks API) in video mode: the main hand, plus a second one for two-hand gestures."""
 
     def __init__(self, model_path: Path | None = None) -> None:
         import mediapipe as mp
@@ -112,13 +122,18 @@ class HandTracker:
         options = vision.HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=str(model_path or ensure_model())),
             running_mode=vision.RunningMode.VIDEO,
-            num_hands=1,
+            num_hands=2,
             min_hand_detection_confidence=0.6,
             min_hand_presence_confidence=0.6,
             min_tracking_confidence=0.5,
         )
         self._landmarker = vision.HandLandmarker.create_from_options(options)
         self._last_ms = -1
+        self._others: list[Hand] = []
+
+    def other_hands(self) -> list[Hand]:
+        """Hands besides the one detect() returned, from the same frame."""
+        return list(self._others)
 
     def detect(self, frame: np.ndarray, t: float) -> Hand | None:
         """Hand in a mirrored BGR frame, or None."""
@@ -130,29 +145,32 @@ class HandTracker:
         stamp = max(self._last_ms + 1, int(t * 1000))
         self._last_ms = stamp
         result = self._landmarker.detect_for_video(image, stamp)
-        return hand_from_result(result, width / height)
+        hands = [hand for index in range(len(result.hand_landmarks)) if (hand := hand_from_result(result, width / height, index))]
+        self._others = hands[1:]
+        return hands[0] if hands else None
 
     def close(self) -> None:
         self._landmarker.close()
 
 
-def hand_from_result(result: Any, aspect: float) -> Hand | None:
-    """First hand of a HandLandmarkerResult, with the detector's confidence as Hand.score.
+def hand_from_result(result: Any, aspect: float, index: int = 0) -> Hand | None:
+    """One hand (the first by default) of a HandLandmarkerResult, with the detector's confidence as Hand.score.
 
     The Tasks API only reports a score for the handedness (left/right); it drops when the hand
     is blurred, edge-on or half out of the frame, so the engine uses it to discard bad frames.
     """
-    if not result.hand_landmarks:
+    if len(result.hand_landmarks) <= index:
         return None
-    points = np.array([[p.x, p.y, p.z] for p in result.hand_landmarks[0]], dtype=float)
+    points = np.array([[p.x, p.y, p.z] for p in result.hand_landmarks[index]], dtype=float)
     if points.shape != (21, 3) or not np.all(np.isfinite(points)):
         return None
     world = None
-    if result.hand_world_landmarks:
-        world = np.array([[p.x, p.y, p.z] for p in result.hand_world_landmarks[0]], dtype=float)
+    if len(result.hand_world_landmarks) > index:
+        world = np.array([[p.x, p.y, p.z] for p in result.hand_world_landmarks[index]], dtype=float)
         if world.shape != (21, 3) or not np.all(np.isfinite(world)):
             world = None
-    category = result.handedness[0][0] if result.handedness and result.handedness[0] else None
+    handedness = result.handedness[index] if len(result.handedness) > index else None
+    category = handedness[0] if handedness else None
     return Hand(
         points=points,
         world=world,
@@ -277,6 +295,43 @@ def _prepare(frame: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(frame[:, ::-1])
 
 
+def camera_covered(frame: np.ndarray) -> bool:
+    """True when the palm covers the lens: a dark or almost flat image."""
+    gray = frame[::8, ::8].astype(np.float32).mean(axis=2)
+    spread = float(gray.std())
+    return spread < COVER_FLAT_STD or (float(gray.mean()) < COVER_DARK_MEAN and spread < COVER_DARK_STD)
+
+
+class MicSwitch:
+    """Mutes/unmutes what the Jarvis hears in the voice session (tapar a câmera).
+
+    Bound by agent.py to the AgentSession; the change runs on the session's event loop.
+    """
+
+    def __init__(self) -> None:
+        self._session: Any | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def bind(self, session: Any, loop: asyncio.AbstractEventLoop) -> None:
+        self._session, self._loop = session, loop
+
+    def unbind(self) -> None:
+        self._session = self._loop = None
+
+    def toggle(self) -> str:
+        session, loop = self._session, self._loop
+        if session is None or loop is None or loop.is_closed():
+            raise GestureActionError("O microfone do Jarvis só muda com uma conversa de voz ligada.")
+        enabled = not session.input.audio_enabled
+        loop.call_soon_threadsafe(session.input.set_audio_enabled, enabled)
+        if enabled:
+            return "Microfone do Jarvis ligado: estou ouvindo de novo."
+        return "Microfone do Jarvis mudo. Tape a câmera de novo para eu voltar a ouvir."
+
+
+MIC = MicSwitch()
+
+
 class GestureEngine:
     """Frames → hand → commands → desktop actions, with overlay and events.
 
@@ -299,6 +354,8 @@ class GestureEngine:
         mouse: bool = False,
         on_ready: Callable[[], None] | None = None,
         trace: Any | None = None,
+        bindings: Callable[[str], Binding | None] = gesture_mapping.binding_for,
+        mic: Callable[[], str] | None = None,
     ) -> None:
         self.frames = frames
         self.actions = actions
@@ -311,6 +368,8 @@ class GestureEngine:
         self.on_ready = on_ready
         self.trace = trace  # arquivo para números de calibração (nunca imagens)
         self.calibrated = self.machine.tuning != Tuning()  # limiares pessoais em uso
+        self.bindings = bindings
+        self.mic = mic or MIC.toggle
         self.fps = 0.0
         self.hand: Hand | None = None
         self._requests: queue.Queue[str] = queue.Queue()
@@ -379,7 +438,12 @@ class GestureEngine:
         self._apply_requests(t)
         image = _prepare(frame)
         self.hand = self.tracker.detect(image, t)
-        commands = self.machine.step(t, self.hand)
+        others = self.tracker.other_hands() if self.hand is not None and hasattr(self.tracker, "other_hands") else []
+        if others:
+            commands = self.machine.step_pair(t, self.hand, others[0])
+        else:
+            commands = self.machine.step(t, self.hand)
+        commands += self.machine.cover(t, self.hand is None and camera_covered(image))
         for command in commands:
             self._dispatch(command, t)
         self._refresh_overlay(t)
@@ -459,6 +523,13 @@ class GestureEngine:
                 self._submit(kind, getattr(self.actions, kind))
             elif kind == "tab":
                 self._submit(kind, self.actions.tab, command.step)
+            elif kind == "screen":
+                target, self._target = self._target, None
+                self._aim = (None, None)
+                if target is not None:
+                    self._submit(kind, self.actions.to_screen, target, command.step, title=target.title)
+            elif kind == "gesture" and command.name:
+                self._gesture(command.name)
             elif kind in ("armed", "disarmed", "mouse_on", "mouse_off"):
                 state = {"armed": "armed", "disarmed": "idle", "mouse_on": "mouse", "mouse_off": "armed"}[kind]
                 if kind == "disarmed":
@@ -478,8 +549,48 @@ class GestureEngine:
         self._aim = (None, None)
         self._emit("grab", title=target.title, browser=target.browser)
 
-    def _submit(self, name: str, func: Callable[..., str], *args: Any, title: str | None = None) -> None:
-        self._flash = (f"{ACTION_LABELS[name]}…", "info", self.clock() + 5.0)
+    def _binding(self, gesture: str) -> Binding | None:
+        try:
+            return self.bindings(gesture)
+        except Exception:
+            logger.exception("Falha ao ler o gestos.json.")
+            return None
+
+    def _gesture(self, gesture: str) -> None:
+        """A customizable gesture: run what gestos.json binds it to (nothing when unbound)."""
+        binding = self._binding(gesture)
+        if binding is None:
+            logger.info("Gesto %s sem ação.", gesture)
+            return
+        actions = self.actions
+        value = binding.value
+        if binding.kind == "layout":
+            call: tuple[Callable[..., str], tuple[Any, ...]] = (actions.layout, (value,))
+        elif binding.kind == "app":
+            call = (actions.launch, (value,))
+        elif binding.kind == "site":
+            call = (actions.site, (value,))
+        elif binding.kind == "atalho":
+            call = (actions.shortcut, (binding.keys, value))
+        elif value in ("play_pause", "next", "previous"):
+            call = (actions.media, (value,))
+        elif value in ("volume_up", "volume_down", "mute", "unmute"):
+            call = (actions.volume, ({"volume_up": "up", "volume_down": "down"}.get(value, value),))
+        elif value in ("maximize", "restore", "minimize"):
+            call = (actions.focus_window, (value,))
+        elif value in ("next_tab", "previous_tab"):
+            call = (actions.tab, (1 if value == "next_tab" else -1,))
+        elif value == "mic_toggle":
+            call = (self.mic, ())
+        else:  # undo, show_desktop
+            call = (getattr(actions, value), ())
+        label = binding.label
+        self._submit(gesture, call[0], *call[1], label=label[0].upper() + label[1:])
+
+    def _submit(
+        self, name: str, func: Callable[..., str], *args: Any, title: str | None = None, label: str | None = None
+    ) -> None:
+        self._flash = (f"{label or ACTION_LABELS[name]}…", "info", self.clock() + 5.0)
 
         def job() -> None:
             try:
@@ -510,6 +621,8 @@ class GestureEngine:
         if status.state == State.CLOSE and target is not None:
             what = "ABA" if target.browser else "JANELA"
             return OverlayView(f"FECHAR {what}? {target.title}", "segure o polegar para baixo · solte para cancelar", status.progress, "danger")
+        if status.state == State.GRAB and target is not None and status.charging == "screen" and status.screen:
+            return OverlayView(f"→ TELA {status.screen}", f"segure os dedos parados · {target.title}", status.progress, "armed")
         if status.state == State.GRAB and target is not None:
             direction, label = self._aim
             if direction and label:
@@ -517,6 +630,11 @@ class GestureEngine:
             if direction:
                 return OverlayView(f"Não há {describe_direction(direction)}", target.title, None, "warn")
             return OverlayView(f"SEGURANDO · {target.title}", HINT_GRAB, None, "info")
+        if status.charging == "gesture" and status.gesture and (status.progress or 0) > 0.15:
+            binding = self._binding(status.gesture)
+            if binding is not None:
+                info = gesture_mapping.GESTURES[status.gesture]
+                return OverlayView(binding.label.upper(), f"{info.name} · segure para confirmar", status.progress, "armed")
         flash = self._flash
         if flash and t < flash[2]:
             return OverlayView(flash[0], "", None, flash[1])
@@ -875,7 +993,58 @@ def build_gesture_tools() -> list[Any]:
         logger.info("Gestos por voz: %s → %s", action, result)
         return result
 
-    return [gesture_control]
+    @function_tool()
+    async def gesture_shortcuts(
+        context: RunContext,
+        action: Literal["list", "explain", "set", "reset"],
+        gesture: str | None = None,
+        kind: Literal["action", "layout", "app", "site", "keys", "none"] | None = None,
+        value: str | None = None,
+    ) -> str:
+        """List, explain or change what the customizable hand gestures do (saved in gestos.json).
+
+        "lista meus gestos" = list. "o que faz o rock?" = explain(gesture="rock"). "quando eu
+        fizer joinha, pausa a música" = set(gesture="joinha", kind="action", value="play_pause").
+        "o rock abre o Spotify" = set(gesture="rock", kind="app", value="spotify"). "o OK aplica
+        o modo estudo" = set(gesture="ok", kind="layout", value="estudo"). "o joinha não faz mais
+        nada" = set(kind="none"). "volta o rock ao padrão" = reset(gesture="rock"); reset without
+        gesture restores all. Customizable gestures: ok, joinha, rock, pinca_sobe, pinca_desce,
+        tapar_camera, maos_afastam, maos_aproximam (the window gestures are fixed). Closing,
+        deleting or typing are refused for gestures; report the refusal as given.
+
+        Args:
+            action: list, explain, set or reset.
+            gesture: the gesture as the user said it ("joinha", "rock", "OK", "tapar a câmera").
+            kind: for set: action (built-in), layout (saved window layout), app, site, keys
+                (shortcut like "ctrl+shift+m") or none.
+            value: for set: the built-in action (play_pause, next, previous, volume_up,
+                volume_down, mute, unmute, mic_toggle, maximize, restore, minimize, undo,
+                show_desktop, next_tab, previous_tab), the layout/app name, the site or the keys.
+        """
+        await tool_status("gesture_shortcuts", "running", action)
+        try:
+            result = await asyncio.to_thread(shortcuts_action, action, gesture, kind, value)
+        except MappingError as exc:
+            result = str(exc)
+        await tool_status("gesture_shortcuts", "done", action)
+        logger.info("Atalhos de gesto por voz: %s %s → %s", action, gesture, result)
+        return result
+
+    return [gesture_control, gesture_shortcuts]
+
+
+def shortcuts_action(action: str, gesture: str | None = None, kind: str | None = None, value: str | None = None) -> str:
+    if action == "list":
+        return gesture_mapping.list_gestures()
+    if action == "explain":
+        return gesture_mapping.explain(gesture)
+    if action == "reset":
+        return gesture_mapping.reset_binding(gesture)
+    if action == "set":
+        if not kind:
+            raise MappingError("Diga o que o gesto deve fazer: uma ação, um layout, um app, um site ou um atalho.")
+        return gesture_mapping.set_binding(gesture or "", kind, value)
+    raise MappingError(f"Ação desconhecida: {action}.")
 
 
 # ───────────────────────── calibração guiada ─────────────────────────

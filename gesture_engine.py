@@ -19,6 +19,10 @@ Precisão: os 21 pontos passam por um filtro One Euro antes da pose (tira o trem
 gestos rápidos) e as distâncias usam o tamanho da palma, para valer perto e longe da câmera. Os
 limiares das poses ficam no Tuning; `python gestures.py --calibrate` mede os seus e os grava em
 gestos_calibracao.json, que o Tuning.load() usa quando existe.
+
+Gestos personalizáveis (OK, pinça subindo/descendo, rock, joinha, tapar a câmera, duas mãos)
+saem como Command("gesture", name=...): o que cada um faz vem do gestos.json (gesture_mapping).
+A única exceção ao "armar antes" é tapar a câmera, que não acontece sem querer.
 """
 
 from __future__ import annotations
@@ -62,6 +66,8 @@ class Pose(str, Enum):
     PINCH = "pinch"
     THUMB_DOWN = "thumb_down"
     THUMB_UP = "thumb_up"
+    THREE = "three"  # indicador, médio e anelar (com a janela pega: tela 3)
+    ROCK = "rock"  # 🤘 indicador e mindinho
 
 
 class State(str, Enum):
@@ -222,6 +228,7 @@ class Command:
     vector: tuple[float, float] = (0.0, 0.0)
     point: tuple[float, float] | None = None
     step: int = 0
+    name: str | None = None  # gesto personalizável ("ok", "rock"...), para kind == "gesture"
 
 
 @dataclass(frozen=True)
@@ -233,6 +240,29 @@ class Status:
     progress: float | None = None
     direction: str | None = None
     dragging: bool = False
+    gesture: str | None = None  # gesto carregando quando charging == "gesture"
+    screen: int | None = None  # tela escolhida com os dedos quando charging == "screen"
+
+
+@dataclass(frozen=True)
+class CustomTuning:
+    """Limiares dos gestos personalizáveis (separados do Tuning, que é da calibração)."""
+
+    hold_s: float = 0.7  # rock e joinha parados
+    ok_hold_s: float = 0.8
+    dial_arm_s: float = 0.2  # pinça segurada antes de o volume começar a contar
+    volume_step: float = 0.06  # subida/descida da pinça por degrau de volume (alturas de quadro)
+    volume_step_palms: float = 0.35  # ...ou isso em palmas, com a mão perto da câmera
+    screen_pick_s: float = 0.5  # janela pega + dedos parados
+    cover_hold_s: float = 1.0
+    cover_recent_s: float = 1.5  # a mão tem de ter aparecido pouco antes de tapar
+    pair_window_s: float = 0.9
+    pair_change: float = 0.22  # afastar/aproximar as mãos pelo menos isso (alturas de quadro)
+    pair_ratio: float = 1.4
+
+
+FINGER_COUNT = {Pose.POINT: 1, Pose.TWO: 2, Pose.THREE: 3}
+HOLD_GESTURES = {Pose.THUMB_UP: "joinha", Pose.ROCK: "rock"}
 
 
 DEFAULT_TUNING = Tuning()
@@ -386,6 +416,21 @@ def hand_quality(hand: Hand, tuning: Tuning | None = None, previous_palm: float 
     elif previous_palm and abs(palm_size(hand) / previous_palm - 1.0) > tuning.max_palm_jump:
         reason = "salto"
     return Quality(score=score, inside=inside, reason=reason)
+def refine(shape: Shape) -> Shape:
+    """Poses dos gestos novos que o classify deixa como ambíguas (três dedos, rock)."""
+    if shape.pose != Pose.NONE:
+        return shape
+    extended, folded = shape.extended, shape.folded
+    if extended["index"] and extended["middle"] and extended["ring"] and folded["pinky"]:
+        return replace(shape, pose=Pose.THREE)
+    if extended["index"] and extended["pinky"] and folded["middle"] and folded["ring"]:
+        return replace(shape, pose=Pose.ROCK)
+    return shape
+
+
+def is_ok_sign(shape: Shape) -> bool:
+    """👌: pinça com médio, anelar e mindinho esticados (a pinça do mouse aceita qualquer mão)."""
+    return shape.pose == Pose.PINCH and all(shape.extended[f] for f in ("middle", "ring", "pinky"))
 
 
 # ───────────────────────── suavização ─────────────────────────
@@ -496,8 +541,9 @@ def dominant_direction(dx: float, dy: float, current: str | None = None) -> str:
 class GestureMachine:
     """Turns one hand per frame into commands. Call step() for every frame (hand=None when absent)."""
 
-    def __init__(self, tuning: Tuning | None = None) -> None:
+    def __init__(self, tuning: Tuning | None = None, custom: CustomTuning | None = None) -> None:
         self.tuning = tuning or Tuning()
+        self.custom = custom or CustomTuning()
         self.state = State.IDLE
         self.pose = Pose.NONE
         self._pose_since = 0.0
@@ -535,6 +581,13 @@ class GestureMachine:
         self._last_point: tuple[float, float] | None = None
         self._charging: tuple[str, float] | None = None
         self._shape: Shape | None = None
+        self._charging_name: str | None = None
+        self._fired_pose_since: float | None = None  # gesto de segurar já disparado nesta pose
+        self._dial: tuple[float, float, bool, int, float] | None = None  # (pose desde, origem y, mexeu, último sentido, extremo)
+        self._paired = False
+        self._pair: deque[tuple[float, float]] = deque()
+        self._lit_at: float | None = None
+        self._cover: tuple[float, bool, bool] | None = None  # (desde, vale, disparou)
 
     @property
     def shape(self) -> Shape | None:
@@ -586,8 +639,17 @@ class GestureMachine:
         progress = None
         if self.state == State.CLOSE:
             charging = ("close", min(1.0, (t - self._close_t) / self.tuning.close_hold_s))
+        gesture = self._charging_name if charging and charging[0] == "gesture" else None
+        if charging is None and self._cover is not None and self._cover[1] and not self._cover[2]:
+            held = t - self._cover[0]
+            if held > 0.3:
+                charging = ("gesture", min(1.0, held / self.custom.cover_hold_s))
+                gesture = "tapar_camera"
         if charging:
             progress = charging[1]
+        screen = None
+        if charging and charging[0] == "screen":
+            screen = FINGER_COUNT.get(self.pose)
         return Status(
             state=self.state,
             pose=self.pose,
@@ -596,6 +658,8 @@ class GestureMachine:
             progress=progress,
             direction=self._direction if self.state == State.GRAB else None,
             dragging=self._dragging,
+            gesture=gesture,
+            screen=screen,
         )
 
     # ── quadro a quadro ──
@@ -615,7 +679,8 @@ class GestureMachine:
             self._lost(t, out)
             return out
 
-        if fresh:
+        if fresh or self._paired:
+            self._paired = False
             self._landmark_filter.reset()
             self._center_filter.reset()
             self._pointer_filter.reset()
@@ -629,7 +694,7 @@ class GestureMachine:
         # A pose sai dos pontos suavizados; centro e ponteiro saem dos brutos, que já têm o
         # próprio filtro (assim o mouse e os arremessos não somam o atraso de dois filtros).
         center, pointer = anchors(hand)
-        shape = replace(classify(self._landmark_filter(t, hand), tuning), center=center, pointer=pointer)
+        shape = refine(replace(classify(self._landmark_filter(t, hand), tuning), center=center, pointer=pointer))
         self._shape = shape
         self._scale = min(1.6, max(0.6, shape.palm / tuning.reference_palm))
         if self._debounce(t, shape.pose):
@@ -688,6 +753,8 @@ class GestureMachine:
             return
         if self.pose in (Pose.FIST, Pose.THUMB_DOWN) and self._pose_since < self._cooldown_until:
             self._need_release = True  # fechou durante o intervalo: é a mão relaxando, não um gesto
+        if self._custom_armed(t, shape, center, out):
+            return
 
         if self.pose == Pose.FIST and not self._need_release and t - self._pose_since >= tuning.grab_confirm_s:
             self._enter(State.GRAB, t)
@@ -751,8 +818,18 @@ class GestureMachine:
             self._direction = direction
             out.append(Command("aim", direction=direction, vector=(dx, dy)))
 
+        # Janela pega + 1, 2 ou 3 dedos parados: manda para a tela com esse número.
+        fingers = FINGER_COUNT.get(self.pose)
+        if fingers and self._direction is None:
+            held = self._still_for(t)
+            self._charging = ("screen", min(1.0, held / self.custom.screen_pick_s))
+            if held >= self.custom.screen_pick_s:
+                out.append(Command("screen", step=fingers))
+                self._after_action(t, cooldown=tuning.window_cooldown_s)
+            return
+
         # Ao abrir a mão o polegar desencosta do indicador por último (fase de "pinça"): já é soltar.
-        released = self.pose in (Pose.OPEN, Pose.TWO, Pose.POINT, Pose.THUMB_UP, Pose.PINCH) or (
+        released = self.pose in (Pose.OPEN, Pose.TWO, Pose.POINT, Pose.THREE, Pose.THUMB_UP, Pose.PINCH, Pose.ROCK) or (
             self.pose == Pose.NONE and t - self._pose_since >= tuning.release_none_s
         )
         if released:
@@ -843,6 +920,116 @@ class GestureMachine:
                 out.extend([Command("mouse_off"), Command("disarmed")])
         elif self.state == State.ARMED and lost_for > tuning.lost_disarm_s:
             out.extend(self.disarm(t))
+
+    # ── gestos personalizáveis ──
+
+    def _custom_armed(self, t: float, shape: Shape, center: tuple[float, float], out: list[Command]) -> bool:
+        """OK, pinça subindo/descendo, rock e joinha (armado). True quando a pose é deles."""
+        if self.pose == Pose.PINCH:
+            self._pinch_dial(t, shape, center, out)
+            return True
+        name = HOLD_GESTURES.get(self.pose)
+        if name is None:
+            return False
+        if self._fired_pose_since != self._pose_since:
+            held = self._still_for(t)
+            if held > 0.2:
+                self._charge(name, held / self.custom.hold_s)
+            if held >= self.custom.hold_s:
+                self._fire(t, name, out)
+        return True
+
+    def _pinch_dial(self, t: float, shape: Shape, center: tuple[float, float], out: list[Command]) -> None:
+        """Pinça: subir/descer muda o volume degrau a degrau; o 👌 parado dispara 'ok'."""
+        custom = self.custom
+        if self._dial is None or self._dial[0] != self._pose_since or t - self._pose_since < custom.dial_arm_s:
+            self._dial = (self._pose_since, center[1], False, 0, center[1])  # origem fresca até a pinça firmar
+            return
+        if self._fired_pose_since == self._pose_since:
+            return  # já disparou o OK: só vale de novo depois de soltar
+        since, origin, moved, last, extreme = self._dial
+        step = max(custom.volume_step, custom.volume_step_palms * shape.palm)
+        y = center[1]
+        extreme = min(extreme, y) if last > 0 else max(extreme, y) if last < 0 else y
+        rise = origin - y  # y cresce para baixo
+        if last and rise * last < 0:
+            rise = extreme - y  # inverteu o sentido: conta do ponto mais longe a que a mão chegou
+        moved = moved or abs(rise) >= step * 0.5
+        if abs(rise) >= step:
+            origin = extreme = y
+            last = 1 if rise > 0 else -1
+            out.append(Command("gesture", name="pinca_sobe" if rise > 0 else "pinca_desce"))
+        self._dial = (since, origin, moved, last, extreme)
+        if not moved and is_ok_sign(shape):
+            held = self._still_for(t)
+            if held > 0.3:
+                self._charge("ok", held / custom.ok_hold_s)
+            if held >= custom.ok_hold_s:
+                self._fire(t, "ok", out)
+
+    def _charge(self, name: str, progress: float) -> None:
+        self._charging = ("gesture", min(1.0, progress))
+        self._charging_name = name
+
+    def _fire(self, t: float, name: str, out: list[Command]) -> None:
+        self._fired_pose_since = self._pose_since
+        out.append(Command("gesture", name=name))
+        self._cooldown_until = t + self.tuning.cooldown_s
+
+    def step_pair(self, t: float, first: Hand, second: Hand) -> list[Command]:
+        """Two hands in the frame: open palms moving apart or together (armed only)."""
+        if self.state != State.ARMED or t < self._cooldown_until:
+            self._pair.clear()
+            return self.step(t, first)
+        self._charging = None
+        self._last_seen = t
+        self._paired = True  # a mão única recomeça do zero depois (sem swipe falso)
+        a, b = classify(first, self.tuning), classify(second, self.tuning)
+        if a.pose != Pose.OPEN or b.pose != Pose.OPEN:
+            self._pair.clear()
+            return []
+        custom = self.custom
+        distance = math.hypot(a.center[0] - b.center[0], a.center[1] - b.center[1])
+        self._pair.append((t, distance))
+        while self._pair and t - self._pair[0][0] > custom.pair_window_s:
+            self._pair.popleft()
+        low = min(sample[1] for sample in self._pair)
+        high = max(sample[1] for sample in self._pair)
+        name = None
+        if distance - low >= custom.pair_change and distance >= low * custom.pair_ratio:
+            name = "maos_afastam"
+        elif high - distance >= custom.pair_change and high >= distance * custom.pair_ratio:
+            name = "maos_aproximam"
+        if name is None:
+            return []
+        self._pair.clear()
+        self._after_action(t)
+        return [Command("gesture", name=name)]
+
+    def cover(self, t: float, covered: bool) -> list[Command]:
+        """Camera covered by the palm (dark, flat frame with no hand) for a moment: 'tapar_camera'.
+
+        Only counts when the camera was showing a normal image and the hand appeared just before,
+        so turning the lights off or starting with the lens shut does nothing. Works disarmed too.
+        """
+        if not covered:
+            self._lit_at = t
+            self._cover = None
+            return []
+        if self._cover is None:
+            recent = self.custom.cover_recent_s
+            valid = (
+                self._lit_at is not None
+                and t - self._lit_at <= 0.5
+                and self._last_seen is not None
+                and t - self._last_seen <= recent
+            )
+            self._cover = (t, valid, False)
+        since, valid, fired = self._cover
+        if valid and not fired and t - since >= self.custom.cover_hold_s:
+            self._cover = (since, valid, True)
+            return [Command("gesture", name="tapar_camera")]
+        return []
 
     # ── auxiliares ──
 

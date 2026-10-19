@@ -6,7 +6,9 @@ da geometria real dos monitores, nunca de números fixos: "para cima" é o monit
 fisicamente acima daquele onde a janela está agora.
 
 Continua sendo um conjunto fechado de ações visíveis: mover, estender, minimizar, desfazer,
-fechar (com as mesmas proteções da voz), trocar de aba e mover/clicar o mouse.
+fechar (com as mesmas proteções da voz), trocar de aba e mover/clicar o mouse. Os gestos
+personalizáveis (gestos.json) somam mídia, volume, layouts, abrir app/site e atalhos de
+teclado, sempre pelas mesmas funções do pc_control que a voz usa.
 """
 
 from __future__ import annotations
@@ -38,6 +40,8 @@ VK_TAB = 0x09
 VK_SHIFT = 0x10
 VK_CONTROL = 0x11
 VK_W = 0x57
+MEDIA_KEYS = {"play_pause": (0xB3, "Tocar/pausar."), "next": (0xB0, "Próxima faixa."), "previous": (0xB1, "Faixa anterior.")}
+VOLUME_STEP = 5  # por degrau da pinça subindo/descendo
 BOUNDS_CACHE_SECONDS = 5.0
 
 
@@ -422,6 +426,72 @@ class DesktopActions:
         self.input.keys(VK_CONTROL, VK_SHIFT, VK_TAB)
         return "Aba anterior."
 
+    def to_screen(self, target: Target, number: int) -> str:
+        """Send the grabbed window to screen `number` (as in the Windows 'Identify')."""
+        pc = _pc()
+        if not _window_exists(target.window.hwnd):
+            raise GestureActionError("A janela fechou antes de eu movê-la.")
+        screen = pc._screen_numbered(number)
+        if screen is None:
+            raise GestureActionError(f"Não há tela {number}.")
+        message = pc._move_window(target.window, screen)
+        if "Tentei" in message:
+            raise GestureActionError(message)
+        return message
+
+    # ── gestos personalizáveis ──
+
+    def media(self, action: str) -> str:
+        code, message = MEDIA_KEYS[action]
+        self.input.keys(code)
+        return message
+
+    def volume(self, action: str) -> str:
+        level = _pc_call(_pc().change_volume, action, VOLUME_STEP)
+        if action == "mute":
+            return "Som silenciado."
+        if action == "unmute":
+            return f"Som reativado em {level}%."
+        return f"Volume em {level}%."
+
+    def focus_window(self, action: str) -> str:
+        """Maximize, restore or minimize the window in focus (two hands apart/together)."""
+        target = self.grab()
+        if target is None:
+            raise GestureActionError("Nenhuma janela em foco.")
+        hwnd = target.window.hwnd
+        if action == "minimize":
+            _pc()._remember_position(hwnd)
+            win_desktop.show_window(hwnd, win_desktop.SW_MINIMIZE)
+            return f"'{target.title}' minimizada."
+        if action == "maximize":
+            if _is_maximized(hwnd):
+                return f"'{target.title}' já está estendida."
+            return self.maximize(target)
+        if not _is_maximized(hwnd):
+            return f"'{target.title}' já está restaurada."
+        win_desktop.show_window(hwnd, win_desktop.SW_RESTORE)
+        return f"'{target.title}' restaurada."
+
+    def show_desktop(self) -> str:
+        return _pc_call(_pc().show_desktop)
+
+    def layout(self, name: str) -> str:
+        return _pc_call(_pc().apply_layout, name)
+
+    def launch(self, name: str) -> str:
+        return _pc_call(_pc().launch_app, name)
+
+    def site(self, target: str) -> str:
+        pc = _pc()
+        label, url = _pc_call(pc.resolve_site, target)
+        return _pc_call(pc.open_url, label, url, None)
+
+    def shortcut(self, codes: tuple[int, ...], label: str) -> str:
+        """Press a shortcut already checked by gesture_mapping (never one that closes or types)."""
+        self.input.keys(*codes)
+        return f"Apertei {label}."
+
     # ── mouse no ar ──
 
     def virtual_bounds(self) -> tuple[int, int, int, int]:
@@ -456,6 +526,14 @@ class DesktopActions:
         self.input.button(False)
 
 
+def _pc_call(func: Any, *args: Any) -> Any:
+    """pc_control errors become overlay messages."""
+    try:
+        return func(*args)
+    except _pc().PCControlError as exc:
+        raise GestureActionError(str(exc)) from None
+
+
 class DryRunActions(DesktopActions):
     """Reads the real windows and monitors but changes nothing (for `gestures.py --dry-run`)."""
 
@@ -481,6 +559,34 @@ class DryRunActions(DesktopActions):
 
     def tab(self, step: int) -> str:
         return "(simulação) próxima aba." if step > 0 else "(simulação) aba anterior."
+
+    def to_screen(self, target: Target, number: int) -> str:
+        return f"(simulação) '{target.title}' → tela {number}."
+
+    def media(self, action: str) -> str:
+        return f"(simulação) {MEDIA_KEYS[action][1].lower()}"
+
+    def volume(self, action: str) -> str:
+        return f"(simulação) volume: {action}."
+
+    def focus_window(self, action: str) -> str:
+        target = self.grab()
+        return f"(simulação) {action} '{target.title if target else '?'}'."
+
+    def show_desktop(self) -> str:
+        return "(simulação) mostrar a área de trabalho."
+
+    def layout(self, name: str) -> str:
+        return f"(simulação) aplicar o layout '{name}'."
+
+    def launch(self, name: str) -> str:
+        return f"(simulação) abrir {name}."
+
+    def site(self, target: str) -> str:
+        return f"(simulação) abrir o site {target}."
+
+    def shortcut(self, codes: tuple[int, ...], label: str) -> str:
+        return f"(simulação) apertar {label}."
 
     def mouse_move(self, u: float, v: float) -> None:
         return None

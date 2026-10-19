@@ -23,3 +23,6 @@ memoria.json.tmp
 # Limiares pessoais medidos por python gestures.py --calibrate
 gestos_calibracao.json
 gestos_calibracao.tmp
+# O que cada gesto personalizável faz (gesto → ação), salvo pelo Jarvis
+gestos.json
+gestos.json.tmp

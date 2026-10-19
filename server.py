@@ -74,7 +74,7 @@ PC_TOOL_NAMES = [
 ]
 MEMORY_TOOL_NAMES = ["remember", "recall", "forget"]
 EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", "cancel_pending_email"]
-GESTURE_TOOL_NAMES = ["gesture_control"]
+GESTURE_TOOL_NAMES = ["gesture_control", "gesture_shortcuts"]
 INSTALL_TOOL_NAMES = ["search_apps", "prepare_app_install", "confirm_app_install", "cancel_app_install"]
 CAMERA_TOOL_NAMES = ["look_at_camera", "camera_view"]
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
