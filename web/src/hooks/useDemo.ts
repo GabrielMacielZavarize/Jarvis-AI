@@ -104,7 +104,7 @@ export function useDemo(): DemoState {
           }
           case 'tool':
             setMode('thinking');
-            hud.setActiveTool(beat.name);
+            hud.setActiveTool(beat.name, beat.detail);
             playCue('toolStart');
             hud.addLog('tool', `${TOOL_LABELS[beat.name] ?? beat.name}${beat.detail ? ` · ${beat.detail}` : ''}`);
             if (beat.hosts) hud.addLinks(beat.hosts, 'request');
@@ -115,6 +115,11 @@ export function useDemo(): DemoState {
             } else {
               await wait(beat.ms);
             }
+            break;
+          case 'toast':
+            hud.pushToast(beat.toast);
+            playCue('notice');
+            await wait(600);
             break;
           case 'card':
             hud.pushCard(beat.card.kind, beat.card.data() as never);

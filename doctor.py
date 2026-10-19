@@ -32,7 +32,22 @@ def main() -> int:
     _print_section("Configuração")
     print(f"Backend selecionado: {settings.backend}")
     if settings.backend == "gemini-realtime":
+        from model_pool import pool_for
+
         print(f"Modelo Gemini: {settings.google_model}")
+        if settings.google_fallback_models:
+            rotation = "rodízio a cada link" if settings.model_rotation == "rotate" else "reservas só quando o principal falha"
+            print(f"Modelos ({rotation}):")
+            for line in pool_for(settings).describe():
+                print(f"- {line}")
+        else:
+            print("Modelos de reserva: nenhum (GOOGLE_FALLBACK_MODELS vazio)")
+        if "thinking" in settings.google_model:
+            print("Aviso: modelos 'extended-thinking' pensam antes de falar e respondem mais devagar.")
+        end = f"{settings.end_of_speech_ms} ms de silêncio" if settings.end_of_speech_ms else "padrão do Google"
+        print(f"Fim da sua fala (JARVIS_END_OF_SPEECH_MS): {end}")
+    silence = f"após {settings.wake_silence_seconds} s de silêncio" if settings.wake_silence_seconds else "nunca"
+    print(f"Link fecha sozinho (JARVIS_WAKE_SILENCE_SECONDS): {silence}")
     print(
         "Ferramenta de email: "
         f"{'ativada' if settings.email_tool_enabled else 'desativada'}"
@@ -75,8 +90,7 @@ def main() -> int:
         f"{'ativada' if settings.wake_word_enabled else 'desativada'}"
     )
     if settings.wake_word_enabled:
-        silence = f"{settings.wake_silence_seconds} s" if settings.wake_silence_seconds else "nunca"
-        print(f"Limiar: {settings.wake_threshold:.2f} · encerra o link após silêncio de: {silence}")
+        print(f"Limiar: {settings.wake_threshold:.2f}")
         missing = [name for name in ("openwakeword", "sounddevice") if importlib.util.find_spec(name) is None]
         if missing:
             problems.append(f"Palavra de ativação ligada, mas falta instalar: pip install {' '.join(missing)}")

@@ -30,7 +30,9 @@ function RingLayer({ geometry, spin = 0, opacity = 0.6, tone = 'primary', z = 0,
     const scale = 1 + scene.user * breathe + scene.surge * 0.025;
     mesh.current.scale.setScalar(scale);
     material.current.color.copy(scene[tone]).multiplyScalar(scene.glow * (1 + scene.energy * react * 1.6));
-    material.current.opacity = Math.min(1, opacity * (0.75 + scene.energy * react) + scene.surge * 0.2);
+    // The rings step back while the globe grows for a search.
+    const recede = 1 - scene.globeFocus * 0.6;
+    material.current.opacity = Math.min(1, opacity * (0.75 + scene.energy * react) + scene.surge * 0.2) * recede;
   });
 
   return (

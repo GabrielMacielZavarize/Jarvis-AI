@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { HudCard } from './types';
-import { hasPendingWork, micLabelFor, noticeCard, noticeLogLevel, parseWakeEvent, silenceLeft } from './wake';
+import { hasPendingWork, micLabelFor, noticeCard, noticeLogLevel, noticeToast, parseWakeEvent, silenceLeft } from './wake';
 
 const NOW = 1_000_000;
 const card = (partial: Pick<HudCard, 'kind' | 'data'>) => ({ id: 'c1', createdAt: NOW, ...partial }) as HudCard;
@@ -120,5 +120,15 @@ describe('noticeCard', () => {
     expect(noticeLogLevel('critical')).toBe('warn');
     expect(noticeLogLevel('high')).toBe('warn');
     expect(noticeLogLevel('normal')).toBe('info');
+  });
+});
+
+describe('noticeToast', () => {
+  const notice = { type: 'notice' as const, id: 'n1', topic: 'battery', title: 'Bateria', message: '15% restantes', route: 'hud' as const };
+
+  it('keeps critical notices until clicked and warns on high ones', () => {
+    expect(noticeToast({ ...notice, priority: 'critical' })).toEqual({ level: 'critical', title: 'Bateria', message: '15% restantes', code: 'PRO-28' });
+    expect(noticeToast({ ...notice, priority: 'high' }).level).toBe('warn');
+    expect(noticeToast({ ...notice, priority: 'low' }).level).toBe('info');
   });
 });

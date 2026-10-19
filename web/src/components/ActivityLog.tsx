@@ -20,7 +20,9 @@ export function ActivityLog() {
         {log.map((entry) => (
           <li key={entry.id} className={`log__item log__item--${entry.level}`}>
             <span className="log__time">{formatClock(entry.ts)}</span>
-            <span className="log__mark">{MARKS[entry.level]}</span>
+            <span className="log__mark" aria-hidden>
+              {MARKS[entry.level]}
+            </span>
             <span>{entry.text}</span>
           </li>
         ))}

@@ -1,8 +1,13 @@
 import { MODE_LABELS } from '../lib/catalog';
-import type { JarvisMode } from '../lib/types';
+import { useHud } from '../lib/hudStore';
+import type { ChatLine, JarvisMode } from '../lib/types';
+import { LiveCaption } from './LiveCaption';
+import { ToolPlate } from './ToolPlate';
 
 interface ControlDockProps {
   mode: JarvisMode;
+  /** Conversation lines, for the live caption. */
+  lines: ChatLine[];
   connected: boolean;
   busy: boolean;
   micEnabled: boolean;
@@ -28,6 +33,19 @@ function MicIcon({ muted }: { muted: boolean }) {
   );
 }
 
+function CinemaIcon({ on }: { on: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      {on ? (
+        <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+      ) : (
+        <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+      )}
+      <circle cx="12" cy="12" r="2.2" />
+    </svg>
+  );
+}
+
 function PowerIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -37,11 +55,18 @@ function PowerIcon() {
 }
 
 export function ControlDock(props: ControlDockProps) {
-  const { mode, connected, busy, micEnabled, demo, canConnect, onStart, onStop, onToggleMic, onDemo, wakeListening, closingIn } = props;
+  const { mode, lines, connected, busy, micEnabled, demo, canConnect, onStart, onStop, onToggleMic, onDemo, wakeListening, closingIn } =
+    props;
   const active = connected || demo;
+  const cinema = useHud((s) => s.cinema);
+  const setCinema = useHud((s) => s.setCinema);
 
   return (
     <div className="dock">
+      <div className="dock__float">
+        <ToolPlate />
+        <LiveCaption lines={lines} speaking={mode === 'speaking'} />
+      </div>
       <div className="dock__state" aria-live="polite">
         {MODE_LABELS[mode]}
       </div>
@@ -73,13 +98,24 @@ export function ControlDock(props: ControlDockProps) {
             Simulação
           </button>
         )}
+
+        <button
+          type="button"
+          className={`btn btn--round btn--ghost ${cinema ? 'btn--on' : ''}`}
+          onClick={() => setCinema(!cinema)}
+          aria-pressed={cinema}
+          aria-label={cinema ? 'Sair do modo cinema' : 'Modo cinema'}
+          title={cinema ? 'Mostrar os painéis (F)' : 'Modo cinema: só o núcleo e a legenda (F)'}
+        >
+          <CinemaIcon on={cinema} />
+        </button>
       </div>
       <div className="dock__hint">
         {active && !demo && closingIn ? (
           <>Encerrando por silêncio em {closingIn} s · fale para continuar</>
         ) : active ? (
           <>
-            Fale naturalmente · <kbd>M</kbd> microfone · <kbd>/</kbd> digitar · <kbd>Esc</kbd> limpar painéis
+            Fale naturalmente · <kbd>M</kbd> microfone · <kbd>/</kbd> digitar · <kbd>F</kbd> cinema · <kbd>Esc</kbd> limpar painéis
           </>
         ) : canConnect && wakeListening ? (
           <>

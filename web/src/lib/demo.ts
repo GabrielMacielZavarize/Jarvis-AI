@@ -1,4 +1,4 @@
-import type { CardDataMap, CardKind, JarvisMode } from './types';
+import type { CardDataMap, CardKind, JarvisMode, Toast } from './types';
 
 /**
  * Scripted simulation used by "Modo demonstração": lets the HUD be explored
@@ -9,7 +9,31 @@ export type DemoBeat =
   | { kind: 'agent'; text: string }
   | { kind: 'user'; text: string }
   | { kind: 'tool'; name: string; detail?: string; ms: number; hosts?: string[]; sources?: string[] }
-  | { kind: 'card'; card: { [K in CardKind]: { kind: K; data: () => CardDataMap[K] } }[CardKind] };
+  | { kind: 'card'; card: { [K in CardKind]: { kind: K; data: () => CardDataMap[K] } }[CardKind] }
+  | { kind: 'toast'; toast: Pick<Toast, 'level' | 'title' | 'message' | 'code'> };
+
+/** 24 fictional hours: cooler at dawn, warmest mid-afternoon. */
+const demoHours = () => {
+  const start = new Date();
+  start.setMinutes(0, 0, 0);
+  return Array.from({ length: 24 }, (_, index) => {
+    const moment = new Date(start.getTime() + index * 3_600_000);
+    const hour = moment.getHours();
+    const temp = 21 + 5 * Math.sin(((hour - 9) / 24) * Math.PI * 2) + (index > 12 ? -1.5 : 0);
+    const local = `${moment.getFullYear()}-${String(moment.getMonth() + 1).padStart(2, '0')}-${String(moment.getDate()).padStart(2, '0')}`;
+    return { time: `${local}T${String(hour).padStart(2, '0')}:00`, temp: Math.round(temp * 10) / 10, rain: hour > 17 ? 60 : 10 };
+  });
+};
+
+/** Today at hh:mm in the browser's timezone, written like the agent writes Google Calendar times. */
+const todayAt = (hours: number, minutes = 0) => {
+  const now = new Date();
+  const offset = -now.getTimezoneOffset();
+  const sign = offset >= 0 ? '+' : '-';
+  const zone = `${sign}${String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0')}:${String(Math.abs(offset) % 60).padStart(2, '0')}`;
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return `${day}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00${zone}`;
+};
 
 const isoDay = (offset: number) => {
   const date = new Date();
@@ -41,6 +65,7 @@ export const DEMO_SCRIPT: DemoBeat[] = [
           { date: isoDay(3), code: 1, label: 'Predominantemente limpo', max: 26, min: 15, rain: 5 },
           { date: isoDay(4), code: 0, label: 'Céu limpo', max: 29, min: 17, rain: 0 },
         ],
+        hourly: demoHours(),
       }),
     },
   },
@@ -80,6 +105,10 @@ export const DEMO_SCRIPT: DemoBeat[] = [
     },
   },
   { kind: 'agent', text: 'Timer de cinco minutos iniciado. O café, ao contrário do senhor, será pontual.' },
+  {
+    kind: 'toast',
+    toast: { level: 'info', title: 'Download concluído', message: 'relatorio-trimestral.pdf · 2,4 MB', code: 'PRO-28' },
+  },
   { kind: 'mode', mode: 'listening', ms: 900 },
   { kind: 'user', text: 'Quais as últimas notícias de tecnologia?' },
   {
@@ -128,6 +157,27 @@ export const DEMO_SCRIPT: DemoBeat[] = [
     },
   },
   { kind: 'agent', text: 'Anotado, senhor. Lo-fi para programar; lembrarei disso nas próximas conversas.' },
+  { kind: 'mode', mode: 'listening', ms: 900 },
+  { kind: 'user', text: 'O que eu tenho hoje?' },
+  { kind: 'tool', name: 'get_agenda', detail: 'hoje', ms: 1300, hosts: ['www.googleapis.com'] },
+  {
+    kind: 'card',
+    card: {
+      kind: 'calendar',
+      data: () => ({
+        status: 'agenda',
+        label: 'hoje',
+        date: todayAt(0).slice(0, 10),
+        events: [
+          { id: 'demo-daily', title: 'Daily do time', start: todayAt(9), end: todayAt(9, 30), all_day: false, link: 'https://meet.example' },
+          { id: 'demo-almoco', title: 'Almoço com a Pepper', start: todayAt(12, 30), end: todayAt(13, 30), all_day: false, location: 'Malibu' },
+          { id: 'demo-review', title: 'Revisão da armadura', start: todayAt(15), end: todayAt(16, 30), all_day: false },
+          { id: 'demo-call', title: 'Ligação com o Rhodes', start: todayAt(16), end: todayAt(16, 45), all_day: false },
+        ],
+      }),
+    },
+  },
+  { kind: 'agent', text: 'Quatro compromissos hoje, senhor. A revisão da armadura encosta na ligação com o Coronel Rhodes.' },
   { kind: 'mode', mode: 'listening', ms: 0 },
 ];
 

@@ -43,6 +43,80 @@
   pointer-events: auto;
 }
 
+/* The panels wait behind the boot sequence, then materialize one after another ("backwards":
+   once done, the panel's own styles rule again, like the dragging fade). */
+.hud:not(.hud--online) > * {
+  visibility: hidden;
+}
+.hud--online .hud__top {
+  animation: hud-drop 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.hud--online .slot > * {
+  animation: panel-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.hud--online .slot:nth-child(2) > * {
+  animation-delay: 0.14s;
+}
+.hud--online .slot:nth-child(n + 3) > * {
+  animation-delay: 0.28s;
+}
+
+/* Each side panel sits in a slot that can be dragged by its header to another place. */
+.slot {
+  display: contents;
+}
+.slot--dragging > * {
+  opacity: 0.45;
+  outline: 1px dashed var(--line-strong);
+  outline-offset: 2px;
+}
+.app:has(.slot--dragging) {
+  user-select: none;
+}
+.drop-line {
+  position: fixed;
+  z-index: 30;
+  height: 2px;
+  background: var(--c-primary);
+  box-shadow: 0 0 12px var(--c-primary);
+  pointer-events: none;
+}
+@media (min-width: 1081px) {
+  .slot .panel__head {
+    cursor: grab;
+  }
+  .slot--dragging .panel__head {
+    cursor: grabbing;
+  }
+}
+.hud--online .hud__dock {
+  animation: hud-rise 0.8s 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+@keyframes hud-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+@keyframes hud-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scaleY(0.92);
+    filter: brightness(2.4) blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
 /* ───────────────────────── Panel frame ───────────────────────── */
 
 .panel {
@@ -50,12 +124,18 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--panel-bg);
+  /* Faint dot matrix over the glass, like a projection surface. */
+  background:
+    radial-gradient(rgb(var(--c-primary-rgb) / 0.07) 0.8px, transparent 1.2px) 0 0 / 12px 12px,
+    var(--panel-bg);
   border: 1px solid var(--line);
   clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   backdrop-filter: blur(7px) saturate(1.2);
   -webkit-backdrop-filter: blur(7px) saturate(1.2);
-  box-shadow: inset 0 0 30px rgb(var(--c-primary-rgb) / 0.06);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--c-primary-rgb) / 0.18),
+    inset 0 0 30px rgb(var(--c-primary-rgb) / 0.06);
+  transition: border-color 0.6s, box-shadow 0.6s;
 }
 .panel::before,
 .panel::after {
@@ -80,21 +160,52 @@
 }
 
 .panel__head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 9px 14px 8px calc(var(--cut) + 4px);
+  overflow: hidden;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(90deg, rgb(var(--c-primary-rgb) / 0.12), transparent 70%);
 }
+/* Energy trace running along the header rule. */
+.panel__head::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 32%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(var(--c-primary-rgb) / 0.95), transparent);
+  transform: translateX(-100%);
+  animation: trace 6s linear infinite;
+  pointer-events: none;
+}
+.hud__right .panel__head::after {
+  animation-delay: -2.4s;
+}
+.card .panel__head::after {
+  animation-delay: -4.1s;
+}
+@keyframes trace {
+  to {
+    transform: translateX(320%);
+  }
+}
 .panel__code {
+  padding: 1px 5px;
+  border: 1px solid rgb(var(--c-accent-rgb) / 0.35);
+  background: rgb(var(--c-accent-rgb) / 0.06);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
+  line-height: 1.4;
   color: var(--c-accent);
   letter-spacing: 0.08em;
 }
 .panel__title {
   margin: 0;
+  transition: color 0.6s, text-shadow 0.6s;
   font-family: var(--font-display);
   font-size: 11.5px;
   font-weight: 600;
@@ -166,27 +277,44 @@
   gap: 14px;
 }
 .brand__mark {
-  position: relative;
-  width: 42px;
-  height: 42px;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  overflow: visible;
+  filter: drop-shadow(0 0 6px rgb(var(--c-primary-rgb) / 0.75));
 }
-.brand__mark span {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1.5px solid var(--c-primary);
-  box-shadow: var(--glow);
+.brand__ring,
+.brand__inner {
+  fill: none;
+  stroke: var(--c-primary);
 }
-.brand__mark span:nth-child(2) {
-  inset: 7px;
-  border-style: dashed;
-  animation: spin 9s linear infinite;
-  opacity: 0.8;
+.brand__ring {
+  stroke-width: 1.4;
 }
-.brand__mark span:nth-child(3) {
-  inset: 15px;
-  background: var(--c-primary);
-  box-shadow: 0 0 16px var(--c-primary), 0 0 36px rgb(var(--c-primary-rgb) / 0.6);
+.brand__inner {
+  stroke-width: 0.8;
+  stroke-dasharray: 2 2.4;
+  opacity: 0.7;
+}
+.brand__cells {
+  fill: rgb(var(--c-primary-rgb) / 0.55);
+  transform-origin: 24px 24px;
+  animation: spin 14s linear infinite;
+}
+.brand__tri {
+  fill: rgb(var(--c-primary-rgb) / 0.12);
+  stroke: var(--c-primary);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+.brand__core {
+  fill: #eaffff;
+  animation: core-pulse 2.6s ease-in-out infinite;
+}
+@keyframes core-pulse {
+  50% {
+    opacity: 0.55;
+  }
 }
 .brand__name {
   margin: 0;
@@ -206,10 +334,24 @@
 }
 
 .chips {
+  position: relative;
+  isolation: isolate;
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+/* Header rail: a ruled line with ticks running behind the status chips. */
+.chips::before {
+  content: '';
+  position: absolute;
+  inset: 50% 0 auto;
+  z-index: -1;
+  height: 7px;
+  translate: 0 -50%;
+  background:
+    linear-gradient(90deg, transparent, var(--line-strong) 18%, var(--line-strong) 82%, transparent) center / 100% 1px no-repeat,
+    repeating-linear-gradient(90deg, rgb(var(--c-primary-rgb) / 0.28) 0 1px, transparent 1px 22px) center / 64% 7px no-repeat;
 }
 .chip {
   display: flex;
@@ -217,7 +359,7 @@
   gap: 8px;
   padding: 5px 12px 5px 10px;
   border: 1px solid var(--line);
-  background: rgb(4 18 28 / 0.55);
+  background: linear-gradient(180deg, rgb(8 30 44 / 0.92), rgb(3 13 21 / 0.92));
   font-family: var(--font-mono);
   font-size: 11.5px;
   letter-spacing: 0.08em;
@@ -261,11 +403,32 @@
 }
 .clock__time {
   font-family: var(--font-mono);
-  font-size: 30px;
+  font-size: 32px;
   line-height: 1;
   letter-spacing: 0.06em;
   color: var(--text);
   text-shadow: 0 0 14px rgb(var(--c-primary-rgb) / 0.6);
+}
+.clock__sep {
+  animation: blink 1s steps(2) infinite;
+}
+.clock__time small {
+  margin-left: 6px;
+  font-size: 0.5em;
+  vertical-align: 0.7em;
+  color: var(--c-primary);
+}
+.clock__seconds {
+  width: 100%;
+  height: 2px;
+  margin-top: 6px;
+  background: rgb(var(--c-primary-rgb) / 0.12);
+}
+.clock__seconds i {
+  display: block;
+  height: 100%;
+  background: var(--c-primary);
+  box-shadow: 0 0 6px var(--c-primary);
 }
 .clock__date {
   margin-top: 4px;
@@ -320,8 +483,114 @@
 .ok-text {
   color: var(--c-ok);
 }
+.latency small {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+.latency--ok {
+  color: var(--c-ok);
+}
+.latency--warn {
+  color: var(--c-accent);
+}
+.latency--slow {
+  color: var(--c-danger);
+}
 .meter {
   grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.meter .meter__bar {
+  margin-top: 0;
+}
+/* The user's voice in amber, like the user's lines in the transcript. */
+.meter--user .meter__fill {
+  background: repeating-linear-gradient(90deg, var(--c-accent) 0 6px, transparent 6px 8px);
+  filter: drop-shadow(0 0 4px var(--c-accent));
+}
+.settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.settings-btn svg {
+  transition: transform 0.4s;
+}
+.settings-btn--open {
+  border-color: var(--line-strong);
+  background: rgb(var(--c-primary-rgb) / 0.1);
+  color: var(--c-primary);
+}
+.settings-btn--open svg {
+  transform: rotate(90deg);
+}
+.stat--setting {
+  animation: setting-in 0.28s ease-out;
+}
+.themes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+  white-space: normal;
+}
+.theme-swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  text-align: left;
+  cursor: pointer;
+}
+.theme-swatch i {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+}
+.theme-swatch:hover,
+.theme-swatch--on {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.theme-swatch--on {
+  background: rgb(var(--c-primary-rgb) / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(var(--c-primary-rgb) / 0.35);
+}
+.quality-readout {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.toggles .toggle {
+  min-width: 0;
+}
+@keyframes setting-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 .sound-controls__row {
   display: flex;
@@ -456,15 +725,34 @@
 }
 .line {
   max-width: 92%;
+  animation: line-in 0.35s ease-out;
+  transition: opacity 0.5s;
+}
+/* Older lines step back so the latest exchange reads first. */
+.transcript > .line:nth-last-child(n + 5) {
+  opacity: 0.6;
+}
+@keyframes line-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 .line__who {
+  display: flex;
+  gap: 8px;
   font-family: var(--font-mono);
   font-size: 10.5px;
   letter-spacing: 0.18em;
   color: var(--text-faint);
 }
+.line__who time {
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
 .line__text {
   margin-top: 3px;
+  padding: 6px 10px;
   font-size: 16px;
   line-height: 1.35;
 }
@@ -473,17 +761,21 @@
 }
 .line--agent .line__text {
   color: var(--text);
-  padding-left: 10px;
-  border-left: 2px solid rgb(var(--c-primary-rgb) / 0.55);
+  border-left: 2px solid rgb(var(--c-primary-rgb) / 0.6);
+  background: linear-gradient(90deg, rgb(var(--c-primary-rgb) / 0.09), transparent 85%);
 }
 .line--user {
   align-self: flex-end;
   text-align: right;
 }
+.line--user .line__who {
+  justify-content: flex-end;
+  color: rgb(var(--c-accent-rgb) / 0.75);
+}
 .line--user .line__text {
   color: var(--text-dim);
-  padding-right: 10px;
   border-right: 2px solid rgb(var(--c-accent-rgb) / 0.6);
+  background: linear-gradient(270deg, rgb(var(--c-accent-rgb) / 0.08), transparent 85%);
 }
 .typing {
   display: inline-flex;
@@ -517,6 +809,25 @@
   font-size: 11px;
   letter-spacing: 0.4em;
   color: rgb(var(--c-primary-rgb) / 0.5);
+}
+.empty__wave {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+}
+.empty__wave i {
+  width: 3px;
+  height: 100%;
+  background: rgb(var(--c-primary-rgb) / 0.55);
+  box-shadow: 0 0 6px rgb(var(--c-primary-rgb) / 0.5);
+  transform: scaleY(0.2);
+  animation: idle-wave 1.6s ease-in-out infinite;
+}
+@keyframes idle-wave {
+  50% {
+    transform: scaleY(0.75);
+  }
 }
 
 .composer {
@@ -567,21 +878,56 @@
   height: clamp(130px, 21vh, 210px);
 }
 .log__list {
+  position: relative;
   margin: 0;
   padding: 0;
   list-style: none;
   font-family: var(--font-mono);
   font-size: 12px;
 }
+/* Timeline rule through the event marks. */
+.log__list::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 74.5px;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--line-strong), transparent);
+}
+.log__list:has(.log__empty)::before {
+  display: none;
+}
 .log__item {
+  position: relative;
   display: grid;
   grid-template-columns: 62px 14px 1fr;
+  align-items: start;
   gap: 6px;
   padding: 3px 0;
   color: var(--text-dim);
 }
+.log__item:first-child {
+  color: var(--text);
+  animation: line-in 0.35s ease-out;
+}
+.log__mark {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: #020d16;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-faint);
+}
 .log__empty {
   color: var(--text-faint);
+}
+.log__item--info .log__mark {
+  color: rgb(var(--c-primary-rgb) / 0.6);
 }
 .log__time {
   color: var(--text-faint);
@@ -603,10 +949,159 @@
 /* ───────────────────────── Dock ───────────────────────── */
 
 .dock {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+
+/* Floats over the bottom of the core: the protocol running now and the live caption. */
+.dock__float {
+  position: absolute;
+  bottom: calc(100% + 16px);
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(760px, 92vw);
+  pointer-events: none;
+}
+
+/* Protocol running now, like a lower third. */
+.tool-plate {
+  --plate-rgb: var(--c-accent-rgb);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'code label state'
+    '. detail detail'
+    'bar bar bar';
+  align-items: center;
+  gap: 2px 10px;
+  width: min(440px, 86vw);
+  padding: 9px 14px 10px;
+  border: 1px solid rgb(var(--plate-rgb) / 0.55);
+  background: linear-gradient(90deg, rgb(var(--plate-rgb) / 0.16), rgb(2 12 22 / 0.78) 38%, rgb(2 12 22 / 0.78) 62%, rgb(var(--plate-rgb) / 0.16));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%, 0 12px);
+  box-shadow: 0 0 26px rgb(var(--plate-rgb) / 0.2);
+  pointer-events: none;
+}
+.tool-plate--done {
+  --plate-rgb: 82 255 176;
+}
+
+/* Live caption: Jarvis's words appearing one by one, film-subtitle style. */
+.caption {
+  display: -webkit-box;
+  max-width: 100%;
+  margin: 0;
+  padding: 6px 18px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  background: radial-gradient(ellipse at center, rgb(1 4 9 / 0.62), transparent 72%);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.38;
+  letter-spacing: 0.01em;
+  text-align: center;
+  color: var(--text);
+  text-shadow:
+    0 0 10px rgb(0 0 0 / 0.95),
+    0 0 18px rgb(var(--c-primary-rgb) / 0.35);
+}
+.caption span {
+  animation: caption-word 0.35s ease-out;
+}
+.caption__more {
+  color: var(--text-faint);
+}
+@keyframes caption-word {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+  }
+}
+.tool-plate--error {
+  --plate-rgb: 255 90 90;
+}
+.tool-plate__code {
+  grid-area: code;
+  padding: 1px 6px;
+  border: 1px solid rgb(var(--plate-rgb) / 0.6);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgb(var(--plate-rgb));
+}
+.tool-plate__label {
+  grid-area: label;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  text-shadow: 0 0 10px rgb(var(--plate-rgb) / 0.6);
+}
+.tool-plate__state {
+  grid-area: state;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--plate-rgb));
+}
+.tool-plate--running .tool-plate__state {
+  animation: blink 1s steps(2) infinite;
+}
+.tool-plate__detail {
+  grid-area: detail;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+.tool-plate__bar {
+  grid-area: bar;
+  position: relative;
+  height: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+  background: rgb(var(--plate-rgb) / 0.15);
+}
+.tool-plate__bar::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  background: linear-gradient(90deg, transparent, rgb(var(--plate-rgb)), transparent);
+  box-shadow: 0 0 8px rgb(var(--plate-rgb));
+  animation: plate-scan 1.15s ease-in-out infinite;
+}
+.tool-plate--done .tool-plate__bar::after,
+.tool-plate--error .tool-plate__bar::after {
+  width: 100%;
+  background: rgb(var(--plate-rgb));
+  animation: none;
+}
+@keyframes plate-scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(290%);
+  }
 }
 .dock__state {
   display: flex;
@@ -699,6 +1194,46 @@
 .btn--muted {
   --c-primary-rgb: 255 90 90;
   color: var(--c-danger);
+}
+.btn--on {
+  border-color: var(--line-strong);
+  background: rgb(var(--c-primary-rgb) / 0.16);
+  color: var(--c-primary);
+}
+
+/* ───────────────────────── Cinema mode ───────────────────────── */
+
+.hud__left,
+.hud__right,
+.chips {
+  transition:
+    opacity 0.6s ease,
+    transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.app[data-cinema] .hud__left,
+.app[data-cinema] .hud__right {
+  opacity: 0;
+  pointer-events: none;
+}
+.app[data-cinema] .hud__left {
+  transform: perspective(1500px) rotateY(28deg) translateX(-80px);
+}
+.app[data-cinema] .hud__right {
+  transform: perspective(1500px) rotateY(-28deg) translateX(80px);
+}
+.app[data-cinema] .chips,
+.app[data-cinema] .brand__tag {
+  opacity: 0;
+}
+.app[data-cinema] .caption {
+  font-size: clamp(22px, 2.2vw, 30px);
+}
+@media (max-width: 1080px) {
+  /* Stacked columns would leave an empty page: in cinema mode they leave the flow. */
+  .app[data-cinema] .hud__left,
+  .app[data-cinema] .hud__right {
+    display: none;
+  }
 }
 
 /* ───────────────────────── Core overlay ───────────────────────── */
@@ -805,7 +1340,8 @@
 
 @media (max-width: 560px) {
   .brand__tag,
-  .clock__date {
+  .clock__date,
+  .clock__seconds {
     display: none;
   }
   .brand__name {
@@ -819,6 +1355,16 @@
   }
   .dock__hint {
     display: none;
+  }
+  /* The protocol name gets the whole first row; the state moves next to the detail. */
+  .tool-plate {
+    grid-template-areas:
+      'code label label'
+      'detail detail state'
+      'bar bar bar';
+  }
+  .tool-plate__label {
+    letter-spacing: 0.1em;
   }
 }
 
@@ -970,4 +1516,201 @@
     top: auto;
     bottom: 60px;
   }
+}
+
+/* ───────────────────────── Notifications ───────────────────────── */
+
+.toasts {
+  position: fixed;
+  top: 96px;
+  right: 28px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+.toast {
+  --toast-rgb: var(--c-primary-rgb);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(var(--toast-rgb) / 0.55);
+  background:
+    linear-gradient(100deg, rgb(var(--toast-rgb) / 0.16), transparent 60%),
+    rgb(2 10 18 / 0.86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 0 26px rgb(var(--toast-rgb) / 0.22);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  pointer-events: auto;
+}
+.toast--warn {
+  --toast-rgb: var(--c-accent-rgb);
+}
+.toast--ok {
+  --toast-rgb: 82 255 176;
+}
+.toast--critical {
+  --toast-rgb: 255 90 90;
+  animation: toast-alarm 1.4s ease-in-out infinite;
+}
+@keyframes toast-alarm {
+  50% {
+    box-shadow: 0 0 34px rgb(var(--toast-rgb) / 0.5);
+  }
+}
+.toast__body {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 11px 14px 12px 16px;
+  border: none;
+  border-left: 3px solid rgb(var(--toast-rgb));
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.toast__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.toast__head strong {
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(var(--toast-rgb));
+  text-shadow: 0 0 10px rgb(var(--toast-rgb) / 0.6);
+}
+.toast__code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.toast__message {
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--text);
+}
+.toast__timer {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: rgb(var(--toast-rgb) / 0.8);
+  transform-origin: left;
+  animation: toast-timer linear forwards;
+}
+@keyframes toast-timer {
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (max-width: 1080px) {
+  .toasts {
+    top: max(12px, env(safe-area-inset-top));
+    right: 16px;
+  }
+}
+
+/* ───────────────────────── Ambient mode ───────────────────────── */
+
+.hud,
+.core-trigger {
+  transition: opacity 1s ease;
+}
+.app[data-ambient] .hud,
+.app[data-ambient] .core-trigger {
+  opacity: 0;
+  pointer-events: none;
+}
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at 50% 45%, transparent 18%, rgb(1 4 9 / 0.55) 70%);
+  pointer-events: none;
+}
+.ambient__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  /* The core stays visible in the middle: clock above it, the details below. */
+  height: 100%;
+  padding: 9vh 24px 8vh;
+  transition: transform 2s ease;
+}
+.ambient__clock {
+  font-family: var(--font-mono);
+  font-size: clamp(64px, 15vh, 180px);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  text-shadow:
+    0 0 30px rgb(var(--c-primary-rgb) / 0.55),
+    0 0 80px rgb(var(--c-primary-rgb) / 0.25);
+}
+.ambient__clock span {
+  color: var(--c-primary);
+  animation: blink 2s steps(2) infinite;
+}
+.ambient__date {
+  font-family: var(--font-display);
+  font-size: clamp(12px, 1.6vh, 16px);
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  color: var(--c-primary);
+}
+.ambient__row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  margin-top: auto;
+}
+.ambient__card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 260px;
+  padding: 14px 20px;
+  border: 1px solid var(--line);
+  background: rgb(2 10 18 / 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+}
+.ambient__value {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1.05;
+  color: var(--text);
+}
+.ambient__value--event {
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+.ambient__label {
+  margin-top: 4px;
+  font-size: 15px;
+  color: var(--text-dim);
+}
+.ambient__hint {
+  margin-top: 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }

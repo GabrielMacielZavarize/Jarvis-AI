@@ -11,6 +11,38 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.google_voice, "Charon")
         self.assertEqual(settings.google_model, "gemini-3.8-live")
 
+    def test_gemini_fallback_models_and_rotation(self) -> None:
+        settings = load_settings({"GOOGLE_API_KEY": "test-key"})
+        self.assertEqual(
+            settings.google_models,
+            ("gemini-3.8-live", "gemini-3.1-flash-live-preview", "gemini-2.5-flash-native-audio-preview-12-2025"),
+        )
+        self.assertEqual(settings.model_rotation, "fallback")
+        self.assertEqual(settings.end_of_speech_ms, 0)
+
+        custom = load_settings(
+            {
+                "GOOGLE_API_KEY": "test-key",
+                "GOOGLE_MODEL": "gemini-3.1-flash-live-preview",
+                "GOOGLE_FALLBACK_MODELS": "gemini-3.8-live, gemini-3.1-flash-live-preview",
+                "JARVIS_MODEL_ROTATION": "Rotate",
+                "JARVIS_END_OF_SPEECH_MS": "600",
+            }
+        )
+        # The primary model is never repeated among the fallbacks.
+        self.assertEqual(custom.google_models, ("gemini-3.1-flash-live-preview", "gemini-3.8-live"))
+        self.assertEqual(custom.model_rotation, "rotate")
+        self.assertEqual(custom.end_of_speech_ms, 600)
+
+        self.assertEqual(load_settings({"GOOGLE_API_KEY": "k", "GOOGLE_FALLBACK_MODELS": ""}).google_fallback_models, ())
+
+    def test_gemini_fallback_options_are_validated(self) -> None:
+        settings = load_settings({"GOOGLE_API_KEY": "test-key", "GOOGLE_FALLBACK_MODELS": "gemini-2.5-flash-lite"})
+        self.assertTrue(any("GOOGLE_FALLBACK_MODELS" in error for error in settings.backend_validation_errors()))
+        for env in ({"JARVIS_MODEL_ROTATION": "aleatorio"}, {"JARVIS_END_OF_SPEECH_MS": "50"}, {"JARVIS_END_OF_SPEECH_MS": "9000"}):
+            with self.subTest(env=env), self.assertRaises(SettingsError):
+                load_settings({"GOOGLE_API_KEY": "test-key", **env})
+
     def test_invalid_backend_raises(self) -> None:
         with self.assertRaises(SettingsError):
             load_settings({"JARVIS_BACKEND": "claude"})
@@ -109,7 +141,8 @@ class SettingsTests(unittest.TestCase):
 
         self.assertFalse(settings.wake_word_enabled)
         self.assertEqual(settings.wake_threshold, 0.5)
-        self.assertEqual(settings.wake_silence_seconds, 30)
+        # The link only closes by "tchau, Jarvis" or the button unless the .env asks otherwise.
+        self.assertEqual(settings.wake_silence_seconds, 0)
         self.assertIsNone(settings.wake_mic)
 
     def test_wake_word_options(self) -> None:

@@ -50,3 +50,7 @@ presenca_rosto.tmp
 aparelhos.json
 aparelhos.json.tmp
 .jarvis-tls/
+
+# Modelos do Gemini em pausa (cota, sobrecarga) e de quem é a vez no rodízio
+modelos.json
+modelos.tmp

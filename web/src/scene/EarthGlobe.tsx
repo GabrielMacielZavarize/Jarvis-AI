@@ -1,3 +1,4 @@
+import { Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import {
@@ -22,6 +23,11 @@ import { scene } from './sceneState';
 const R = 1.16;
 const DEG = Math.PI / 180;
 const Z_AXIS = new Vector3(0, 0, 1);
+/** How much the globe grows while it draws a search. */
+const FOCUS_ZOOM = 0.55;
+const worldEnd = new Vector3();
+const worldCentre = new Vector3();
+const toCamera = new Vector3();
 
 /** lat/lon (degrees) → point on a sphere where (0, 0) faces the camera (+Z). */
 function toVector(lat: number, lon: number, radius = 1) {
@@ -99,6 +105,7 @@ function linkColor(kind: NetLink['kind'], target: Color) {
 /** Great-circle arc from home to a host, drawn progressively then pulsing data packets. */
 function Arc({ link, home }: { link: NetLink; home: GeoPoint }) {
   const material = useRef<ShaderMaterial>(null);
+  const tag = useRef<HTMLDivElement>(null);
   const marker = useRef<Mesh>(null);
   const markerMat = useRef<MeshBasicMaterial>(null);
   const ring = useRef<Mesh>(null);
@@ -131,7 +138,7 @@ function Arc({ link, home }: { link: NetLink; home: GeoPoint }) {
     ring.current?.quaternion.setFromUnitVectors(Z_AXIS, normal);
   }, [normal]);
 
-  useFrame(() => {
+  useFrame((state) => {
     const age = (Date.now() - link.createdAt) / 1000;
     const life = link.ttl / 1000;
     const visible = age >= 0;
@@ -150,6 +157,14 @@ function Arc({ link, home }: { link: NetLink; home: GeoPoint }) {
     if (marker.current && markerMat.current) {
       marker.current.scale.setScalar(arrived);
       linkColor(link.kind, markerMat.current.color).multiplyScalar(2.2);
+    }
+    // Name of the place and the service at the end of the arc, hidden behind the globe.
+    if (tag.current && marker.current) {
+      marker.current.getWorldPosition(worldEnd);
+      marker.current.parent?.getWorldPosition(worldCentre);
+      const facing = toCamera.copy(state.camera.position).sub(worldEnd).normalize().dot(worldEnd.sub(worldCentre).normalize());
+      const shown = link.kind !== 'model' && arrived > 0.05 && facing > 0.2;
+      tag.current.style.opacity = shown ? String(Math.min(1, arrived) * Math.min(1, (facing - 0.2) * 4)) : '0';
     }
     if (ring.current && ringMat.current) {
       const wave = (age * 1.1) % 1;
@@ -181,6 +196,12 @@ function Arc({ link, home }: { link: NetLink; home: GeoPoint }) {
         <ringGeometry args={[0.018, 0.026, 24]} />
         <meshBasicMaterial ref={ringMat} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} />
       </mesh>
+      <Html position={end} zIndexRange={[2, 0]} style={{ pointerEvents: 'none' }}>
+        <div ref={tag} className={`globe-tag globe-tag--${link.kind}`} style={{ opacity: 0 }}>
+          <b>{link.label}</b>
+          <span>{link.host}</span>
+        </div>
+      </Html>
     </group>
   );
 }
@@ -265,9 +286,13 @@ export function EarthGlobe() {
     const active = activeLinks.length > 0;
     const target = active || scene.mode === 'thinking' ? 1 : 0;
     scene.network += (target - scene.network) * (1 - Math.exp(-delta * (target ? 4 : 1.5)));
+    // Only real lookups (search, weather, news) take the stage; the model round-trip does not.
+    const lookup = activeLinks.some((link) => link.kind !== 'model') ? 1 : 0;
+    scene.globeFocus += (lookup - scene.globeFocus) * (1 - Math.exp(-delta * (lookup ? 2.5 : 1.2)));
 
     const g = group.current;
     if (g) {
+      g.scale.setScalar(1 + scene.globeFocus * FOCUS_ZOOM);
       // Idle: slow spin. Active: face the middle of home + destinations so the arcs cross the disc.
       focus.copy(toVector(home.lat, home.lon)).multiplyScalar(1.5);
       for (const link of activeLinks) focus.add(toVector(link.lat, link.lon));

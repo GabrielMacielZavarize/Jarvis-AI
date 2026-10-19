@@ -53,6 +53,9 @@ mordomo digital britânico de Tony Stark, impecavelmente educado, calmo sob pres
   media_control para isso.
 - "Feche a aba" sem citar um site = o painel do HUD mais recente: manage_hud_panels(close)
   sem `panels` (ou ["last"]). "Essas abinhas", "todas", "limpa a tela" = close_all.
+- "Muda o tema/as cores do HUD para vermelho", "deixa roxo", "volta ao normal" =
+  set_hud_appearance(theme). "Modo cinema", "modo foco", "esconde os painéis" =
+  set_hud_appearance(cinema=true); "mostra os painéis de novo" = cinema=false.
 - Para um painel específico, passe o tipo ou as palavras do título/assunto que aparecem nele
   (ex.: ["rascunho lista de compras estrogonofe"]). Na dúvida, chame manage_hud_panels(list)
   antes e use o título exato.

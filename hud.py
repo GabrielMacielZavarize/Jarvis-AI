@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
 from livekit.agents import get_job_context
@@ -187,3 +188,30 @@ def watch_user_voice(session: Any) -> None:
     def _on_transcribed(event: Any) -> None:
         if event.is_final and event.transcript.strip():
             logger.info("Transcrição do usuário: %s", event.transcript.strip())
+
+
+# Fala do Jarvis que começa mais de 1 min depois da sua (aviso proativo, timer) não é resposta.
+MAX_REPLY_SECONDS = 60.0
+
+
+def watch_response_time(session: Any, model: Callable[[], str]) -> None:
+    """Time from the end of the user's speech to Jarvis's first word, in the terminal and the HUD.
+
+    It is the wait the user feels: end-of-speech detection, the model and any tool in between.
+    """
+    stopped: list[float] = []
+
+    @session.on("user_state_changed")
+    def _on_user_state(event: Any) -> None:
+        if event.old_state == "speaking" and event.new_state != "speaking":
+            stopped[:] = [time.monotonic()]
+
+    @session.on("agent_state_changed")
+    def _on_agent_state(event: Any) -> None:
+        if event.new_state != "speaking" or not stopped:
+            return
+        seconds = time.monotonic() - stopped.pop()
+        if seconds > MAX_REPLY_SECONDS:
+            return
+        logger.info("Resposta em %.1f s (%s).", seconds, model() or "modelo")
+        _publish_soon("latency", seconds=round(seconds, 2), model=model())

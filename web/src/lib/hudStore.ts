@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { DEFAULT_HOME, locateHost } from './geo';
+import { addLatency, type LatencyStats } from './latency';
 import { describePanel, matchPanels } from './panels';
 import type {
   CameraState,
@@ -15,9 +16,15 @@ import type {
   LogLevel,
   NetLink,
   PanelCommandResult,
+  SceneLevel,
+  Toast,
+  ToastLevel,
 } from './types';
 
 const MAX_CARDS = 4;
+const MAX_TOASTS = 4;
+/** How long a notification stays; critical ones wait for a click. */
+const TOAST_MS: Record<ToastLevel, number> = { info: 6000, ok: 6000, warn: 9000, critical: 0 };
 const MAX_LOG = 40;
 const MAX_LINKS = 14;
 const MAX_VOICE_STARTS = 60;
@@ -58,6 +65,8 @@ function cardKey(kind: CardKind, data: CardDataMap[CardKind]): string {
 interface HudState {
   mode: JarvisMode;
   activeTool: string | null;
+  /** What the active tool is working on ("São Paulo"), shown under the core. */
+  activeToolDetail: string | null;
   demo: boolean;
   /** Last time the agent reported hearing the user's voice. */
   userHeardAt: number | null;
@@ -73,8 +82,19 @@ interface HudState {
   camera: CameraState | null;
   /** Dictation mode (DIT-29) shown by the DITADO indicator. */
   dictation: DictationState | null;
+  /** Gemini Live model the agent is using right now (null until the link reports it). */
+  liveModel: string | null;
+  /** Response time of the recent turns. */
+  latency: LatencyStats | null;
+  /** Cinema mode: only the core and the caption, no panels. */
+  cinema: boolean;
+  /** Ambient mode: idle screen with the big clock, core at low power. */
+  ambient: boolean;
+  /** Quality the 3D scene is rendering at and the frame rate measured. */
+  sceneQuality: { level: SceneLevel; fps: number | null };
+  toasts: Toast[];
   setMode: (mode: JarvisMode) => void;
-  setActiveTool: (name: string | null) => void;
+  setActiveTool: (name: string | null, detail?: string | null) => void;
   setDemo: (demo: boolean) => void;
   setUserHeardAt: (ts: number | null) => void;
   addVoiceStart: (ts: number) => void;
@@ -98,6 +118,14 @@ interface HudState {
   clearLog: () => void;
   setCamera: (camera: CameraState | null) => void;
   setDictation: (dictation: DictationState | null) => void;
+  setLiveModel: (model: string | null) => void;
+  recordLatency: (seconds: number) => void;
+  setCinema: (cinema: boolean) => void;
+  setAmbient: (ambient: boolean) => void;
+  setSceneQuality: (level: SceneLevel, fps: number | null) => void;
+  /** Holographic notification on the right edge; returns its id. */
+  pushToast: (toast: Omit<Toast, 'id' | 'createdAt' | 'ttl'>) => string;
+  dismissToast: (id: string) => void;
   /** Opens the Câmera panel unless it is already on screen (keeps the analysed frame). */
   openCamera: () => void;
 }
@@ -105,6 +133,7 @@ interface HudState {
 export const useHud = create<HudState>((set, get) => ({
   mode: 'standby',
   activeTool: null,
+  activeToolDetail: null,
   demo: false,
   userHeardAt: null,
   voiceStarts: [],
@@ -115,8 +144,14 @@ export const useHud = create<HudState>((set, get) => ({
   log: [],
   camera: null,
   dictation: null,
+  liveModel: null,
+  latency: null,
+  cinema: false,
+  ambient: false,
+  sceneQuality: { level: 'high', fps: null },
+  toasts: [],
   setMode: (mode) => set((s) => (s.mode === mode ? s : { mode })),
-  setActiveTool: (activeTool) => set({ activeTool }),
+  setActiveTool: (activeTool, detail = null) => set({ activeTool, activeToolDetail: activeTool ? detail : null }),
   setDemo: (demo) => set({ demo }),
   setUserHeardAt: (userHeardAt) => set({ userHeardAt }),
   addVoiceStart: (ts) => set((s) => ({ voiceStarts: [...s.voiceStarts, ts].slice(-MAX_VOICE_STARTS) })),
@@ -211,6 +246,20 @@ export const useHud = create<HudState>((set, get) => ({
   clearLog: () => set({ log: [] }),
   setCamera: (camera) => set({ camera }),
   setDictation: (dictation) => set({ dictation }),
+  setLiveModel: (liveModel) => set({ liveModel }),
+  recordLatency: (seconds) => set((s) => ({ latency: addLatency(s.latency, seconds) })),
+  setCinema: (cinema) => set({ cinema }),
+  setAmbient: (ambient) => set((s) => (s.ambient === ambient ? s : { ambient })),
+  setSceneQuality: (level, fps) =>
+    set((s) => (s.sceneQuality.level === level && s.sceneQuality.fps === fps ? s : { sceneQuality: { level, fps } })),
+  pushToast: (toast) => {
+    const id = nextId('toast');
+    set((s) => ({
+      toasts: [{ ...toast, id, createdAt: Date.now(), ttl: TOAST_MS[toast.level] }, ...s.toasts].slice(0, MAX_TOASTS),
+    }));
+    return id;
+  },
+  dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((toast) => toast.id !== id) })),
   openCamera: () => {
     if (!get().cards.some((card) => card.kind === 'camera')) get().pushCard('camera', {});
   },

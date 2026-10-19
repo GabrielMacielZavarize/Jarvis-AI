@@ -14,6 +14,20 @@ const weather = {
 
 const kinds = () => useHud.getState().cards.map((card) => card.kind);
 
+describe('setActiveTool', () => {
+  it('keeps what the tool is working on until it ends', () => {
+    useHud.getState().setActiveTool('get_weather', 'São Paulo');
+    expect(useHud.getState().activeToolDetail).toBe('São Paulo');
+
+    useHud.getState().setActiveTool('run_diagnostics');
+    expect(useHud.getState().activeToolDetail).toBeNull();
+
+    useHud.getState().setActiveTool('search_web', 'fusão nuclear');
+    useHud.getState().setActiveTool(null, 'fusão nuclear');
+    expect(useHud.getState()).toMatchObject({ activeTool: null, activeToolDetail: null });
+  });
+});
+
 describe('runPanelCommand', () => {
   beforeEach(() => {
     useHud.setState({ cards: [], expandedId: null });

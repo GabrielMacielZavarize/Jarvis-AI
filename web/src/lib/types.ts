@@ -51,6 +51,15 @@ export interface WeatherData {
     is_day?: number;
   };
   daily: WeatherDay[];
+  /** Next 24 hours, for the temperature chart (older agents send none). */
+  hourly?: WeatherHour[];
+}
+
+export interface WeatherHour {
+  /** Local time without offset, as Open-Meteo sends it: "2026-10-19T15:00". */
+  time: string;
+  temp: number;
+  rain?: number | null;
 }
 
 export interface SearchData {
@@ -348,7 +357,9 @@ export type HudPanelAction = 'list' | 'close' | 'close_all' | 'expand' | 'collap
 export type HudRequest =
   | { action: HudPanelAction; targets: string[] }
   | { action: 'mic' }
-  | { action: 'end_session' };
+  | { action: 'end_session' }
+  /** Colour theme and/or cinema mode; null leaves that part as it is. */
+  | { action: 'appearance'; theme: string | null; cinema: boolean | null };
 
 /** A panel as the user sees it: the agent gets the same title that is shown on screen. */
 export interface PanelInfo {
@@ -412,6 +423,10 @@ export type HudEvent =
   | { type: 'voice'; state: 'speaking'; ts: number }
   | { type: 'net'; hosts: string[]; kind: LinkKind; ts: number }
   | { type: 'hud'; action: 'close' | 'clear'; kinds: CardKind[]; ts: number }
+  /** Gemini Live model in use: sent when the link opens and when it moves to a fallback model. */
+  | { type: 'model'; model: string; previous?: string | null; reason?: string | null; ts: number }
+  /** Seconds between the end of the user's speech and Jarvis's first word. */
+  | { type: 'latency'; seconds: number; model?: string | null; ts: number }
   | DictationEvent
   | { [K in CardKind]: { type: 'card'; kind: K; data: CardDataMap[K]; ts: number } }[CardKind];
 
@@ -436,6 +451,24 @@ export interface GeoPoint {
 }
 
 export type LogLevel = 'info' | 'tool' | 'ok' | 'warn' | 'error';
+
+/** Quality the 3D scene renders at (lib/quality.ts). */
+export type SceneLevel = 'high' | 'medium' | 'low';
+
+export type ToastLevel = 'info' | 'ok' | 'warn' | 'critical';
+
+/** Holographic notification sliding in on the right edge. */
+export interface Toast {
+  id: string;
+  level: ToastLevel;
+  title: string;
+  message?: string;
+  /** Protocol code shown in the corner ("PRO-28"). */
+  code?: string;
+  createdAt: number;
+  /** Milliseconds on screen; 0 stays until clicked. */
+  ttl: number;
+}
 
 export interface LogEntry {
   id: string;

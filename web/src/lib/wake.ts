@@ -1,4 +1,4 @@
-import type { HudCard, JarvisMode, LogLevel, NoteData } from './types';
+import type { HudCard, JarvisMode, LogLevel, NoteData, Toast } from './types';
 
 export type NoticePriority = 'low' | 'normal' | 'high' | 'critical';
 
@@ -97,6 +97,12 @@ export function silenceLeft({ now, lastActivityAt, silenceMs, mode, pendingWork 
 export function noticeCard(notice: NoticeEvent): NoteData {
   const quiet = notice.route === 'hud' && notice.priority !== 'low' ? ' · sem voz' : '';
   return { title: `Aviso · ${notice.title}${quiet}`, content: notice.message };
+}
+
+/** The notification a notice slides in on the right edge; critical ones wait for a click. */
+export function noticeToast(notice: NoticeEvent): Pick<Toast, 'level' | 'title' | 'message' | 'code'> {
+  const level = notice.priority === 'critical' ? 'critical' : notice.priority === 'high' ? 'warn' : 'info';
+  return { level, title: notice.title, message: notice.message, code: 'PRO-28' };
 }
 
 export function noticeLogLevel(priority: NoticePriority): LogLevel {

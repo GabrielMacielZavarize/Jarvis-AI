@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { playSleepChime, playWakeChime } from '../lib/chime';
 import { useHud } from '../lib/hudStore';
 import type { JarvisMode } from '../lib/types';
-import { ACTIVE_MODES, hasPendingWork, noticeCard, noticeLogLevel, parseWakeEvent, silenceLeft } from '../lib/wake';
+import { playCue } from '../lib/sounds';
+import { ACTIVE_MODES, hasPendingWork, noticeCard, noticeLogLevel, noticeToast, parseWakeEvent, silenceLeft } from '../lib/wake';
 
 /** A wake heard while a freshly opened tab is still booting waits this long for the link. */
 const WAKE_TTL_MS = 40_000;
@@ -112,8 +113,13 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         return;
       }
       playWakeChime();
-      if (routine) hud.addLog('ok', `Rotina agendada · “${routine}”`);
-      else if (reason === 'calendar') hud.addLog('ok', 'Aviso da agenda · reunião chegando');
+      if (routine) {
+        hud.addLog('ok', `Rotina agendada · “${routine}”`);
+        hud.pushToast({ level: 'info', title: 'Rotina agendada', message: routine, code: 'ROT-24' });
+      } else if (reason === 'calendar') {
+        hud.addLog('ok', 'Aviso da agenda · reunião chegando');
+        hud.pushToast({ level: 'warn', title: 'Reunião chegando', message: 'O Jarvis vai avisar os detalhes.', code: 'AGD-27' });
+      }
       else if (reason === 'notice') {
         hud.addLog('ok', 'Aviso do Jarvis · abrindo o link');
         setNoticeLink(true);
@@ -144,6 +150,9 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       } else if (event.type === 'notice') {
         const hud = useHud.getState();
         hud.pushCard('note', noticeCard(event));
+        hud.pushToast(noticeToast(event));
+        // Spoken notices have Jarvis's voice and the link chime; the silent ones get a sound of their own.
+        if (event.route === 'hud') playCue('notice');
         hud.addLog(noticeLogLevel(event.priority), `${event.title} · ${event.message}`);
       } else {
         onWake(event.score, event.routine, event.reason);
