@@ -33,6 +33,7 @@ TRUTHY_VALUES = {"1", "true", "yes", "on"}
 FALSY_VALUES = {"0", "false", "no", "off"}
 DEFAULT_WAKE_THRESHOLD = 0.5
 DEFAULT_WAKE_SILENCE_SECONDS = 30
+DEFAULT_CALENDAR_REMINDER_MINUTES = 10
 
 
 class SettingsError(ValueError):
@@ -148,6 +149,8 @@ class Settings:
     computer_use_enabled: bool = False
     computer_use_model: str = DEFAULT_COMPUTER_USE_MODEL
     memory_enabled: bool = True
+    calendar_enabled: bool = False
+    calendar_reminder_minutes: int = DEFAULT_CALENDAR_REMINDER_MINUTES
     home_city: str | None = None
     transcription_hints: bool = False
     wake_word_enabled: bool = False
@@ -234,6 +237,20 @@ class Settings:
                 env_map.get("JARVIS_ENABLE_MEMORY"),
                 "JARVIS_ENABLE_MEMORY",
                 default=True,
+            ),
+            calendar_enabled=_parse_bool(
+                env_map.get("JARVIS_ENABLE_CALENDAR"),
+                "JARVIS_ENABLE_CALENDAR",
+                default=False,
+            ),
+            calendar_reminder_minutes=int(
+                _parse_number(
+                    env_map.get("JARVIS_CALENDAR_REMINDER_MINUTES"),
+                    "JARVIS_CALENDAR_REMINDER_MINUTES",
+                    DEFAULT_CALENDAR_REMINDER_MINUTES,
+                    0,
+                    240,
+                )
             ),
             home_city=_clean_optional(env_map.get("JARVIS_HOME_CITY")),
             transcription_hints=_parse_bool(

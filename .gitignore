@@ -20,3 +20,6 @@ memoria*.json
 memoria.json.tmp
 # Configurações pessoais da IDE
 .idea/
+# Google Agenda: credenciais OAuth do app e token de acesso (pessoais, nunca no git)
+google_credentials.json
+google_token.json

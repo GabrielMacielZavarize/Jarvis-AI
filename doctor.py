@@ -55,6 +55,21 @@ def main() -> int:
         f"{'ativado, visão com ' + settings.computer_use_model if settings.computer_use_enabled else 'desativado'}"
     )
 
+    if settings.calendar_enabled:
+        from calendar_tools import CREDENTIALS_FILE, is_connected
+
+        reminder = settings.calendar_reminder_minutes
+        print(
+            "Google Agenda (AGD-27): ativado, "
+            + ("conectado" if is_connected() else "SEM LOGIN")
+            + (f", aviso {reminder} min antes das reuniões" if reminder else ", sem aviso de reuniões")
+        )
+        if not is_connected():
+            step = "python calendar_tools.py --login" if CREDENTIALS_FILE.exists() else "veja 'Google Agenda' no README"
+            print(f"Aviso: conecte a agenda com: {step}")
+    else:
+        print("Google Agenda (AGD-27): desativado")
+
     print(
         "Palavra de ativação (WAK-22): "
         f"{'ativada' if settings.wake_word_enabled else 'desativada'}"
