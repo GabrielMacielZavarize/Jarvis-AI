@@ -20,3 +20,6 @@ memoria*.json
 memoria.json.tmp
 # Configurações pessoais da IDE
 .idea/
+# Limiares pessoais medidos por python gestures.py --calibrate
+gestos_calibracao.json
+gestos_calibracao.tmp

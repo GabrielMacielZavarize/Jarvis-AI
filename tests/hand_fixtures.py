@@ -7,12 +7,14 @@ MediaPipe entregaria: pontos normalizados de 0 a 1 e pontos "do mundo" em metros
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Callable
+from dataclasses import replace
 
 import numpy as np
 
-from gesture_engine import PALM_POINTS, Hand
+from gesture_engine import PALM_POINTS, Hand, hand_row
 
 FINGER_BASES = {"index": (-0.33, 0.93), "middle": (0.0, 1.0), "ring": (0.30, 0.95), "pinky": (0.55, 0.85)}
 FINGER_DIRECTIONS = {"index": (-0.12, 1.0), "middle": (0.0, 1.0), "ring": (0.1, 1.0), "pinky": (0.22, 1.0)}
@@ -80,19 +82,25 @@ def _thumb(mode: str, index_tip: np.ndarray) -> list[np.ndarray]:
 def hand_space(pose: str) -> np.ndarray:
     """(21, 3) points of a pose in hand space (y up)."""
     straight, thumb = POSES[pose]
+    curls: dict[str, tuple[float, float, float]] = {}
+    for name in FINGER_BASES:
+        if pose == "pinch" and name == "index":
+            curls[name] = (30, 40, 20)
+        elif pose == "loose_fist":
+            curls[name] = (50, 45, 30) if name == "pinky" else (70, 80, 45)
+        elif pose == "thumb_down_relaxed":
+            curls[name] = (30, 30, 20)
+        else:
+            curls[name] = STRAIGHT if name in straight else CURLED
+    return custom_space(curls, thumb)
+
+
+def custom_space(curls: dict[str, tuple[float, float, float]], thumb: str) -> np.ndarray:
+    """(21, 3) points with each finger's three joint curls (degrees) and a thumb mode."""
     points = [np.zeros(3)] * 21
-    points[0] = np.zeros(3)
     starts = {"index": 5, "middle": 9, "ring": 13, "pinky": 17}
     for name, start in starts.items():
-        if pose == "pinch" and name == "index":
-            curls = (30, 40, 20)
-        elif pose == "loose_fist":
-            curls = (50, 45, 30) if name == "pinky" else (70, 80, 45)
-        elif pose == "thumb_down_relaxed":
-            curls = (30, 30, 20)
-        else:
-            curls = STRAIGHT if name in straight else CURLED
-        for offset, point in enumerate(_finger(name, curls)):
+        for offset, point in enumerate(_finger(name, curls[name])):
             points[start + offset] = point
     for offset, point in enumerate(_thumb(thumb, points[8])):
         points[1 + offset] = point
@@ -107,8 +115,23 @@ def make_hand(
     world: bool = True,
 ) -> Hand:
     """A hand in a mirrored frame: palm center at `center` (0..1), palm `size` frame heights long."""
-    space = hand_space(pose)
-    angle = math.radians(ROLLS.get(pose, 0.0) if roll is None else roll)
+    return project(hand_space(pose), center, size, ROLLS.get(pose, 0.0) if roll is None else roll, world)
+
+
+def make_custom(
+    curls: dict[str, tuple[float, float, float]],
+    thumb: str = "tucked",
+    center: tuple[float, float] = (0.5, 0.5),
+    size: float = 0.18,
+    roll: float = 0.0,
+    world: bool = True,
+) -> Hand:
+    """A hand of someone else's: every finger with its own curls (see custom_space)."""
+    return project(custom_space(curls, thumb), center, size, roll, world)
+
+
+def project(space: np.ndarray, center: tuple[float, float], size: float, roll: float, world: bool) -> Hand:
+    angle = math.radians(roll)
     rotation = np.array([[math.cos(angle), -math.sin(angle), 0], [math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
     space = space @ rotation.T
     space = space - space[list(PALM_POINTS)].mean(axis=0) * np.array([1, 1, 0])
@@ -156,3 +179,26 @@ def absent(start: float, seconds: float) -> Timeline:
 
 def end_of(timeline: Timeline) -> float:
     return timeline[-1][0] + 1 / FPS
+
+
+def shaky(timeline: Timeline, sigma: float = 0.004, seed: int = 0) -> Timeline:
+    """Same frames with detector jitter: every point wobbles independently (sigma in frame units)."""
+    rng = np.random.default_rng(seed)
+    out: Timeline = []
+    for t, hand in timeline:
+        if hand is None:
+            out.append((t, None))
+            continue
+        noise = rng.normal(0, sigma, hand.points.shape) * (1 / ASPECT, 1, 1 / ASPECT)
+        world = None if hand.world is None else hand.world + noise * 0.09 / 0.18 * (ASPECT, 1, ASPECT)
+        out.append((t, replace(hand, points=hand.points + noise, world=world)))
+    return out
+
+
+def with_score(timeline: Timeline, score: float) -> Timeline:
+    return [(t, None if hand is None else replace(hand, score=score)) for t, hand in timeline]
+
+
+def trace_lines(timeline: Timeline) -> list[str]:
+    """The timeline written in the --trace format (JSON lines), as the engine records it."""
+    return [json.dumps({"t": round(t, 4), **(hand_row(hand) if hand is not None else {})}) for t, hand in timeline]
