@@ -3,6 +3,7 @@ import { DEFAULT_HOME, locateHost } from './geo';
 import { describePanel, matchPanels } from './panels';
 import type {
   CameraState,
+  DictationState,
   CardDataMap,
   CardKind,
   GeoPoint,
@@ -68,6 +69,8 @@ interface HudState {
   log: LogEntry[];
   /** Webcam state polled from the server (null: server unreachable). */
   camera: CameraState | null;
+  /** Dictation mode (DIT-29) shown by the DITADO indicator. */
+  dictation: DictationState | null;
   setMode: (mode: JarvisMode) => void;
   setActiveTool: (name: string | null) => void;
   setDemo: (demo: boolean) => void;
@@ -92,6 +95,7 @@ interface HudState {
   addLog: (level: LogLevel, text: string) => void;
   clearLog: () => void;
   setCamera: (camera: CameraState | null) => void;
+  setDictation: (dictation: DictationState | null) => void;
   /** Opens the Câmera panel unless it is already on screen (keeps the analysed frame). */
   openCamera: () => void;
 }
@@ -108,6 +112,7 @@ export const useHud = create<HudState>((set, get) => ({
   expandedId: null,
   log: [],
   camera: null,
+  dictation: null,
   setMode: (mode) => set((s) => (s.mode === mode ? s : { mode })),
   setActiveTool: (activeTool) => set({ activeTool }),
   setDemo: (demo) => set({ demo }),
@@ -203,6 +208,7 @@ export const useHud = create<HudState>((set, get) => ({
     })),
   clearLog: () => set({ log: [] }),
   setCamera: (camera) => set({ camera }),
+  setDictation: (dictation) => set({ dictation }),
   openCamera: () => {
     if (!get().cards.some((card) => card.kind === 'camera')) get().pushCard('camera', {});
   },

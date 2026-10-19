@@ -75,8 +75,9 @@ Os protocolos MED, PC, WEB, AUD, JAN, VIS e LAY só existem com `JARVIS_ENABLE_P
 
 Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`; GST só com `JARVIS_ENABLE_GESTURES=true` (ou `python jarvis.py --gestures`).
 | MOU-20 | `click_on_screen` / `move_mouse` / `type_text` / `press_keys` / `scroll` / `do_on_screen` / `confirm_screen_action` / `cancel_screen_action` — mouse e teclado de verdade: acha o elemento num print com o Gemini, desliza o cursor até ele e clica; digita, usa atalhos liberados e rola; tarefas curtas de até 8 passos. Cliques que enviam, compram, pagam, publicam, apagam ou confirmam pedem código | "Clica no botão de play." · "Digita olá no bloco de notas." · "Rola a página." · "Abre o menu de configurações do Discord." |
+| DIT-29 | `start_dictation` / `write_here` — modo ditado: tudo o que você fala vira texto no campo em foco até "fim do ditado", com vírgula, ponto, nova linha, apagar e desfazer por voz; ou uma frase só ("escreve aqui: ...") | "Jarvis, modo ditado." · "Escreve aqui: chego em 10 minutos." |
 
-Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`; MOU só com `JARVIS_ENABLE_COMPUTER_USE=true`.
+Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`; MOU e DIT só com `JARVIS_ENABLE_COMPUTER_USE=true`.
 | MEM-23 | `remember` / `recall` / `forget` — memória entre conversas em `memoria.json`; o painel Memória lista e apaga | "Lembra que minha reunião de segunda é às 9." · "O que você sabe sobre mim?" · "Esquece isso." |
 | TEL-31 | `explain_screen` — lê a seleção, o texto da janela em foco ou o trecho perto do cursor (print só sem texto) e explica no painel Assistente de tela · `copy_fix` — coloca o código sugerido na área de transferência | "Explica esse erro." · "O que tem de errado aqui?" · "O que esse código faz?" · "Resume essa página." · "Traduz isso pro inglês." · "Copia a correção." |
 
@@ -404,6 +405,40 @@ Vem junto com o controle do PC (`JARVIS_ENABLE_PC_CONTROL=true`) e usa a `GOOGLE
 6. Numa página em inglês no navegador: "resume essa página" e depois "traduz isso" com um parágrafo selecionado.
 7. Abra o `.env` no Bloco de Notas e peça "explica isso": o painel avisa que segredos foram ocultados e a chave não aparece em lugar nenhum.
 8. Com o KeePass/Bitwarden em foco: o Jarvis recusa ler.
+
+### Modo ditado (DIT-29)
+
+Vem junto com o mouse e teclado (`JARVIS_ENABLE_COMPUTER_USE=true`). Clique no campo onde quer escrever (Bloco de Notas, WhatsApp Web, PhpStorm, Discord...) e diga **"Jarvis, modo ditado"**: um bipe duplo avisa que ligou e o indicador **DITADO** aparece no HUD com o texto saindo. A partir daí tudo o que você falar é digitado ali, frase a frase (cada pausa de ~1 s fecha uma frase, com um bipe curto), até **"fim do ditado"**. Enquanto isso o Jarvis não responde falando.
+
+| Você fala | Vira |
+|---|---|
+| "vírgula", "ponto" / "ponto final", "ponto de interrogação", "ponto de exclamação", "dois pontos", "ponto e vírgula", "reticências" | `,` `.` `?` `!` `:` `;` `...` |
+| "nova linha" / "pula linha", "novo parágrafo" | Enter / dois Enter (Shift+Enter em apps de conversa) |
+| "apaga a última palavra", "apaga a última frase" | Backspace só sobre o que o ditado escreveu |
+| "desfaz" | volta a última frase ditada (de novo: a anterior) |
+| "tudo maiúsculo" … "fim do maiúsculo" / "tudo minúsculo" | CAIXA ALTA no meio |
+| "fim do ditado", "encerra/para/sai do ditado" | desliga (ESC, mexer no mouse durante a digitação e 3 min de silêncio também) |
+
+- **Pontuação automática**: a pontuação que a transcrição do Gemini já põe fica; se você dita pontuação numa frase, só vale a falada (nada de "Oi,,"). Frase que termina sem pontuação ganha ponto, ou interrogação se começa com quem/como/onde/quando/qual/quanto/o que/por que; se depois da pausa você disser "vírgula", ela troca esse ponto. Maiúscula no começo de cada frase; a maiúscula que a transcrição põe no começo de cada fala some no meio da frase (nomes como Gabriel, PhpStorm e WhatsApp ficam).
+- **"ponto" e "vírgula" como palavras**: "no ponto", "ponto de ônibus" e "uma vírgula" ficam escritos.
+- **Uma frase só**: "escreve aqui: chego em 10 minutos" ou "digita aí que já vou" (`write_here`) escrevem as **suas** palavras (tiradas da transcrição da sua fala, não do que o modelo repetiu), com os mesmos comandos e sem ponto automático.
+- **Nada é enviado**: em WhatsApp, Discord, Telegram, Teams e afins a nova linha sai como Shift+Enter; apertar Enter para enviar fica com você.
+- **Mudou de campo no meio?** O ditado segue no campo novo, e "apaga"/"desfaz" passam a valer só para o que foi escrito nele.
+
+**Por que um hook nas transcrições, e não o modelo chamando uma ferramenta a cada frase:** o texto digitado é exatamente o que você disse, sem o modelo resumir, traduzir ou "corrigir", sem uma ida e volta de ferramenta por frase e sem depender de ele lembrar de chamar. O modelo só liga o modo (`start_dictation`). Depois, o `dictation.py` escuta o evento `user_input_transcribed` do LiveKit (alimentado pela transcrição de entrada do Gemini Live, que vem ligada por padrão; `JARVIS_TRANSCRIPTION_HINTS=true` ajuda com o vocabulário) e, a cada fala que o modelo começa (`speech_created`), interrompe a fala antes de tocar áudio ou rodar ferramenta. O Gemini só manda a transcrição *final* depois de terminar a própria resposta, então o ditado usa as transcrições parciais assim que elas param de chegar (a pausa) e a final apenas completa o que faltou. O áudio continua indo para o Gemini durante o ditado (ele ouve tudo, mas fica calado).
+
+Limites conhecidos: frases longas sem pausa só saem quando você pausa; "apaga a última frase" dito como parte de um texto é entendido como comando; o modo ditado precisa do HUD ou do alto-falante do PC para os bipes (sem HUD conectado, sai um `winsound.Beep`).
+
+#### Teste ao vivo (em casa, no Windows)
+
+1. `.env` com `JARVIS_ENABLE_COMPUTER_USE=true` (e, de preferência, `JARVIS_TRANSCRIPTION_HINTS=true`); `python jarvis.py`; conecte o HUD.
+2. Abra o **Bloco de Notas**, clique dentro e diga "Jarvis, modo ditado". Espere o bipe duplo e o indicador DITADO; o Jarvis não deve falar nada.
+3. Dite "oi vírgula tudo bem ponto de interrogação", pausa, "chego em 10 minutos", pausa, "nova linha tudo maiúsculo urgente", pausa, "fim do maiúsculo apaga a última palavra", pausa, "desfaz". Confira no Bloco de Notas e no HUD: `Oi, tudo bem? Chego em 10 minutos.` / `URGENTE` → apagado → volta. Um bipe curto por frase.
+4. Diga "fim do ditado": bipe descendente, indicador "Ditado encerrado"; fale algo e confira que nada mais é digitado e que o Jarvis volta a responder.
+5. **WhatsApp Web**: clique na caixa de mensagem, "modo ditado", "oi nova linha já chego", "fim do ditado". A mensagem **não** pode ter sido enviada (duas linhas na caixa).
+6. **Travas**: no meio de um ditado, mexa no mouse enquanto ele digita uma frase longa (para, bipe grave); ligue de novo e aperte ESC entre frases (desliga); clique num campo de senha e dite algo (recusa no HUD, nada digitado); dite "4111 1111 1111 1111" (recusado).
+7. **PhpStorm** e **Discord**: um ditado curto em cada, conferindo acentos (ç, ã, é) e que o "nova linha" no Discord não envia.
+8. Fora do ditado: "escreve aqui: chego em 10 minutos" no Bloco de Notas → `Chego em 10 minutos` sem ponto, e o terminal registra `[DIT-29]`.
 ### Palavra de ativação "Jarvis" (WAK-22)
 
 ```env
@@ -550,6 +585,13 @@ Desligado por padrão (`JARVIS_ENABLE_COMPUTER_USE=false`). **O trade-off**: at�
 
 O que continua possível, e por isso o padrão é desligado: um clique "inofensivo" induzido por texto na tela quando a sua última fala já pedia alguma ação, e apps que embutem terminal (VS Code, PhpStorm) só são protegidos pelo filtro de comandos. Os prints vão para o Gemini como na leitura de tela.
 
+### Modo ditado
+
+- **O texto vem da sua fala, não da tela nem do modelo.** O que é digitado sai da transcrição do seu microfone; enquanto o ditado está ligado, as falas do modelo são interrompidas antes de rodar qualquer ferramenta, e `click_on_screen`, `type_text` e as outras do MOU-20 recusam ("diga 'fim do ditado' antes").
+- **Mesmas travas da digitação do MOU-20, frase a frase**: nada de senhas, cartões, CPF/CNPJ, chaves ou textos com cara de comando; campo de senha, UAC, Segurança do Windows, Configurações, terminais, a caixa Executar, a busca do Menu Iniciar e o próprio HUD são recusados. A frase recusada não é digitada e não entra no "desfaz".
+- **Apagar só o que ele escreveu**: "apaga" e "desfaz" calculam os Backspaces a partir do texto deste ditado, neste campo; nunca alcançam o que já estava lá.
+- **Você assume quando quiser**: ESC ou mexer no mouse durante a digitação param na hora e desligam o ditado; ESC entre frases e 3 minutos de silêncio também desligam.
+
 ### Gestos e webcam
 
 - Desligados por padrão (`JARVIS_ENABLE_GESTURES=false`). Com eles ligados, a webcam fica acesa; "desliga os gestos" a libera.
@@ -627,6 +669,8 @@ Cobertura: settings, seleção de backend, registro de ferramentas, clima e prev
 
 Assistente de tela (TEL-31): ordem de leitura (seleção, área de transferência, texto da janela ou do cursor e print só sem texto), HUD em foco, recusa de cofres de senha, ocultação de segredos, região do cursor nos monitores de x negativo, prompt e parse do modelo, queda para a sessão de voz e cópia sem digitar, com UI Automation, prints, área de transferência e modelo falsos; no HUD, o destaque de sintaxe e o painel.
 
+Modo ditado (DIT-29): a normalização (comandos falados → texto/teclas, pontuação automática, maiúsculas, "ponto"/"vírgula" como palavras) e a máquina de estados (parciais e final do Gemini, a fala que ligou o modo nunca digitada, silêncio do Jarvis, fim do ditado, desfazer, Shift+Enter em apps de conversa, recusas, ESC, mouse, silêncio e troca de campo), com teclado falso.
+
 ## Estrutura
 
 ```
@@ -638,6 +682,7 @@ pc_control.py         Ações seguras no computador (apps, sites, abas, janelas,
 installer.py          Busca e instalação de apps pelo winget, com confirmação por código
 computer_use.py       Mouse e teclado (MOU-20): visão com box_2d, SendInput/SetCursorPos e as travas
 screen_assist.py      Assistente de tela (TEL-31): lê seleção/janela/cursor por UI Automation e explica com o Gemini
+dictation.py          Modo ditado (DIT-29): transcrições da fala → comandos falados → teclado do MOU-20
 confirmation.py       Frase "confirmar <código>" tolerante à transcrição de voz
 memory.py             Memória entre conversas (memoria.json), filtro de segredos e painel MEM-23
 win_desktop.py        Monitores, janelas e captura de tela via Win32

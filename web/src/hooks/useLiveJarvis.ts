@@ -11,6 +11,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { attachTrack, lastUserSignalAt } from '../lib/audio';
 import { TOOL_LABELS } from '../lib/catalog';
+import { playDictationBeep } from '../lib/chime';
+import { dictationLog, reduceDictation } from '../lib/dictation';
 import { useHud } from '../lib/hudStore';
 import { MEMORY_RPC_METHOD, setMemoryTransport } from '../lib/memoryLink';
 import { describeMicrophone } from '../lib/microphone';
@@ -122,6 +124,13 @@ function handleHudEvent(event: HudEvent) {
     if (hud.userHeardAt === null) hud.addLog('ok', 'Jarvis está captando sua voz');
     hud.setUserHeardAt(Date.now());
     hud.addVoiceStart(Date.now());
+    return;
+  }
+  if (event.type === 'dictation') {
+    hud.setDictation(reduceDictation(hud.dictation, event, Date.now()));
+    const line = dictationLog(event);
+    if (line) hud.addLog(line.level, line.text);
+    if (event.beep) playDictationBeep(event.beep);
     return;
   }
   if (event.type === 'net') {
@@ -343,6 +352,7 @@ export function useLiveJarvis(): LiveJarvis {
   const start = useCallback(async () => {
     setError(null);
     useHud.getState().resetVoice();
+    useHud.getState().setDictation(null);
     useHud.getState().addLog('info', 'Solicitando credenciais de acesso…');
     // Capture from the microphone chosen in the HUD; "ideal" falls back to the default if it is gone.
     if (savedMic) room.options.audioCaptureDefaults = { ...room.options.audioCaptureDefaults, deviceId: { ideal: savedMic } };
@@ -364,6 +374,10 @@ export function useLiveJarvis(): LiveJarvis {
   useEffect(() => {
     stopRef.current = stop;
   }, [stop]);
+  useEffect(() => {
+    // Without the agent nobody types: the DITADO indicator must not stay on.
+    if (connectionState === ConnectionState.Disconnected) useHud.getState().setDictation(null);
+  }, [connectionState]);
 
   const toggleMic = useCallback(async () => {
     try {

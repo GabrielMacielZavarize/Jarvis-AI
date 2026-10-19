@@ -18,6 +18,11 @@ async def jarvis_agent(ctx: agents.JobContext):
     settings = load_settings()
     runtime = build_runtime(settings)
     watch_user_voice(runtime.session)
+    if settings.computer_use_enabled:
+        # Modo ditado (DIT-29): escuta as transcrições desde o começo da sessão.
+        from dictation import watch_dictation
+
+        watch_dictation(runtime.session)
 
     await runtime.session.start(
         room=ctx.room,

@@ -62,6 +62,7 @@ PROTOCOL = "MOU-20"
 HUD_TITLE = "J.A.R.V.I.S."
 STATE_KEY = "computer_use"
 PENDING_KEY = "pending_screen_action"
+DICTATION_KEY = "dictation"  # controlador do modo ditado (dictation.py) em session.userdata
 
 # Modelo de visão (API normal do Gemini). O gemini-3.8-flash está no plano gratuito, é o
 # usado na documentação de detecção (box_2d 0-1000) e o recomendado para computer use.
@@ -961,15 +962,38 @@ def _stroke_for(char: str, layout: int) -> KeyStroke | None:
     return KeyStroke(vk=vk, scan=user32.MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, layout), shift=shift)
 
 
-def type_unicode(text: str) -> None:
-    """Type any text key by key, like a person would (ESC aborts)."""
+def _typing_guard(index: int, start: tuple[int, int] | None) -> None:
+    if _escape_down():
+        raise UserTookOver(f"ESC pressionado: parei depois de {index} caracteres.")
+    if start is not None and _distance(_get_cursor(), start) > TAKEOVER_TOLERANCE_PX:
+        raise UserTookOver(f"O senhor mexeu no mouse: parei depois de {index} caracteres.")
+
+
+def type_unicode(text: str, *, soft_newlines: bool = False, watch_mouse: bool = False) -> None:
+    """Type any text key by key, like a person would (ESC aborts).
+
+    soft_newlines: line breaks go as Shift+Enter (a new line in chat apps, which send on Enter).
+    watch_mouse: moving the mouse also aborts (the dictation mode types for a long time).
+    """
     layout = _foreground_layout()
+    start = _get_cursor() if watch_mouse else None
     for index, char in enumerate(text):
-        if index % 8 == 0 and _escape_down():
-            raise UserTookOver(f"ESC pressionado: parei depois de {index} caracteres.")
-        for event in text_events(char, _stroke_for(char, layout)):
+        if index % 8 == 0:
+            _typing_guard(index, start)
+        events = combo_events("shift+enter") if soft_newlines and char == "\n" else text_events(char, _stroke_for(char, layout))
+        for event in events:
             _send_input([event])
             time.sleep(KEY_GAP_SECONDS)
+        time.sleep(TYPE_DELAY_SECONDS)
+
+
+def erase(count: int, *, watch_mouse: bool = False) -> None:
+    """Press Backspace `count` times (ESC and, if asked, moving the mouse abort)."""
+    start = _get_cursor() if watch_mouse else None
+    for index in range(count):
+        if index % 8 == 0:
+            _typing_guard(index, start)
+        _send_input(combo_events("backspace"))
         time.sleep(TYPE_DELAY_SECONDS)
 
 
@@ -1445,6 +1469,9 @@ async def _authorize(context: RunContext) -> str:
     """The latest thing the user SAID must ask for an action on screen."""
     if not IS_WINDOWS:
         raise ComputerUseError("Mouse e teclado só funcionam no Windows por enquanto.")
+    if getattr(session_state(context).get(DICTATION_KEY), "active", False):
+        # No ditado (dictation.py) a fala do usuário é texto a escrever, nunca ordem de clique.
+        raise ComputerUseError("Recusado: o modo ditado está ligado; diga 'fim do ditado' antes.")
     loop = asyncio.get_running_loop()
     deadline = loop.time() + REQUEST_WAIT_SECONDS
     heard = last_user_message(context)

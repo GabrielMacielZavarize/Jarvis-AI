@@ -41,3 +41,21 @@ export function playSleepChime() {
   tone(ctx, now, 990, 660, 0.12, 0.1);
   tone(ctx, now + 0.13, 660, 440, 0.18, 0.08);
 }
+
+/** Dictation mode (DIT-29): Jarvis does not talk while dictating, these beeps do. */
+export function playDictationBeep(kind: 'start' | 'tick' | 'error' | 'end') {
+  const ctx = audioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime + 0.01;
+  if (kind === 'start') {
+    tone(ctx, now, 880, 880, 0.07, 0.12);
+    tone(ctx, now + 0.09, 1320, 1320, 0.09, 0.12);
+  } else if (kind === 'tick') {
+    tone(ctx, now, 1500, 1400, 0.045, 0.07);
+  } else if (kind === 'error') {
+    tone(ctx, now, 330, 280, 0.18, 0.12);
+  } else {
+    tone(ctx, now, 1320, 1320, 0.07, 0.1);
+    tone(ctx, now + 0.09, 880, 660, 0.12, 0.1);
+  }
+}
