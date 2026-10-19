@@ -29,6 +29,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'look_at_camera', code: 'CAM-19', label: 'Câmera', hint: '“O que você está vendo?” · “Mostra a câmera.”' },
   { id: 'click_on_screen', code: 'MOU-20', label: 'Mouse & teclado', hint: '“Clica no botão de play.” · “Rola a página.”' },
   { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
+  { id: 'get_agenda', code: 'AGD-27', label: 'Google Agenda', hint: '“O que eu tenho hoje?” · “Marca dentista sexta às 15h.”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -78,6 +79,13 @@ export const TOOL_LABELS: Record<string, string> = {
   do_on_screen: 'Tarefa na tela',
   confirm_screen_action: 'Clique confirmado',
   cancel_screen_action: 'Clique cancelado',
+  get_agenda: 'Consulta da agenda',
+  next_meeting: 'Próxima reunião',
+  prepare_calendar_event: 'Preparando evento',
+  prepare_calendar_update: 'Preparando alteração',
+  prepare_calendar_delete: 'Preparando exclusão',
+  confirm_calendar_change: 'Gravando na agenda',
+  cancel_calendar_change: 'Mudança cancelada',
 };
 
 export const MODE_LABELS: Record<JarvisMode, string> = {

@@ -32,6 +32,7 @@ function isPinned(card: HudCard, now: number): boolean {
   if (card.kind === 'camera') return true;
   if (card.kind === 'email') return card.data.status === 'draft';
   if (card.kind === 'pointer') return card.data.status === 'pending';
+  if (card.kind === 'calendar') return card.data.status === 'pending';
   if (card.kind === 'timer') return card.data.status === 'running' && (card.data.ends_at == null || card.data.ends_at > now);
   return false;
 }

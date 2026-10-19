@@ -59,6 +59,8 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const { enabled, canConnect, ready, connected, busy, demo, mode, error, lineCount, micLabel } = options;
   const [clientId] = useState(() => crypto.randomUUID());
   const [subscribed, setSubscribed] = useState(false);
+  // False when the stream is open only for meeting reminders (AGD-27), without the detector.
+  const [wakeWord, setWakeWord] = useState(true);
   const [reports, setReports] = useState(0);
   const [detector, setDetector] = useState({ online: false, listening: false, micSilent: false });
   const [silenceS, setSilenceS] = useState(0);
@@ -77,7 +79,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const report = useCallback((result: 'connected' | 'failed' | 'ignored') => post('/api/wake/result', { client: clientId, result }), [clientId]);
 
   const onWake = useCallback(
-    (score: number) => {
+    (score: number, reason?: string) => {
       const state = latest.current;
       const hud = useHud.getState();
       if (state.sessionActive || state.demo) {
@@ -90,7 +92,8 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         return;
       }
       playWakeChime();
-      hud.addLog('ok', `Palavra de ativação · “Jarvis” (${Math.round(score * 100)}%)`);
+      if (reason === 'calendar') hud.addLog('ok', 'Aviso da agenda · reunião chegando');
+      else hud.addLog('ok', `Palavra de ativação · “Jarvis” (${Math.round(score * 100)}%)`);
       setWakeAt(Date.now());
     },
     [report],
@@ -105,19 +108,21 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       if (!event) return;
       if (event.type === 'config') {
         setSubscribed(event.enabled);
+        setWakeWord(event.wake_word ?? true);
         setSilenceS(event.silence_s);
         // The server knows this tab now: (re)send its state, also after a server restart.
         setReports((count) => count + 1);
       } else if (event.type === 'status') {
         setDetector({ online: event.detector, listening: event.listening, micSilent: event.mic_silent ?? false });
       } else {
-        onWake(event.score);
+        onWake(event.score, event.reason);
       }
     };
     source.onerror = () => setDetector({ online: false, listening: false, micSilent: false });
     return () => {
       source.close();
       setSubscribed(false);
+      setWakeWord(true);
     };
   }, [enabled, clientId, onWake]);
 
@@ -201,7 +206,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   }, [subscribed, silenceS, connected, demo]);
 
   return {
-    enabled: subscribed,
+    enabled: subscribed && wakeWord,
     detector: detector.online,
     listening: detector.listening,
     micSilent: detector.micSilent,

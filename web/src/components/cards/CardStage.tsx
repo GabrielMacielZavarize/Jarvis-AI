@@ -5,6 +5,7 @@ import { useHud } from '../../lib/hudStore';
 import { PANEL_META, panelTitle } from '../../lib/panels';
 import type { HudCard } from '../../lib/types';
 import { ProtocolsPanel } from '../ProtocolsPanel';
+import { CalendarBody } from './CalendarCard';
 import { CameraBody } from './CameraFeed';
 import {
   DiagnosticsBody,
@@ -53,6 +54,8 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <PointerBody data={card.data} />;
     case 'memory':
       return <MemoryBody id={card.id} data={card.data} />;
+    case 'calendar':
+      return <CalendarBody data={card.data} />;
   }
 }
 

@@ -2,9 +2,16 @@ import type { HudCard, JarvisMode } from './types';
 
 /** Events of /api/wake/events (WAK-22). */
 export type WakeEvent =
-  | { type: 'config'; enabled: boolean; silence_s: number }
+  | {
+      type: 'config';
+      enabled: boolean;
+      silence_s: number;
+      /** AGD-27: meeting reminders also wake the HUD; then wake_word says if the detector exists. */
+      reminders?: boolean;
+      wake_word?: boolean;
+    }
   | { type: 'status'; detector: boolean; listening: boolean; mic_silent?: boolean }
-  | { type: 'wake'; score: number };
+  | { type: 'wake'; score: number; reason?: 'calendar' };
 
 export function parseWakeEvent(raw: string): WakeEvent | null {
   try {
@@ -33,6 +40,7 @@ export function hasPendingWork(cards: HudCard[], now: number): boolean {
     if (card.kind === 'timer') return card.data.status === 'running' && (card.data.ends_at == null || card.data.ends_at > now);
     if (card.kind === 'email') return card.data.status === 'draft';
     if (card.kind === 'install') return card.data.status === 'pending' || card.data.status === 'installing';
+    if (card.kind === 'calendar') return card.data.status === 'pending';
     return false;
   });
 }

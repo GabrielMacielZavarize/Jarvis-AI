@@ -119,8 +119,10 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
   const stop = () => (demo.running ? demo.stop() : void live.stop());
 
   // WAK-22: saying "Jarvis" connects; silence closes the link and the detector listens again.
+  // AGD-27: a meeting about to start connects too, so Jarvis can warn about it.
   const wake = useWakeWord({
-    enabled: server?.wake_word?.enabled ?? false,
+    // Meeting reminders (AGD-27) wake the HUD through the same stream.
+    enabled: Boolean(server?.wake_word?.enabled || server?.calendar?.reminders),
     canConnect,
     ready: canConnect && live !== OFFLINE_LIVE,
     connected: live.connected,
