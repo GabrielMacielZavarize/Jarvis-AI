@@ -7,6 +7,8 @@ no formato padrão de endpoint usado pelo ``TokenSource.endpoint`` do livekit-cl
 from __future__ import annotations
 
 import argparse
+import asyncio
+import logging
 import os
 import re
 import secrets
@@ -14,7 +16,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import webbrowser
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import anyio
 import requests
@@ -22,11 +24,12 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import camera
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
+from presence import NEEDS_CAMERA, PresenceService, get_service, voice_action
 from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
 from wake_hub import WakeHub, build_wake_router
@@ -73,6 +76,7 @@ PC_TOOL_NAMES = [
     "save_shortcut",
 ]
 MEMORY_TOOL_NAMES = ["remember", "recall", "forget"]
+PRESENCE_TOOL_NAMES = ["presence_control"]
 EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", "cancel_pending_email"]
 GESTURE_TOOL_NAMES = ["gesture_control"]
 INSTALL_TOOL_NAMES = ["search_apps", "prepare_app_install", "confirm_app_install", "cancel_app_install"]
@@ -90,6 +94,18 @@ COMPUTER_USE_TOOL_NAMES = [
     "confirm_screen_action",
     "cancel_screen_action",
 ]
+
+
+logger = logging.getLogger("jarvis-server")
+
+
+class PresenceAction(BaseModel):
+    action: Literal["on", "off", "status", "lock_on", "lock_off"]
+
+
+class PresenceNote(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+    at: float | None = None
 
 
 class AgentDispatchRequest(BaseModel):
@@ -185,15 +201,39 @@ def create_app(
     reload_env: bool = True,
     camera_hub: CameraHub | None = None,
     open_browser: Callable[[str], Any] = webbrowser.open,
+    presence_service: PresenceService | None = None,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
     ``camera_hub`` replaces the real webcam (tests); ``open_browser`` opens the HUD when
-    "Jarvis" is heard and no tab is open."""
+    "Jarvis" is heard and no tab is open; ``presence_service`` replaces the webcam presence
+    detector (PRS-25, tests)."""
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        loop = asyncio.get_running_loop()
+
+        async def welcome_back() -> None:
+            # Mesma via da palavra de ativação: o HUD conecta o link e o agente dá as boas-vindas.
+            result = app.state.wake_hub.trigger(1.0, reason="presence")
+            logger.info("Presença: boas-vindas %s.", "entregues" if result["accepted"] else "recusadas (link já aberto)")
+            if result["opened_browser"]:
+                await asyncio.to_thread(open_browser, f"{current_settings().hud_url}/")
+
+        service = presence()
+        service.on_welcome = lambda: loop.call_soon_threadsafe(lambda: asyncio.ensure_future(welcome_back()))
+        try:
+            settings = current_settings()
+        except SettingsError:
+            settings = None
+        if settings is not None and settings.presence_enabled:
+            if settings.camera_enabled:
+                logger.info("Presença: %s", service.start())
+            else:
+                logger.warning("Presença: %s", NEEDS_CAMERA)
         yield
+        service.on_welcome = None
+        service.stop()
         # Ao encerrar o servidor a webcam é solta na hora (a luz apaga).
         if camera_hub is not None:
             camera_hub.off()
@@ -209,6 +249,9 @@ def create_app(
 
     def hub() -> CameraHub:
         return camera_hub if camera_hub is not None else camera.get_hub()
+
+    def presence() -> PresenceService:
+        return presence_service if presence_service is not None else get_service()
 
     def camera_enabled() -> bool:
         try:
@@ -244,6 +287,7 @@ def create_app(
             + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
             + (INSTALL_TOOL_NAMES if settings.app_install_enabled else [])
             + (CAMERA_TOOL_NAMES if settings.camera_enabled else [])
+            + (PRESENCE_TOOL_NAMES if settings.presence_enabled else [])
             + (COMPUTER_USE_TOOL_NAMES if settings.computer_use_enabled else [])
         )
         return {
@@ -258,6 +302,7 @@ def create_app(
             "app_install": settings.app_install_enabled,
             "camera": settings.camera_enabled,
             "gestures": settings.gestures_enabled,
+            "presence": settings.presence_enabled,
             "computer_use": settings.computer_use_enabled,
             "memory": settings.memory_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
@@ -336,6 +381,52 @@ def create_app(
         webcam = hub()
         webcam.off()
         return {"enabled": camera_enabled(), **webcam.state()}
+
+    def presence_state() -> dict[str, Any]:
+        try:
+            settings = current_settings()
+            enabled, camera_on = settings.presence_enabled, settings.camera_enabled
+        except SettingsError:
+            enabled = camera_on = False
+        state = presence().state()
+        if enabled and not camera_on:
+            state["error"] = NEEDS_CAMERA
+        return {"enabled": enabled, **state}
+
+    @app.get("/api/presence")
+    def presence_get(request: Request) -> dict[str, Any]:
+        """Estado da presença (PRS-25) para o painel Sistema: presente, ausente desde quando..."""
+        _require_local(request)
+        return presence_state()
+
+    @app.post("/api/presence")
+    def presence_post(body: PresenceAction, request: Request) -> dict[str, Any]:
+        """Ferramenta de voz presence_control: liga/desliga e escolhe se bloqueia o PC."""
+        _require_local(request)
+        state = presence_state()
+        if not state["enabled"]:
+            raise HTTPException(status_code=403, detail="A presença está desativada. Defina JARVIS_PRESENCE=true no .env.")
+        if body.action == "on" and not camera_enabled():
+            raise HTTPException(status_code=403, detail=NEEDS_CAMERA)
+        message = voice_action(presence(), body.action)
+        return {"message": message, **presence_state()}
+
+    @app.post("/api/presence/note")
+    def presence_note(body: PresenceNote, request: Request) -> dict[str, bool]:
+        """Anota algo para o resumo das boas-vindas (ex.: o fim de um timer, enviado ao criá-lo)."""
+        _require_local(request)
+        presence().journal.add(body.text, body.at)
+        return {"ok": True}
+
+    @app.get("/api/presence/welcome")
+    def presence_welcome(request: Request) -> dict[str, Any]:
+        """Boas-vindas pendentes para a conversa que acabou de abrir (entregues uma vez só)."""
+        _require_local(request)
+        welcome = presence().consume_welcome()
+        if welcome is None:
+            return {"welcome": None}
+        return {"welcome": {"away_s": round(welcome.away_s), "notes": welcome.notes}}
+
     app.state.wake_hub = WakeHub()
     app.include_router(
         build_wake_router(

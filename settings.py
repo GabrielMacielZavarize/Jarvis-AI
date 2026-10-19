@@ -33,6 +33,7 @@ TRUTHY_VALUES = {"1", "true", "yes", "on"}
 FALSY_VALUES = {"0", "false", "no", "off"}
 DEFAULT_WAKE_THRESHOLD = 0.5
 DEFAULT_WAKE_SILENCE_SECONDS = 30
+DEFAULT_PRESENCE_AWAY_MINUTES = 5
 
 
 class SettingsError(ValueError):
@@ -154,6 +155,9 @@ class Settings:
     wake_threshold: float = DEFAULT_WAKE_THRESHOLD
     wake_silence_seconds: int = DEFAULT_WAKE_SILENCE_SECONDS
     wake_mic: str | None = None
+    presence_enabled: bool = False
+    presence_away_minutes: float = DEFAULT_PRESENCE_AWAY_MINUTES
+    presence_lock: bool = False
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -247,6 +251,15 @@ class Settings:
             ),
             wake_silence_seconds=_parse_wake_silence(env_map.get("JARVIS_WAKE_SILENCE_SECONDS")),
             wake_mic=_clean_optional(env_map.get("JARVIS_WAKE_MIC")),
+            presence_enabled=_parse_bool(env_map.get("JARVIS_PRESENCE"), "JARVIS_PRESENCE", default=False),
+            presence_away_minutes=_parse_number(
+                env_map.get("JARVIS_PRESENCE_AWAY_MINUTES"),
+                "JARVIS_PRESENCE_AWAY_MINUTES",
+                DEFAULT_PRESENCE_AWAY_MINUTES,
+                1,
+                240,
+            ),
+            presence_lock=_parse_bool(env_map.get("JARVIS_PRESENCE_LOCK"), "JARVIS_PRESENCE_LOCK", default=False),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),

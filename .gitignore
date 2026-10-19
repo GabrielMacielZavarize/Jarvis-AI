@@ -20,3 +20,6 @@ memoria*.json
 memoria.json.tmp
 # Configurações pessoais da IDE
 .idea/
+# Cadastro do rosto da presença (só a geometria do rosto, nenhuma imagem)
+presenca_rosto.json
+presenca_rosto.tmp

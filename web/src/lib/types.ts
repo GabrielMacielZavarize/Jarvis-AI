@@ -343,5 +343,7 @@ export interface ServerStatus {
   home?: { name: string; latitude: number; longitude: number } | null;
   /** WAK-22: "Jarvis" opens the link; silence_s of quiet closes it (0 = never). */
   wake_word?: { enabled: boolean; silence_s: number };
+  /** PRS-25: the webcam notices when the user arrives and leaves (JARVIS_PRESENCE=true). */
+  presence?: boolean;
   errors: string[];
 }

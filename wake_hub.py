@@ -56,6 +56,8 @@ class WakeHub:
         self.pending_until = 0.0
         # Score of a wake waiting for the browser that was just opened.
         self.undelivered_score: float | None = None
+        # "presence" when the user sat back in front of the PC (PRS-25) instead of saying "Jarvis".
+        self.undelivered_reason: str | None = None
         self.detector_seen_at: float | None = None
         # The detector's open microphone has delivered only silence (muted in Windows?).
         self.mic_silent = False
@@ -66,7 +68,7 @@ class WakeHub:
         client = HudClient(id=client_id, connected_at=self._clock())
         self.clients[client_id] = client
         if self.undelivered_score is not None and self._pending():
-            self._deliver(client, self.undelivered_score)
+            self._deliver(client, self.undelivered_score, self.undelivered_reason)
         return client
 
     def close(self) -> None:
@@ -104,15 +106,16 @@ class WakeHub:
     def detector_online(self) -> bool:
         return self.detector_seen_at is not None and self._clock() - self.detector_seen_at < DETECTOR_STALE_S
 
-    def trigger(self, score: float) -> dict[str, Any]:
+    def trigger(self, score: float, reason: str | None = None) -> dict[str, Any]:
         """Hand the wake to one HUD tab, or ask for a browser when none is open."""
         if not self.listening():
             return {"accepted": False, "opened_browser": False}
         target = self._pick_client()
         if target is not None:
-            self._deliver(target, score)
+            self._deliver(target, score, reason)
             return {"accepted": True, "opened_browser": False}
         self.undelivered_score = score
+        self.undelivered_reason = reason
         self.pending_until = self._clock() + PENDING_BROWSER_S
         return {"accepted": True, "opened_browser": True}
 
@@ -133,11 +136,16 @@ class WakeHub:
     def _clear_pending(self) -> None:
         self.pending_until = 0.0
         self.undelivered_score = None
+        self.undelivered_reason = None
 
-    def _deliver(self, client: HudClient, score: float) -> None:
+    def _deliver(self, client: HudClient, score: float, reason: str | None = None) -> None:
         self.undelivered_score = None
+        self.undelivered_reason = None
         self.pending_until = self._clock() + PENDING_WAKE_S
-        client.queue.put_nowait({"type": "wake", "score": score})
+        event: dict[str, Any] = {"type": "wake", "score": score}
+        if reason:
+            event["reason"] = reason
+        client.queue.put_nowait(event)
 
     def _pick_client(self) -> HudClient | None:
         # Uma aba só conecta: a visível mais recente, senão a mais recente.
@@ -169,7 +177,14 @@ async def hud_events(hub: WakeHub, client_id: str, settings: Settings) -> AsyncI
     """SSE stream of one HUD tab: config, detector status changes and wakes."""
     client = hub.connect(client_id)
     try:
-        yield _sse({"type": "config", "enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds})
+        yield _sse(
+            {
+                "type": "config",
+                "enabled": settings.wake_word_enabled,
+                "presence": settings.presence_enabled,
+                "silence_s": settings.wake_silence_seconds,
+            }
+        )
         last_status = hub.status()
         yield _sse(last_status)
         idle = 0.0

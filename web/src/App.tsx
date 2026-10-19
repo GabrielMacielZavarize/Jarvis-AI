@@ -11,6 +11,7 @@ import { SystemPanel } from './components/SystemPanel';
 import { TopBar } from './components/TopBar';
 import { useCameraMonitor } from './hooks/useCameraMonitor';
 import { useDemo } from './hooks/useDemo';
+import { usePresence } from './hooks/usePresence';
 import { type LiveJarvis, OFFLINE_LIVE, useLiveJarvis } from './hooks/useLiveJarvis';
 import { type StatusResult, useServerStatus } from './hooks/useServerStatus';
 import { useWakeWord } from './hooks/useWakeWord';
@@ -121,6 +122,7 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
   // WAK-22: saying "Jarvis" connects; silence closes the link and the detector listens again.
   const wake = useWakeWord({
     enabled: server?.wake_word?.enabled ?? false,
+    presence: server?.presence ?? false,
     canConnect,
     ready: canConnect && live !== OFFLINE_LIVE,
     connected: live.connected,
@@ -134,6 +136,8 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
     stop: live.stop,
   });
   const wakeListening = wake.enabled && wake.listening;
+  // PRS-25: "Presente" / "Ausente há 5 min" in the Sistema panel.
+  const presence = usePresence(server?.presence ?? false);
 
   // Global shortcuts: Space starts, M toggles the mic, Esc clears the projections.
   useEffect(() => {
@@ -193,6 +197,7 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
             micEnabled={live.micEnabled}
             microphone={{ devices: live.micDevices, deviceId: live.micDeviceId, onSelect: (id) => void live.selectMic(id) }}
             wake={wake.enabled ? wake : null}
+            presence={presence}
           />
           <CardStage enabledTools={server?.tools ?? null} />
         </aside>

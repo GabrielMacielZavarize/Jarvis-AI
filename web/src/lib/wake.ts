@@ -1,10 +1,10 @@
 import type { HudCard, JarvisMode } from './types';
 
-/** Events of /api/wake/events (WAK-22). */
+/** Events of /api/wake/events (WAK-22). A wake with reason "presence" means the webcam saw the user sit back down (PRS-25). */
 export type WakeEvent =
-  | { type: 'config'; enabled: boolean; silence_s: number }
+  | { type: 'config'; enabled: boolean; presence?: boolean; silence_s: number }
   | { type: 'status'; detector: boolean; listening: boolean; mic_silent?: boolean }
-  | { type: 'wake'; score: number };
+  | { type: 'wake'; score: number; reason?: 'presence' };
 
 export function parseWakeEvent(raw: string): WakeEvent | null {
   try {

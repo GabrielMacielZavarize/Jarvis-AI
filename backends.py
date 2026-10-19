@@ -70,7 +70,11 @@ class JarvisAgent(Agent):
         super().__init__(instructions=instructions or build_agent_instructions())
 
     async def on_enter(self) -> None:
-        self.session.generate_reply(instructions=build_initial_reply_instruction())
+        from presence import welcome_instruction
+
+        # Link aberto porque o usuário voltou para a frente do PC (PRS-25): "Bem-vindo de volta".
+        welcome = await welcome_instruction()
+        self.session.generate_reply(instructions=welcome or build_initial_reply_instruction())
 
 
 def build_backend_components(settings: Settings) -> BackendComponents:

@@ -703,6 +703,11 @@ async def set_timer(
         },
     )
     logger.info("Timer '%s' iniciado (%ss).", clean_label, seconds)
+    from presence import note_soon
+
+    # O fim vai para o resumo de "bem-vindo de volta" (PRS-25), mesmo se esta conversa acabar antes.
+    ends = dt.datetime.fromtimestamp(ends_at).strftime("%H:%M")
+    await note_soon(f"o timer '{clean_label}' terminou às {ends}", ends_at)
 
     if seconds < 60:
         human = f"{int(seconds)} segundos"
@@ -1339,6 +1344,10 @@ def build_tools(settings: Settings) -> list[Any]:
         from vision import build_camera_tools
 
         tools.extend(build_camera_tools())
+    if settings.presence_enabled:
+        from presence import build_presence_tools
+
+        tools.extend(build_presence_tools())
     if settings.computer_use_enabled:
         from computer_use import build_computer_use_tools
 
