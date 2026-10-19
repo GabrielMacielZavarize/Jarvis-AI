@@ -92,7 +92,13 @@ class JarvisAgent(Agent):
 
             self._startup_task = asyncio.create_task(run_scheduled(self.session, self.startup_routine))
             return
-        self.session.generate_reply(instructions=self.first_reply_instruction or build_initial_reply_instruction())
+        from presence import welcome_instruction
+
+        # Link aberto porque o usuário voltou para a frente do PC (PRS-25): "Bem-vindo de volta".
+        welcome = await welcome_instruction()
+        self.session.generate_reply(
+            instructions=self.first_reply_instruction or welcome or build_initial_reply_instruction()
+        )
 
 
 def build_backend_components(settings: Settings) -> BackendComponents:

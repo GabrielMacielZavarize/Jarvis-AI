@@ -85,6 +85,9 @@ Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CON
 | VOZ-30 | `change_voice` — troca a voz do Jarvis (vozes do Gemini Live), lista as vozes no HUD e volta à padrão | "Troca sua voz para Orus." · "Quais vozes você tem?" · "Volta pra sua voz normal." |
 | ROT-24 | `run_routine` / `list_routines` / `save_routine` / `delete_routine` / `schedule_routine` / `confirm_routine_step` — várias ferramentas em sequência, com cada passo no painel Rotina; agendamento por horário | "Bom dia, Jarvis." · "Modo foco." · "Cria uma rotina estudo que abre o Notion e põe lo-fi." · "Todo dia útil às 8h roda o bom dia." |
 | PRO-28 | `set_reminder` / `list_reminders` / `cancel_reminder` / `configure_alerts` — lembretes com hora em `lembretes.json` e avisos sozinhos de bateria, CPU/RAM, downloads e disco | "Me lembra amanhã às 10h de ligar pro contador." · "Quais lembretes eu tenho?" · "Para de me avisar sobre bateria." |
+| PRS-25 | `presence_control` — liga/desliga a presença pela webcam e escolhe se o PC bloqueia quando você sai | "Liga a presença." · "Não bloqueia quando eu sair." · "Pode bloquear quando eu sair." |
+
+PRS só existe com `JARVIS_PRESENCE=true` (e precisa de `JARVIS_ENABLE_CAMERA=true`).
 
 Os protocolos MED, PC, WEB, AUD, JAN, VIS e TEL só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`. MEM vem ligado e some com `JARVIS_ENABLE_MEMORY=false`; ROT também vem ligado e some com `JARVIS_ENABLE_ROUTINES=false` (os passos que mexem no PC só funcionam com `JARVIS_ENABLE_PC_CONTROL=true`).
 | AGD-27 | `get_agenda` / `next_meeting` — lê o Google Agenda · `prepare_calendar_event` / `prepare_calendar_update` / `prepare_calendar_delete` / `confirm_calendar_change` / `cancel_calendar_change` — cria, altera e apaga eventos com código de confirmação; painel Agenda e aviso antes das reuniões | "O que eu tenho hoje?" · "E amanhã?" · "Qual minha próxima reunião?" · "Marca dentista sexta às 15h." · "Desmarca a reunião das 10." |
@@ -631,6 +634,49 @@ Com o link aberto, o agente pergunta ao servidor a cada 2 s (`/api/proactive/nex
 
 Limitações: sem o servidor do HUD (só `python agent.py console`) os lembretes não disparam; ficam guardados até o `jarvis.py` subir de novo. O horário entendido é sempre repetido na resposta: se o Jarvis entender errado, cancele e peça de novo com "amanhã às 10h".
 
+### Presença (PRS-25)
+
+```env
+JARVIS_ENABLE_CAMERA=true
+JARVIS_PRESENCE=true
+JARVIS_PRESENCE_AWAY_MINUTES=5   # fora por mais que isso: pausa a mídia (e bloqueia, se ligado)
+JARVIS_PRESENCE_LOCK=false       # true = bloqueia o PC quando você sai (muda por voz)
+```
+
+O servidor do HUD (`presence.py`, dentro do `python jarvis.py`) pede quadros ao hub da webcam, o mesmo que serve o feed do HUD e os gestos, e olha cerca de **2 vezes por segundo** se há um rosto (MediaPipe Face Detector, ~5 ms por quadro).
+
+- **Chegou.** Rosto visto por 1,5 s seguidos (um vulto passando não conta). Se você ficou pelo menos 2 minutos fora, o link abre pela mesma via da palavra de ativação (bipe no HUD; sem aba aberta, o navegador abre) e o Jarvis diz **"Bem-vindo de volta, senhor"**, resumindo o que aconteceu: timers que acabaram (o fim é anotado quando o timer é criado, então entra no resumo mesmo se a conversa já tiver fechado), mídia pausada, PC bloqueado e alguém que ele não reconheceu na frente do PC. Com a tela bloqueada, ele espera você desbloquear para falar.
+- **Saiu.** Nem rosto nem teclado/mouse por 20 s. Teclado e mouse contam como presença: olhar o monitor vertical de lado enquanto digita não vira "ausente".
+- **Fora por mais de N minutos** (`JARVIS_PRESENCE_AWAY_MINUTES`): pausa a mídia **só se algo estiver tocando** (mede o nível de áudio dos apps no Windows antes de mandar a tecla play/pause, que alternaria) e, com o bloqueio ligado, bloqueia o PC (`lock_workstation` do `pc_control.py`).
+- O painel **Sistema** mostra "Presente", "Ausente há 5 min", "Verificando…" ou o motivo de não estar observando.
+- Por voz: "liga/desliga a presença", "pode bloquear quando eu sair", "não bloqueia quando eu sair", "a presença está ligada?". As mudanças por voz valem até reiniciar o Jarvis; o padrão fica no `.env`.
+- "Desliga a câmera" desliga a presença também (ela não religa a webcam sozinha): diga "liga a presença" para voltar.
+
+**Reconhecer só você (opcional).** Com o Jarvis fechado (ele é o dono da câmera), rode:
+
+```bash
+python presence.py --enroll   # ~30 amostras do seu rosto em uns 10 s; vire a cabeça devagar
+python presence.py --test     # mostra rostos, "é você"/"não reconheci" e a semelhança, ao vivo
+python presence.py --forget   # apaga o cadastro
+```
+
+O MediaPipe (Face Landmarker) acha olhos, nariz e boca, o rosto é alinhado e o **SFace** do OpenCV (já vem no `opencv-contrib-python`) gera um embedding de 128 números. O cadastro guarda só esses vetores em `presenca_rosto.json` (fora do git), nunca imagens. Com ele, outra pessoa sentada não ganha "bem-vindo de volta" nem conta como você presente (o PC bloqueia normalmente), e o resumo avisa que alguém desconhecido apareceu. Semelhança ≥ 0,363 (o limite recomendado do SFace) é você; o `--test` mostra o valor para você conferir com outras pessoas e luzes. Não é uma trava de segurança: quem protege o PC é o bloqueio do Windows.
+
+Na primeira execução são baixados (para `.cache/models`, conferidos por hash) o detector de rosto (~230 KB) e, com cadastro, o Face Landmarker (~3,7 MB) e o SFace (~37 MB).
+
+Limitações: o detector é de curta distância (até ~1,5 m da webcam); a webcam fica ligada o tempo todo com a presença ativa (a luz e o aviso CÂMERA ATIVA ficam acesos); os gestos rodam no processo do agente e hoje abrem a webcam por conta própria, então no Windows pode ser que a segunda abertura falhe com "câmera em uso" enquanto os dois estiverem ligados (veja o roteiro de teste abaixo).
+
+**Roteiro de teste ao vivo (Windows):**
+
+1. `.env` com `JARVIS_ENABLE_CAMERA=true`, `JARVIS_PRESENCE=true`, `JARVIS_PRESENCE_AWAY_MINUTES=1` e `JARVIS_WAKE_SILENCE_SECONDS=30`; `python jarvis.py`. O painel Sistema deve mostrar "Presença · PRS-25: Presente" em ~2 s e o aviso CÂMERA ATIVA.
+2. Vire a cabeça para o monitor vertical por 30 s mexendo no mouse: continua "Presente". Pare de mexer e saia da frente: depois de ~20 s, "Ausente há menos de 1 min".
+3. Deixe um vídeo do YouTube tocando, peça antes "timer de 2 minutos pro chá" e saia por 3 minutos: em ~1 min o vídeo pausa (e nada acontece se não houver som tocando).
+4. Volte e sente: bipe, o link abre e o Jarvis diz "Bem-vindo de volta, senhor", citando o timer do chá e a mídia pausada. Saia por só 1 minuto e volte: sem boas-vindas.
+5. "Pode bloquear quando eu sair", saia por 2 minutos: o PC bloqueia. Ao voltar, as boas-vindas só vêm depois de você desbloquear. Anote se a webcam continua mandando imagem com a tela bloqueada (o painel deve seguir "Ausente" e não mostrar erro).
+6. "Não bloqueia quando eu sair" → o painel tira "bloqueia ao sair". "Desliga a câmera" → "Câmera desligada · diga “liga a presença”"; "liga a presença" volta a observar.
+7. Gestos juntos: "liga os gestos" com a presença ligada. Se der "câmera em uso", anote; os quadros da presença saem do hub do servidor e os gestos, do processo do agente.
+8. Opcional: feche o Jarvis, rode `python presence.py --enroll` e depois `--test`: você deve ver "é você" com semelhança alta (0,6+), e outra pessoa (ou uma foto de outra pessoa no celular) "não reconheci" com valor baixo.
+
 Confira tudo com:
 
 ```bash
@@ -800,6 +846,14 @@ Uma memória falsa plantada por uma página seria um prompt injection persistent
 - `/api/proactive/next` só atende o próprio computador (Host local e sem `Sec-Fetch-Site` de outro site). Um aviso só abre o mesmo link do botão "Inicializar"; as regras de email, instalação e controle do PC continuam iguais.
 - `lembretes.json` é gravado de forma atômica, com uma trava de arquivo entre o agente e o servidor; um arquivo ilegível é preservado como `lembretes.corrompido-<data>.json`.
 
+### Presença
+
+- Desligada por padrão (`JARVIS_PRESENCE=false`) e só funciona com a câmera habilitada.
+- Os quadros ficam só na memória e são descartados logo após a detecção: nada de imagem é gravado nem enviado, e a presença não manda nada ao Gemini. O resumo das boas-vindas sai do diário local do servidor (só texto curto: "o timer 'chá' terminou às 15:02").
+- O cadastro do rosto é opcional e guarda apenas embeddings em `presenca_rosto.json`, ignorado pelo git; `python presence.py --forget` apaga.
+- Os endpoints `/api/presence` (estado e ações), `/api/presence/note` e `/api/presence/welcome` têm a mesma proteção dos da câmera: só este computador e só o próprio HUD (`Host` e `Sec-Fetch-Site`).
+- A presença só pausa mídia e bloqueia a tela; ela não fecha, não digita e não envia nada.
+
 ### Leitura de tela
 
 `look_at_screen` só roda quando você pede. O print aparece no HUD e é **enviado ao Gemini (Google)** para análise, incluindo tudo o que estiver visível naquela tela ou janela. Feche arquivos sensíveis (como o `.env`) antes de pedir. O Jarvis é instruído a nunca ler senhas, chaves ou tokens em voz alta.
@@ -856,6 +910,7 @@ Voz e sons (VOZ-30): `tests/test_voices.py` confere `JARVIS_VOICE`, a lista de v
 Agenda (AGD-27): datas em português com relógio fixo, busca do evento falado ("a reunião das 10"), criar/alterar/apagar só com "confirmar agenda" + código, erros de login e de rede, aviso antes das reuniões (janela, uma vez só, fila no servidor e despertar do HUD), com a API do Google falsa.
 
 Avisos proativos (PRO-28): horários em português ("amanhã às 10h", "daqui a 2h30", "segunda às 9") com relógio falso, `lembretes.json` entre reinícios e com trava, bateria/CPU/RAM/disco com sondas falsas, pasta Downloads falsa (parciais do Chrome e do Firefox), rota de cada prioridade com link aberto/fechado, silêncio e assuntos silenciados, abertura do link pela via da palavra de ativação e as ferramentas de voz.
+Presença (PRS-25): máquina de estados chegou/saiu com histerese, quadros e relógio falsos, boas-vindas com o resumo do tempo fora, pausa/bloqueio e embeddings do dono.
 
 ## Estrutura
 
@@ -892,6 +947,7 @@ server.py             FastAPI: serve web/dist e emite tokens LiveKit
 wake_word.py          Detector local da palavra "Jarvis" (openWakeWord), iniciado pelo jarvis.py
 wake_hub.py           Ponte detector → HUD: avisa a aba por SSE ou abre o navegador
 proactive.py          Avisos proativos (PRO-28): lembretes.json, monitores, prioridade/silêncio e ferramentas
+presence.py           Presença (PRS-25): chegou/saiu pela webcam, boas-vindas, pausa/bloqueio e cadastro do rosto
 jarvis.py             Inicializador: HUD + agente em um comando
 doctor.py             Checagem de configuração
 web/

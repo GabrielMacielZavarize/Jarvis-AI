@@ -123,7 +123,8 @@ class WakeHub:
     def trigger(self, score: float, reason: str = "wake") -> dict[str, Any]:
         """Hand the wake to one HUD tab, or ask for a browser when none is open.
 
-        ``reason`` "notice": a proactive notice (PRO-28) opens the link, not the user's voice."""
+        ``reason`` says why when it was not a heard "Jarvis": "notice" (a proactive notice, PRO-28),
+        "calendar" (a meeting reminder, AGD-27) or "presence" (the user sat back down, PRS-25)."""
         if not self.listening():
             return {"accepted": False, "opened_browser": False}
         target = self._pick_client()
@@ -242,6 +243,7 @@ def _config_event(settings: Settings) -> dict[str, Any]:
         "enabled": settings.wake_word_enabled,
         "silence_s": settings.wake_silence_seconds,
         "proactive": settings.proactive_enabled,
+        "presence": settings.presence_enabled,
     }
     if settings.calendar_enabled and settings.calendar_reminder_minutes > 0:
         # Os avisos da agenda também acordam o HUD; sem a palavra de ativação o link não fecha

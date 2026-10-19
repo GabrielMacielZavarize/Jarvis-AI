@@ -25,6 +25,16 @@ describe('parseWakeEvent', () => {
     expect(parseWakeEvent('{"type":"notice","title":3}')).toBeNull();
   });
 
+  it('reads presence wakes (PRS-25)', () => {
+    expect(parseWakeEvent('{"type":"wake","score":1,"reason":"presence"}')).toEqual({ type: 'wake', score: 1, reason: 'presence' });
+    expect(parseWakeEvent('{"type":"config","enabled":false,"presence":true,"silence_s":30}')).toEqual({
+      type: 'config',
+      enabled: false,
+      presence: true,
+      silence_s: 30,
+    });
+  });
+
   it('ignores anything else', () => {
     expect(parseWakeEvent('not json')).toBeNull();
     expect(parseWakeEvent('{"type":"other"}')).toBeNull();

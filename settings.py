@@ -39,6 +39,7 @@ DEFAULT_CALENDAR_REMINDER_MINUTES = 10
 # Horário de silêncio dos avisos proativos (PRO-28): só o crítico fala.
 DEFAULT_QUIET_HOURS = "23:00-07:00"
 CLOCK_RANGE = re.compile(r"^\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*(?:-|a|as|às|até|ate)\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*$", re.IGNORECASE)
+DEFAULT_PRESENCE_AWAY_MINUTES = 5
 
 
 class SettingsError(ValueError):
@@ -202,6 +203,9 @@ class Settings:
     proactive_enabled: bool = False
     quiet_hours: tuple[int, int] | None = (23 * 60, 7 * 60)
     downloads_dir: str | None = None
+    presence_enabled: bool = False
+    presence_away_minutes: float = DEFAULT_PRESENCE_AWAY_MINUTES
+    presence_lock: bool = False
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -317,6 +321,15 @@ class Settings:
             proactive_enabled=_parse_bool(env_map.get("JARVIS_PROACTIVE"), "JARVIS_PROACTIVE", default=False),
             quiet_hours=_parse_quiet_hours(env_map.get("JARVIS_QUIET_HOURS")),
             downloads_dir=_clean_optional(env_map.get("JARVIS_DOWNLOADS_DIR")),
+            presence_enabled=_parse_bool(env_map.get("JARVIS_PRESENCE"), "JARVIS_PRESENCE", default=False),
+            presence_away_minutes=_parse_number(
+                env_map.get("JARVIS_PRESENCE_AWAY_MINUTES"),
+                "JARVIS_PRESENCE_AWAY_MINUTES",
+                DEFAULT_PRESENCE_AWAY_MINUTES,
+                1,
+                240,
+            ),
+            presence_lock=_parse_bool(env_map.get("JARVIS_PRESENCE_LOCK"), "JARVIS_PRESENCE_LOCK", default=False),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),

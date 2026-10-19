@@ -24,13 +24,16 @@ export type WakeEvent =
       wake_word?: boolean;
       /** PRO-28: proactive notices arrive on this stream and may open the link. */
       proactive?: boolean;
+      /** PRS-25: the webcam opens the link when the user sits back down. */
+      presence?: boolean;
     }
   | { type: 'status'; detector: boolean; listening: boolean; mic_silent?: boolean }
   /**
    * routine: a scheduled routine (ROT-24) opened the link; reason: why it woke instead of a heard
-   * "Jarvis" (calendar = AGD-27 meeting reminder, notice = PRO-28 proactive notice).
+   * "Jarvis" (calendar = AGD-27 meeting reminder, notice = PRO-28 proactive notice, presence =
+   * PRS-25: the webcam saw the user sit back down).
    */
-  | { type: 'wake'; score: number; routine?: string; reason?: 'calendar' | 'notice' }
+  | { type: 'wake'; score: number; routine?: string; reason?: 'calendar' | 'notice' | 'presence' }
   | NoticeEvent;
 
 export function parseWakeEvent(raw: string): WakeEvent | null {

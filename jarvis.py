@@ -141,7 +141,7 @@ def main() -> int:
         os.environ["JARVIS_ENABLE_GESTURES"] = "true"
         os.environ["JARVIS_GESTURES_AUTOSTART"] = "true"
     url = _local_url(args.host, args.port)
-    # O agente pede a câmera e os avisos proativos neste endereço; o servidor abre o HUD nele.
+    # O agente pede a câmera, a presença e os avisos proativos neste endereço; o servidor abre o HUD nele.
     os.environ["JARVIS_HUD_URL"] = url
     agent_process = None if args.no_agent else _start_agent(args.agent_mode, url)
     gestures_here = args.gestures and agent_process is None

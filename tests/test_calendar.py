@@ -541,7 +541,7 @@ class WakeHubReminderTests(unittest.TestCase):
 
         self.assertEqual(
             asyncio.run(first_event()),
-            {"type": "config", "enabled": True, "silence_s": 0, "proactive": False, "reminders": True, "wake_word": False},
+            {"type": "config", "enabled": True, "silence_s": 0, "proactive": False, "presence": False, "reminders": True, "wake_word": False},
         )
 
 

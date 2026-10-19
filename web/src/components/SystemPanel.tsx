@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useClock } from '../hooks/useClock';
 import type { StatusResult } from '../hooks/useServerStatus';
 import { levels, SIGNAL_FLOOR } from '../lib/audio';
+import { type PresenceState, presenceLabel } from '../lib/presence';
 import { BACKEND_LABELS, MODE_LABELS } from '../lib/catalog';
 import { useHud } from '../lib/hudStore';
 import type { JarvisMode } from '../lib/types';
@@ -73,6 +74,8 @@ interface SystemPanelProps {
   microphone: MicrophoneProps;
   /** WAK-22, when JARVIS_WAKE_WORD=true. */
   wake?: WakeWord | null;
+  /** PRS-25, when JARVIS_PRESENCE=true. */
+  presence?: PresenceState | null;
 }
 
 function wakeLabel(wake: WakeWord, connected: boolean): { text: string; ok: boolean } {
@@ -82,7 +85,7 @@ function wakeLabel(wake: WakeWord, connected: boolean): { text: string; ok: bool
   return { text: connected ? 'Pausada durante o link' : 'Retomando escuta…', ok: false };
 }
 
-export function SystemPanel({ mode, status, demo, connected, micEnabled, microphone, wake }: SystemPanelProps) {
+export function SystemPanel({ mode, status, demo, connected, micEnabled, microphone, wake, presence }: SystemPanelProps) {
   const server = status.state === 'ok' ? status.status : null;
   const backend = server?.backend ? (BACKEND_LABELS[server.backend] ?? server.backend) : '—';
   const live = connected && !demo;
@@ -147,6 +150,12 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
           <div className="stat" style={{ gridColumn: '1 / -1' }}>
             <dt>Avisos proativos · PRO-28</dt>
             <dd className="ok-text">Lembretes, bateria, CPU/RAM, downloads e disco</dd>
+          </div>
+        )}
+        {presence && !demo && (
+          <div className="stat" style={{ gridColumn: '1 / -1' }}>
+            <dt>Presença · PRS-25</dt>
+            <dd className={presenceLabel(presence, now).ok ? 'ok-text' : undefined}>{presenceLabel(presence, now).text}</dd>
           </div>
         )}
         {live && (

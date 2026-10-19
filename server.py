@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import os
 import re
 import secrets
@@ -16,7 +17,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import webbrowser
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import anyio
 import requests
@@ -24,13 +25,14 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import camera
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
 from routines import RoutineScheduler
 from proactive import ProactiveEngine, build_proactive_router
+from presence import NEEDS_CAMERA, PresenceService, get_service, voice_action
 from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
 from wake_hub import WakeHub, build_wake_router
@@ -88,6 +90,8 @@ ROUTINE_TOOL_NAMES = [
     "delete_routine",
     "schedule_routine",
 ]
+
+PRESENCE_TOOL_NAMES = ["presence_control"]
 EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", "cancel_pending_email"]
 GESTURE_TOOL_NAMES = ["gesture_control", "gesture_shortcuts"]
 INSTALL_TOOL_NAMES = ["search_apps", "prepare_app_install", "confirm_app_install", "cancel_app_install"]
@@ -117,6 +121,18 @@ COMPUTER_USE_TOOL_NAMES = [
     "start_dictation",  # modo ditado (dictation.py), junto com o mouse e teclado
     "write_here",
 ]
+
+
+logger = logging.getLogger("jarvis-server")
+
+
+class PresenceAction(BaseModel):
+    action: Literal["on", "off", "status", "lock_on", "lock_off"]
+
+
+class PresenceNote(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+    at: float | None = None
 
 
 class AgentDispatchRequest(BaseModel):
@@ -237,6 +253,7 @@ def create_app(
     routine_scheduler: RoutineScheduler | None = None,
     calendar_reminders: bool = True,
     proactive: Callable[[WakeHub], ProactiveEngine | None] | None = None,
+    presence_service: PresenceService | None = None,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
@@ -244,7 +261,8 @@ def create_app(
     "Jarvis" is heard (or a meeting is about to start) and no tab is open. ``routine_scheduler``
     replaces the clock-driven scheduler of the routines (tests); ``calendar_reminders=False``
     turns off the meeting reminders loop (tests); ``proactive`` builds the PRO-28 notice engine
-    (tests); by default it runs when JARVIS_PROACTIVE=true."""
+    (tests); by default it runs when JARVIS_PROACTIVE=true; ``presence_service`` replaces the
+    webcam presence detector (PRS-25, tests)."""
 
     def default_engine(wake_hub: WakeHub) -> ProactiveEngine | None:
         try:
@@ -259,6 +277,26 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        loop = asyncio.get_running_loop()
+
+        async def welcome_back() -> None:
+            # Mesma via da palavra de ativação: o HUD conecta o link e o agente dá as boas-vindas.
+            result = app.state.wake_hub.trigger(1.0, reason="presence")
+            logger.info("Presença: boas-vindas %s.", "entregues" if result["accepted"] else "recusadas (link já aberto)")
+            if result["opened_browser"]:
+                await asyncio.to_thread(open_browser, f"{current_settings().hud_url}/")
+
+        service = presence()
+        service.on_welcome = lambda: loop.call_soon_threadsafe(lambda: asyncio.ensure_future(welcome_back()))
+        try:
+            settings = current_settings()
+        except SettingsError:
+            settings = None
+        if settings is not None and settings.presence_enabled:
+            if settings.camera_enabled:
+                logger.info("Presença: %s", service.start())
+            else:
+                logger.warning("Presença: %s", NEEDS_CAMERA)
         # ROT-24: as rotinas agendadas vencem aqui, no processo do servidor.
         scheduler_task = asyncio.create_task(app.state.routines.run_forever(routines_enabled))
         reminders = asyncio.create_task(_calendar_reminders()) if calendar_reminders else None
@@ -272,6 +310,8 @@ def create_app(
             reminders.cancel()
         if engine is not None:
             await engine.stop()
+        service.on_welcome = None
+        service.stop()
         # Ao encerrar o servidor a webcam é solta na hora (a luz apaga).
         if camera_hub is not None:
             camera_hub.off()
@@ -293,6 +333,9 @@ def create_app(
             return current_settings().routines_enabled
         except SettingsError:
             return False
+
+    def presence() -> PresenceService:
+        return presence_service if presence_service is not None else get_service()
 
     def camera_enabled() -> bool:
         try:
@@ -342,6 +385,7 @@ def create_app(
             + (INSTALL_TOOL_NAMES if settings.app_install_enabled else [])
             + (CAMERA_TOOL_NAMES if settings.camera_enabled else [])
             + (CALENDAR_TOOL_NAMES if settings.calendar_enabled else [])
+            + (PRESENCE_TOOL_NAMES if settings.presence_enabled else [])
             + (COMPUTER_USE_TOOL_NAMES if settings.computer_use_enabled else [])
             + (PROACTIVE_TOOL_NAMES if settings.proactive_enabled else [])
         )
@@ -357,6 +401,7 @@ def create_app(
             "app_install": settings.app_install_enabled,
             "camera": settings.camera_enabled,
             "gestures": settings.gestures_enabled,
+            "presence": settings.presence_enabled,
             "computer_use": settings.computer_use_enabled,
             "memory": settings.memory_enabled,
             "voice": _active_voice(settings),
@@ -447,6 +492,51 @@ def create_app(
         """O agente busca os avisos de reunião que o servidor guardou (cada um sai uma vez só)."""
         _require_local(request, "A agenda")
         return {"reminders": app.state.wake_hub.claim_reminders()}
+
+    def presence_state() -> dict[str, Any]:
+        try:
+            settings = current_settings()
+            enabled, camera_on = settings.presence_enabled, settings.camera_enabled
+        except SettingsError:
+            enabled = camera_on = False
+        state = presence().state()
+        if enabled and not camera_on:
+            state["error"] = NEEDS_CAMERA
+        return {"enabled": enabled, **state}
+
+    @app.get("/api/presence")
+    def presence_get(request: Request) -> dict[str, Any]:
+        """Estado da presença (PRS-25) para o painel Sistema: presente, ausente desde quando..."""
+        _require_local(request)
+        return presence_state()
+
+    @app.post("/api/presence")
+    def presence_post(body: PresenceAction, request: Request) -> dict[str, Any]:
+        """Ferramenta de voz presence_control: liga/desliga e escolhe se bloqueia o PC."""
+        _require_local(request)
+        state = presence_state()
+        if not state["enabled"]:
+            raise HTTPException(status_code=403, detail="A presença está desativada. Defina JARVIS_PRESENCE=true no .env.")
+        if body.action == "on" and not camera_enabled():
+            raise HTTPException(status_code=403, detail=NEEDS_CAMERA)
+        message = voice_action(presence(), body.action)
+        return {"message": message, **presence_state()}
+
+    @app.post("/api/presence/note")
+    def presence_note(body: PresenceNote, request: Request) -> dict[str, bool]:
+        """Anota algo para o resumo das boas-vindas (ex.: o fim de um timer, enviado ao criá-lo)."""
+        _require_local(request)
+        presence().journal.add(body.text, body.at)
+        return {"ok": True}
+
+    @app.get("/api/presence/welcome")
+    def presence_welcome(request: Request) -> dict[str, Any]:
+        """Boas-vindas pendentes para a conversa que acabou de abrir (entregues uma vez só)."""
+        _require_local(request)
+        welcome = presence().consume_welcome()
+        if welcome is None:
+            return {"welcome": None}
+        return {"welcome": {"away_s": round(welcome.away_s), "notes": welcome.notes}}
 
     app.state.wake_hub = WakeHub()
     app.state.base_url = None

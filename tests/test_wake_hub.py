@@ -122,7 +122,7 @@ class HudEventsTests(unittest.TestCase):
 
         events = asyncio.run(scenario())
 
-        self.assertEqual(events[0], {"type": "config", "enabled": True, "silence_s": 45, "proactive": False})
+        self.assertEqual(events[0], {"type": "config", "enabled": True, "silence_s": 45, "proactive": False, "presence": False})
         self.assertEqual(events[1], {"type": "status", "detector": True, "listening": True, "mic_silent": False})
         self.assertEqual(events[2], {"type": "wake", "score": 0.77})
         self.assertEqual(events[3], {"type": "status", "detector": True, "listening": False, "mic_silent": False})

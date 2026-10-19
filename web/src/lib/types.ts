@@ -477,5 +477,7 @@ export interface ServerStatus {
   routines?: { enabled: boolean; scheduled: number };
   /** PRO-28: reminders and background monitors speak up on their own. */
   proactive?: boolean;
+  /** PRS-25: the webcam notices when the user arrives and leaves (JARVIS_PRESENCE=true). */
+  presence?: boolean;
   errors: string[];
 }

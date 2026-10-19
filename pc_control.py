@@ -2645,15 +2645,22 @@ async def open_folder(context: RunContext, folder: str) -> str:
         return str(exc)
 
 
+def lock_workstation() -> None:
+    """Bloqueia a tela do Windows (também usado pela presença quando o usuário sai)."""
+    _require_windows("Bloquear a tela")
+    import ctypes
+
+    ctypes.windll.user32.LockWorkStation()
+
+
 @function_tool()
 async def lock_computer(context: RunContext) -> str:
     """Lock the computer screen (the user will need their password to come back)."""
     if not IS_WINDOWS:
         return "Bloquear a tela só está disponível no Windows por enquanto."
-    import ctypes
 
     await tool_status("lock_computer", "running")
-    ctypes.windll.user32.LockWorkStation()
+    lock_workstation()
     await tool_status("lock_computer", "done")
     logger.info("Tela bloqueada a pedido do usuário.")
     return "Tela bloqueada."
