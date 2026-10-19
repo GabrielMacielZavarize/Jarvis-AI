@@ -20,6 +20,7 @@ export const PANEL_META: Record<CardKind, { code: string; title: string; aliases
   camera: { code: 'CAM-19', title: 'Câmera', aliases: ['webcam', 'camara', 'cam', 'feed', 'visao', 'olho'] },
   pointer: { code: 'MOU-20', title: 'Mouse e teclado', aliases: ['mouse', 'teclado', 'clique', 'cursor', 'digitacao', 'atalho'] },
   memory: { code: 'MEM-23', title: 'Memória', aliases: ['memorias', 'lembranca', 'lembrancas', 'perfil', 'sobre mim'] },
+  explain: { code: 'TEL-31', title: 'Assistente de tela', aliases: ['explicacao', 'erro', 'correcao', 'codigo', 'resumo', 'traducao'] },
 };
 
 const PANEL_ACTIONS: HudPanelAction[] = ['list', 'close', 'close_all', 'expand', 'collapse'];
@@ -76,6 +77,8 @@ export function panelDetail(card: HudCard, now = Date.now()): string {
       const count = `${total} ${total === 1 ? 'memória' : 'memórias'}`;
       return query ? `"${query}" · ${count}` : count;
     }
+    case 'explain':
+      return [card.data.task_label, card.data.title || card.data.source].filter(Boolean).join(' · ');
   }
 }
 

@@ -783,6 +783,7 @@ HUD_PANEL_KINDS = {
     "camera": "Câmera",
     "pointer": "Mouse e teclado",
     "memory": "Memória",
+    "explain": "Assistente de tela",
 }
 LAST_PANEL = "last"
 MAX_PANEL_TARGETS = 6
@@ -826,7 +827,7 @@ async def manage_hud_panels(
         action: list (what is open, newest first, with the title shown on each panel), close,
             close_all, expand (enlarge one panel in the center of the HUD) or collapse.
         panels: Which panels. Each item is a kind (weather, search, news, time, diagnostics,
-            timer, note, email, media, screen, install, camera, pointer, memory), words of the title/subject shown on the panel
+            timer, note, email, media, screen, install, camera, pointer, memory, explain), words of the title/subject shown on the panel
             ("Leitura de tela", "Reprodução", "lista de compras estrogonofe") or "last" for the
             most recent panel. Without panels, close and expand act on the most recent panel.
     """
@@ -1325,6 +1326,10 @@ def build_tools(settings: Settings) -> list[Any]:
         from pc_control import build_pc_tools
 
         tools.extend(build_pc_tools())
+        import screen_assist
+
+        screen_assist.configure(settings.google_api_key, settings.computer_use_model)
+        tools.extend(screen_assist.build_screen_assist_tools())
     if settings.gestures_enabled:
         from gestures import build_gesture_tools
 
