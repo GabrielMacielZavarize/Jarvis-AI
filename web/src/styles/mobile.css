@@ -1,0 +1,249 @@
+/* LAN-26: o HUD no celular (pareamento, painel Celular do PC e layout de toque). */
+
+/* ───────────────────────── Pareamento (celular sem token) ───────────────────────── */
+
+.pairing {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: radial-gradient(circle at 50% 30%, rgb(var(--c-primary-rgb) / 0.12), transparent 60%), var(--bg);
+}
+.pairing__card {
+  width: min(100%, 420px);
+}
+.pairing__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pairing__brand {
+  margin: 4px 0 6px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: 0.3em;
+  text-align: center;
+  color: var(--c-primary);
+  text-shadow: var(--glow);
+}
+.pairing__hint,
+.pairing__foot {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+.pairing__foot {
+  font-size: 13px;
+}
+.pairing__foot a {
+  color: var(--c-primary);
+}
+.pairing__label {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.pairing__code,
+.pairing__name {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  background: rgb(var(--c-primary-rgb) / 0.06);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.pairing__code {
+  height: 64px;
+  font-family: var(--font-mono);
+  font-size: 34px;
+  letter-spacing: 0.4em;
+  text-align: center;
+}
+.pairing__name {
+  height: 46px;
+  padding: 0 12px;
+  font-size: 17px;
+}
+.pairing__code:focus,
+.pairing__name:focus {
+  border-color: var(--c-primary);
+  box-shadow: var(--glow);
+}
+.pairing__alert,
+.lan__error {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgb(255 90 90 / 0.5);
+  background: rgb(40 6 10 / 0.6);
+  color: #ffd2d2;
+  font-size: 14px;
+}
+.pairing__submit {
+  width: 100%;
+  height: 56px;
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+/* ───────────────────────── Painel Celular (no PC) ───────────────────────── */
+
+.lan .panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lan__url {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-dim);
+  word-break: break-all;
+}
+.lan__url strong {
+  font-family: var(--font-mono);
+  color: var(--c-primary);
+}
+.lan__pairing {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.lan__qr {
+  flex: none;
+  image-rendering: pixelated;
+  border: 1px solid var(--line);
+}
+.lan__code-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.lan__code {
+  font-family: var(--font-mono);
+  font-size: 30px;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  text-shadow: var(--glow);
+}
+.lan__left {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.lan__start {
+  min-width: 0;
+  width: 100%;
+}
+.lan__devices {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lan__devices li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+.lan__device-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lan__device-seen {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.lan__revoke {
+  height: 30px;
+  padding: 0 10px;
+}
+
+/* ───────────────────────── Celular: toque, núcleo e botões grandes ───────────────────────── */
+
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1100px) {
+  .hud {
+    gap: 14px;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(20px, env(safe-area-inset-bottom));
+  }
+  /* O núcleo vira o botão de falar: grande e em cima do núcleo 3D (centro da tela). */
+  .core-trigger {
+    width: min(56vw, 260px);
+    top: 50vh;
+  }
+  .core-trigger__label {
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    white-space: normal;
+    width: 80vw;
+    text-align: center;
+  }
+  .hud__dock {
+    margin-top: 58vh;
+    position: sticky;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    z-index: 5;
+  }
+  .dock {
+    padding: 10px 0;
+    background: linear-gradient(180deg, transparent, rgb(1 4 9 / 0.85) 30%);
+  }
+  .dock__controls {
+    width: 100%;
+    justify-content: center;
+    gap: 12px;
+  }
+  .btn {
+    height: 52px;
+    font-size: 13px;
+  }
+  .btn--primary {
+    flex: 1;
+    max-width: 320px;
+    height: 64px;
+    font-size: 14px;
+  }
+  .btn--round {
+    width: 64px;
+    height: 64px;
+    flex: none;
+  }
+  .btn--round svg {
+    width: 28px;
+    height: 28px;
+  }
+  .hud__left,
+  .hud__right {
+    gap: 12px;
+  }
+  .conversation {
+    min-height: 260px;
+    max-height: 55vh;
+  }
+  .lan__code {
+    font-size: 26px;
+  }
+  /* Campos com menos de 16px fazem o iPhone dar zoom ao focar. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* PWA instalado: sem a barra do navegador, respeita o entalhe. */
+@media (display-mode: standalone) {
+  .hud__top {
+    padding-top: env(safe-area-inset-top);
+  }
+}

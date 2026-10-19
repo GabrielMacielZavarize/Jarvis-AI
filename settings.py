@@ -206,6 +206,7 @@ class Settings:
     presence_enabled: bool = False
     presence_away_minutes: float = DEFAULT_PRESENCE_AWAY_MINUTES
     presence_lock: bool = False
+    lan_enabled: bool = False
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -330,6 +331,7 @@ class Settings:
                 240,
             ),
             presence_lock=_parse_bool(env_map.get("JARVIS_PRESENCE_LOCK"), "JARVIS_PRESENCE_LOCK", default=False),
+            lan_enabled=_parse_bool(env_map.get("JARVIS_LAN"), "JARVIS_LAN", default=False),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),

@@ -9,6 +9,9 @@ navegador, e os dois nunca disputam o microfone.
 
 O aviso de reunião da agenda (AGD-27) usa o mesmo caminho: o servidor guarda o aviso numa fila,
 acorda o HUD com ``reason="calendar"`` e o agente busca a fila assim que o link abre.
+
+Um celular pareado (LAN-26) também recebe os eventos, mas a palavra ouvida pelo PC só conecta uma
+aba do próprio PC, e só o PC escolhe o microfone que o detector usa.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from lan_access import device_of
 from settings import Settings
 
 # jarvis.py shares a random secret with the detector, so only it can say "Jarvis" was heard.
@@ -53,6 +57,8 @@ class HudClient:
     queue: asyncio.Queue[dict[str, Any] | None] = field(default_factory=asyncio.Queue)
     session_active: bool = False
     visible: bool = True
+    # Aba aberta no próprio PC (não num celular pareado).
+    local: bool = True
 
 
 class WakeHub:
@@ -75,8 +81,8 @@ class WakeHub:
 
     # --- HUD -------------------------------------------------------------------------------------
 
-    def connect(self, client_id: str) -> HudClient:
-        client = HudClient(id=client_id, connected_at=self._clock())
+    def connect(self, client_id: str, *, local: bool = True) -> HudClient:
+        client = HudClient(id=client_id, connected_at=self._clock(), local=local)
         self.clients[client_id] = client
         if self.undelivered_score is not None and self._pending():
             self._deliver(client, self.undelivered_score, self.undelivered_reason, self.undelivered_routine)
@@ -99,7 +105,9 @@ class WakeHub:
         if client is not None:
             client.session_active = session_active
             client.visible = visible
-        self.mic_label = mic_label
+        # O microfone de um celular não existe no PC: o detector segue o do HUD local.
+        if client is None or client.local:
+            self.mic_label = mic_label
         if session_active:
             self._clear_pending()
 
@@ -216,8 +224,10 @@ class WakeHub:
         client.queue.put_nowait(event)
 
     def _pick_client(self) -> HudClient | None:
-        # Uma aba só conecta: a visível mais recente, senão a mais recente.
-        clients = sorted(self.clients.values(), key=lambda client: (client.visible, client.connected_at))
+        # Uma aba só conecta: a visível mais recente, senão a mais recente. Quem disse "Jarvis" está
+        # perto do PC, então o celular nunca é escolhido; sem aba no PC, o navegador do PC abre.
+        local = [client for client in self.clients.values() if client.local]
+        clients = sorted(local, key=lambda client: (client.visible, client.connected_at))
         return clients[-1] if clients else None
 
 
@@ -261,9 +271,9 @@ def _sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
 
-async def hud_events(hub: WakeHub, client_id: str, settings: Settings) -> AsyncIterator[str]:
+async def hud_events(hub: WakeHub, client_id: str, settings: Settings, *, local: bool = True) -> AsyncIterator[str]:
     """SSE stream of one HUD tab: config, detector status changes and wakes."""
-    client = hub.connect(client_id)
+    client = hub.connect(client_id, local=local)
     try:
         yield _sse(_config_event(settings))
         last_status = hub.status()
@@ -324,7 +334,7 @@ def build_wake_router(
     async def events(request: Request, client: str = "") -> StreamingResponse:
         _require_hud(request)
         return StreamingResponse(
-            hud_events(hub, client_id(client), current_settings()),
+            hud_events(hub, client_id(client), current_settings(), local=device_of(request) is None),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )

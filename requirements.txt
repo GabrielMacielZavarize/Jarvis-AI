@@ -24,3 +24,7 @@ sounddevice
 # Google Agenda (AGD-27): login OAuth de app desktop e a API do Calendar
 google-auth-oauthlib
 google-api-python-client
+
+# Celular na rede de casa (LAN-26): certificado HTTPS local e QR de pareamento
+cryptography
+segno

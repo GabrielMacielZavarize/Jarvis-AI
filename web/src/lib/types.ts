@@ -479,5 +479,7 @@ export interface ServerStatus {
   proactive?: boolean;
   /** PRS-25: the webcam notices when the user arrives and leaves (JARVIS_PRESENCE=true). */
   presence?: boolean;
+  /** LAN-26: the server also answers paired phones on the home network (--lan). */
+  lan?: boolean;
   errors: string[];
 }

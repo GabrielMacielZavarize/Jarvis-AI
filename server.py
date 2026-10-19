@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import mimetypes
 import os
 import re
 import secrets
@@ -33,6 +34,7 @@ from generate_playground_token import create_token
 from routines import RoutineScheduler
 from proactive import ProactiveEngine, build_proactive_router
 from presence import NEEDS_CAMERA, PresenceService, get_service, voice_action
+from lan_access import DeviceRegistry, LanGuard, TlsFiles, build_lan_router, device_of, ensure_certificates, lan_addresses, lan_url
 from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
 from wake_hub import WakeHub, build_wake_router
@@ -45,6 +47,8 @@ GRACEFUL_SHUTDOWN_S = 2
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
 WEB_DIST = ROOT / "web" / "dist"
+# O manifest do PWA precisa do tipo certo (o Windows nem sempre o conhece).
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.\- ]{1,64}$")
 TOOL_NAMES = [
     "get_weather",
@@ -190,12 +194,13 @@ def _geocode_home(city: str) -> dict[str, Any] | None:
     return home
 
 
-def _require_local(request: Request, name: str = "A câmera") -> None:
-    """A webcam (e a fila de avisos da agenda) só atende este computador: recusa Host estranho
-    (DNS rebinding) e páginas de outros sites abertas no navegador (Sec-Fetch-Site), que poderiam
-    ligá-la com um <img>."""
+def _require_local(request: Request, name: str = "A câmera", *, devices: bool = True) -> None:
+    """A webcam (e o resto do que é do PC) só atende este computador ou um celular pareado
+    (LAN-26): recusa Host estranho (DNS rebinding) e páginas de outros sites abertas no navegador
+    (Sec-Fetch-Site), que poderiam ligá-la com um <img>. ``devices=False`` fecha a rota também
+    para os celulares pareados (ex.: a fila de avisos da agenda, que é só do agente)."""
     host = (request.url.hostname or "").strip("[]").lower()
-    if host not in LOCAL_HOSTS:
+    if host not in LOCAL_HOSTS and not (devices and device_of(request) is not None):
         raise HTTPException(status_code=403, detail=f"{name} só pode ser acessada pelo próprio computador.")
     if request.headers.get("sec-fetch-site") not in (None, "same-origin", "none"):
         raise HTTPException(status_code=403, detail=f"Pedido de outro site bloqueado: {name.lower()} só atende o HUD do Jarvis.")
@@ -254,6 +259,7 @@ def create_app(
     calendar_reminders: bool = True,
     proactive: Callable[[WakeHub], ProactiveEngine | None] | None = None,
     presence_service: PresenceService | None = None,
+    devices: DeviceRegistry | None = None,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
@@ -262,7 +268,7 @@ def create_app(
     replaces the clock-driven scheduler of the routines (tests); ``calendar_reminders=False``
     turns off the meeting reminders loop (tests); ``proactive`` builds the PRO-28 notice engine
     (tests); by default it runs when JARVIS_PROACTIVE=true; ``presence_service`` replaces the
-    webcam presence detector (PRS-25, tests)."""
+    webcam presence detector (PRS-25, tests); ``devices`` replaces ``aparelhos.json`` (tests)."""
 
     def default_engine(wake_hub: WakeHub) -> ProactiveEngine | None:
         try:
@@ -319,6 +325,25 @@ def create_app(
             camera.shutdown()
 
     app = FastAPI(title="Jarvis HUD", version=APP_VERSION, lifespan=lifespan)
+    # LAN-26: fora do próprio PC nada responde sem um aparelho pareado. serve() preenche os
+    # endereços da rede local e o certificado quando o modo --lan está ligado.
+    app.state.lan_urls = []
+    app.state.tls = None
+    registry_box: list[DeviceRegistry] = [devices] if devices is not None else []
+
+    def registry() -> DeviceRegistry:
+        if not registry_box:
+            registry_box.append(DeviceRegistry())
+        return registry_box[0]
+
+    app.add_middleware(LanGuard, registry=registry, web_dist=WEB_DIST)
+    app.include_router(
+        build_lan_router(
+            registry,
+            lambda: app.state.lan_urls,
+            lambda: app.state.tls.ca_cert if app.state.tls else None,
+        )
+    )
 
     def current_settings() -> Settings:
         if reload_env:
@@ -413,6 +438,7 @@ def create_app(
             "proactive": settings.proactive_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
+            "lan": bool(app.state.lan_urls),
             "errors": backend_errors + livekit_errors,
         }
 
@@ -490,7 +516,7 @@ def create_app(
     @app.post("/api/calendar/reminders/claim")
     def claim_calendar_reminders(request: Request) -> dict[str, Any]:
         """O agente busca os avisos de reunião que o servidor guardou (cada um sai uma vez só)."""
-        _require_local(request, "A agenda")
+        _require_local(request, "A agenda", devices=False)
         return {"reminders": app.state.wake_hub.claim_reminders()}
 
     def presence_state() -> dict[str, Any]:
@@ -585,36 +611,94 @@ def create_app(
 app = create_app()
 
 
-def serve(hud_app: FastAPI, *, host: str, port: int, log_level: str) -> None:
+def enable_lan(hud_app: FastAPI, port: int) -> list[str]:
+    """LAN-26: descobre os IPs da rede de casa e prepara o certificado HTTPS para eles."""
+    ips = lan_addresses()
+    if not ips:
+        raise RuntimeError("Nenhum IP de rede local encontrado. O PC está no Wi-Fi ou no cabo de casa?")
+    hud_app.state.tls = ensure_certificates(ips)
+    hud_app.state.lan_urls = [lan_url(ip, port) for ip in ips]
+    return ips
+
+
+def serve(hud_app: FastAPI, *, host: str, port: int, log_level: str, lan_ips: list[str] | None = None) -> None:
     """``uvicorn.run`` that first ends the SSE streams of open HUD tabs, which would otherwise
-    keep Ctrl+C waiting until every tab is closed."""
+    keep Ctrl+C waiting until every tab is closed.
+
+    With ``lan_ips`` (``--lan``) the same app also listens with HTTPS on each LAN address and the
+    same port: the PC keeps http://127.0.0.1, the phone gets https://<ip> (the mic needs HTTPS)."""
+    import asyncio
+    import contextlib
+
     import uvicorn
 
     shown = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
     hud_app.state.hud_url = f"http://{f'[{shown}]' if ':' in shown else shown}:{port}"
+    extras: list[uvicorn.Server] = []
 
     class HudServer(uvicorn.Server):
         async def shutdown(self, sockets: Any = None) -> None:
             hud_app.state.wake_hub.close()
+            for extra in extras:
+                extra.should_exit = True
             await super().shutdown(sockets)
 
     hud_app.state.base_url = f"http://{'127.0.0.1' if host in {'0.0.0.0', '::'} else host}:{port}/"
+    class LanServer(uvicorn.Server):
+        # Ctrl+C chega ao servidor principal, que encerra este junto.
+        def capture_signals(self) -> Any:
+            return contextlib.nullcontext()
+
     config = uvicorn.Config(
         hud_app, host=host, port=port, log_level=log_level, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_S
     )
+    main_server = HudServer(config)
+    tls: TlsFiles | None = hud_app.state.tls
+    for ip in lan_ips or []:
+        if tls is None:
+            break
+        lan_config = uvicorn.Config(
+            hud_app,
+            host=ip,
+            port=port,
+            log_level=log_level,
+            lifespan="off",
+            ssl_certfile=str(tls.cert),
+            ssl_keyfile=str(tls.key),
+            timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_S,
+        )
+        extras.append(LanServer(lan_config))
+
+    async def run_all() -> None:
+        await asyncio.gather(main_server.serve(), *(extra.serve() for extra in extras))
+
     try:
-        HudServer(config).run()
+        if extras:
+            asyncio.run(run_all())
+        else:
+            main_server.run()
     except KeyboardInterrupt:
         pass
+
+
+def _lan_from_env() -> bool:
+    try:
+        return load_settings().lan_enabled
+    except SettingsError:
+        return False
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Servidor do HUD do Jarvis.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--lan", action="store_true", help="Atende também o celular na rede de casa (HTTPS).")
     args = parser.parse_args()
 
-    serve(app, host=args.host, port=args.port, log_level="info")
+    lan_ips = enable_lan(app, args.port) if args.lan or _lan_from_env() else None
+    for url in app.state.lan_urls:
+        print(f"[LAN] Celular: {url}")
+    serve(app, host=args.host, port=args.port, log_level="info", lan_ips=lan_ips)
     return 0
 
 
