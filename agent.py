@@ -24,6 +24,14 @@ async def jarvis_agent(ctx: agents.JobContext):
 
         watch_dictation(runtime.session)
 
+    if settings.routines_enabled:
+        import asyncio
+
+        from routines import claim_scheduled
+
+        # ROT-24: o link foi aberto por uma rotina agendada? Ela roda no lugar do cumprimento.
+        runtime.agent.startup_routine = await asyncio.to_thread(claim_scheduled, settings.hud_url)
+
     await runtime.session.start(
         room=ctx.room,
         agent=runtime.agent,
@@ -34,6 +42,11 @@ async def jarvis_agent(ctx: agents.JobContext):
         from memory import serve_memory_panel
 
         serve_memory_panel(ctx.room)
+
+    if settings.routines_enabled:
+        from routines import watch_scheduled_routines
+
+        watch_scheduled_routines(runtime.session, settings.hud_url)
 
     if settings.gestures_enabled:
         from gestures import MIC, autostart_requested, start_for_session

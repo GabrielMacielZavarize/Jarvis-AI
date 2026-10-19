@@ -160,6 +160,7 @@ class Settings:
     computer_use_enabled: bool = False
     computer_use_model: str = DEFAULT_COMPUTER_USE_MODEL
     memory_enabled: bool = True
+    routines_enabled: bool = True
     home_city: str | None = None
     transcription_hints: bool = False
     wake_word_enabled: bool = False
@@ -245,6 +246,11 @@ class Settings:
             memory_enabled=_parse_bool(
                 env_map.get("JARVIS_ENABLE_MEMORY"),
                 "JARVIS_ENABLE_MEMORY",
+                default=True,
+            ),
+            routines_enabled=_parse_bool(
+                env_map.get("JARVIS_ENABLE_ROUTINES"),
+                "JARVIS_ENABLE_ROUTINES",
                 default=True,
             ),
             home_city=_clean_optional(env_map.get("JARVIS_HOME_CITY")),

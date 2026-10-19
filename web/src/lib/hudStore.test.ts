@@ -165,6 +165,21 @@ describe('card limit', () => {
     expect(kinds()).toEqual(['time', 'news', 'timer', 'email']);
   });
 
+  it('keeps a running routine on screen while its steps open weather, news and media panels', () => {
+    const hud = useHud.getState();
+    const steps = [{ label: 'Clima', status: 'running' as const, detail: '' }];
+    hud.pushCard('routine', { id: 'r1', name: 'Bom dia', trigger: 'voz', status: 'running', started_at: Date.now(), steps });
+    hud.pushCard('weather', weather);
+    hud.pushCard('news', { topic: 'tecnologia', items: [] });
+    hud.pushCard('search', { query: 'frango', results: [] });
+    hud.pushCard('media', { service: 'YouTube', title: 'lo-fi', url: 'https://youtube.com' });
+    expect(kinds()).toEqual(['media', 'search', 'news', 'routine']);
+
+    // The same run updates its panel in place instead of stacking a new one.
+    hud.pushCard('routine', { id: 'r1', name: 'Bom dia', trigger: 'voz', status: 'done', started_at: Date.now(), steps });
+    expect(kinds().filter((kind) => kind === 'routine')).toHaveLength(1);
+  });
+
   it('still caps the column when everything is pinned', () => {
     const now = Date.now();
     const timers = Array.from({ length: 6 }, (_, index) => ({

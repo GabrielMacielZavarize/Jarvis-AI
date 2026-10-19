@@ -812,13 +812,13 @@ class ToolAndSettingsTests(unittest.TestCase):
         self.assertTrue(load_settings({"GOOGLE_API_KEY": "k", "JARVIS_ENABLE_GESTURES": "true"}).gestures_enabled)
 
     def test_tool_is_registered_only_with_the_flag(self) -> None:
-        from server import GESTURE_TOOL_NAMES, MEMORY_TOOL_NAMES, TOOL_NAMES
+        from server import GESTURE_TOOL_NAMES, MEMORY_TOOL_NAMES, ROUTINE_TOOL_NAMES, TOOL_NAMES
         from tools import build_tools
 
         names = [tool.__name__ for tool in build_tools(load_settings({"GOOGLE_API_KEY": "k"}))]
         self.assertNotIn("gesture_control", names)
         settings = load_settings({"GOOGLE_API_KEY": "k", "JARVIS_ENABLE_GESTURES": "true"})
-        self.assertEqual([tool.__name__ for tool in build_tools(settings)], TOOL_NAMES + MEMORY_TOOL_NAMES + GESTURE_TOOL_NAMES)
+        self.assertEqual([tool.__name__ for tool in build_tools(settings)], TOOL_NAMES + MEMORY_TOOL_NAMES + ROUTINE_TOOL_NAMES + GESTURE_TOOL_NAMES)
 
     def test_voice_tool_calls_the_service(self) -> None:
         gesture_control, _shortcuts = gestures.build_gesture_tools()

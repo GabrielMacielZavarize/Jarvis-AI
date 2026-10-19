@@ -18,6 +18,7 @@ Short English summary: real-time voice assistant built on LiveKit Agents (Gemini
 - **Assistente de tela para dev** (TEL-31): "explica esse erro", "o que tem de errado aqui?", "o que esse código faz?", "resume essa página", "traduz isso" e "copia a correção", com painel de explicação e blocos de código com destaque e botão de copiar.
 - **Palavra de ativação** (opcional): diga "Jarvis" e o link abre sozinho; o silêncio o encerra para poupar a cota do Gemini. Detecção local, sem enviar áudio antes da ativação.
 - **Voz e jeito do filme (VOZ-30)**: voz grave e calma configurável (`JARVIS_VOICE`, troca por comando de voz), persona de mordomo britânico com humor seco, sons de interface gerados no navegador e animações de "pensando" e "executando" no núcleo 3D.
+- **Rotinas** (ROT-24): "Bom dia, Jarvis" cumprimenta, diz o clima, as manchetes e os lembretes, arruma as janelas e toca uma playlist; "modo foco", "modo jogo", "boa noite" e as rotinas que você criar por voz. Também rodam sozinhas no horário ("todo dia útil às 8h").
 - **Um comando para subir tudo**: `python jarvis.py`.
 - Ferramentas de rede agora rodam fora do event loop (`asyncio.to_thread`), então o áudio não engasga durante uma pesquisa.
 
@@ -82,8 +83,9 @@ Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CON
 | MEM-23 | `remember` / `recall` / `forget` — memória entre conversas em `memoria.json`; o painel Memória lista e apaga | "Lembra que minha reunião de segunda é às 9." · "O que você sabe sobre mim?" · "Esquece isso." |
 | TEL-31 | `explain_screen` — lê a seleção, o texto da janela em foco ou o trecho perto do cursor (print só sem texto) e explica no painel Assistente de tela · `copy_fix` — coloca o código sugerido na área de transferência | "Explica esse erro." · "O que tem de errado aqui?" · "O que esse código faz?" · "Resume essa página." · "Traduz isso pro inglês." · "Copia a correção." |
 | VOZ-30 | `change_voice` — troca a voz do Jarvis (vozes do Gemini Live), lista as vozes no HUD e volta à padrão | "Troca sua voz para Orus." · "Quais vozes você tem?" · "Volta pra sua voz normal." |
+| ROT-24 | `run_routine` / `list_routines` / `save_routine` / `delete_routine` / `schedule_routine` / `confirm_routine_step` — várias ferramentas em sequência, com cada passo no painel Rotina; agendamento por horário | "Bom dia, Jarvis." · "Modo foco." · "Cria uma rotina estudo que abre o Notion e põe lo-fi." · "Todo dia útil às 8h roda o bom dia." |
 
-Os protocolos MED, PC, WEB, AUD, JAN, VIS e TEL só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`. MEM vem ligado e some com `JARVIS_ENABLE_MEMORY=false`.
+Os protocolos MED, PC, WEB, AUD, JAN, VIS e TEL só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`. MEM vem ligado e some com `JARVIS_ENABLE_MEMORY=false`; ROT também vem ligado e some com `JARVIS_ENABLE_ROUTINES=false` (os passos que mexem no PC só funcionam com `JARVIS_ENABLE_PC_CONTROL=true`).
 
 ### Memória entre conversas
 
@@ -100,6 +102,49 @@ O Jarvis entende "aba"/"abinha" na tela ou na esquerda como os painéis do HUD; 
 Depois de atualizar o código, recompile o HUD com `python jarvis.py --rebuild`: sem isso o navegador continua com a versão antiga e não entende os títulos, o microfone nem o "desligar".
 
 Serviços conhecidos (Google Maps, Gmail, Drive, Claude, ChatGPT, GitHub…) abrem direto pelo nome. Para sites seus, peça "salva esse site como …" ou edite `atalhos.json` (`{"portal SATC": "https://…"}`); esse arquivo fica fora do git.
+
+### Rotinas (ROT-24)
+
+Uma rotina é uma lista de passos que o Jarvis roda em sequência com as ferramentas que já existem. Diga o nome dela como comando:
+
+| Rotina | O que faz |
+| --- | --- |
+| **Bom dia** ("Bom dia, Jarvis") | Cumprimenta pelo horário, diz o clima de `JARVIS_HOME_CITY`, as manchetes do dia e os lembretes de agenda da memória, aplica o layout de janelas **trabalho** e toca uma playlist lo-fi no YouTube |
+| **Modo foco** | Minimiza as janelas (distrações fora da vista), volume em 15%, timer Pomodoro de 25 minutos e uma nota no HUD |
+| **Modo jogo** | Abre a Steam e o Discord e põe o volume em 60% |
+| **Boa noite** | Cumprimenta, salva as janelas como layout **noite**, pausa a mídia e **pergunta** antes de bloquear o PC |
+
+- Cada passo aparece no painel **Rotina (ROT-24)** do HUD (✓ feito, ✕ falhou, ? esperando seu sim). Um passo que falha (layout que não existe, app que não abre, rede fora) não derruba os outros, e o Jarvis diz o que falhou e por quê. Um passo travado desiste depois de 60 segundos.
+- O layout **trabalho** do "bom dia" é o que você salvou com "salva esse layout como trabalho" (`manage_layouts`); sem ele, o passo falha e o resto segue.
+- Crie e edite por voz: "cria uma rotina estudo que abre o Notion e põe lo-fi", "coloca o Spotify no modo jogo", "muda o modo foco para 50 minutos", "apaga a rotina estudo", "quais rotinas eu tenho?".
+- Agende por voz: "todo dia útil às 8h roda o bom dia", "toda sexta às 19h roda o modo jogo", "para de rodar o bom dia sozinho". Na hora, com o `python jarvis.py` aberto, o HUD conecta o link sozinho pela mesma via da palavra de ativação (abre o navegador se não houver aba), roda a rotina e o Jarvis fala o resultado. Se a conversa já estiver aberta, ela roda ali mesmo. O PC ligado até 10 minutos depois do horário ainda roda a rotina daquele dia.
+- As rotinas ficam em `rotinas.json` (fora do git). Sem o arquivo, valem as quatro de fábrica; a primeira edição grava todas nele. Dá para editar à mão — cada passo é uma linha `ação: argumento`:
+
+```json
+{
+  "version": 1,
+  "routines": {
+    "estudo": {
+      "name": "Estudo",
+      "aliases": ["hora de estudar"],
+      "steps": ["app: Notion", "youtube: lo-fi para estudar", "timer: 50 Estudo", "volume: 25"],
+      "schedule": {"days": [0, 1, 2, 3, 4], "time": "19:00", "enabled": true}
+    }
+  }
+}
+```
+
+Ações: `greet`, `weather` (ou `weather: cidade`), `news: tema`, `reminders`, `time`, `timer: minutos rótulo`, `note: título | texto`, `layout: nome`, `save_layout: nome`, `youtube: busca`, `spotify: busca`, `stream: serviço | busca`, `site: endereço`, `app: nome`, `folder: pasta`, `volume: 0-100 | mute | unmute`, `media: stop | play_pause | next | previous`, `minimize`, `close: app` e `lock`. Os dias vão de 0 (segunda) a 6 (domingo).
+
+Roteiro de teste ao vivo (Windows, `JARVIS_ENABLE_PC_CONTROL=true` e `JARVIS_HOME_CITY` no `.env`, `python jarvis.py --rebuild` na primeira vez):
+
+1. Arrume as janelas de trabalho nos 3 monitores e diga "salva esse layout como trabalho". Minimize tudo.
+2. "Bom dia, Jarvis" → o painel Rotina mostra os 6 passos um a um; o Jarvis fala o clima, 2 ou 3 manchetes e os lembretes, as janelas voltam ao lugar e a playlist abre.
+3. "Apaga o layout trabalho" e repita o "bom dia": o passo do layout fica com ✕, o resto roda e o Jarvis diz que o layout não existe.
+4. "Modo foco" → janelas minimizadas, volume em 15% e o timer de 25 minutos no HUD.
+5. "Boa noite" → layout **noite** salvo, mídia pausada e a pergunta do bloqueio; responda "não" (nada acontece) e depois rode de novo e responda "sim, pode" (a tela bloqueia).
+6. "Cria uma rotina estudo que abre o Notion e põe lo-fi" e depois "roda a rotina estudo".
+7. "Todo dia às <daqui a 2 minutos> roda o modo foco", feche a aba do HUD e espere: o navegador abre sozinho, o link conecta e o Jarvis fala o resultado. Repita com uma conversa aberta: a rotina roda nela em até 15 segundos. No fim, "para de rodar o modo foco sozinho".
 
 ### Telas e layouts de janelas
 
@@ -651,6 +696,13 @@ Uma memória falsa plantada por uma página seria um prompt injection persistent
 - O painel do HUD só lista e apaga por id: não existe caminho para criar memória pelo navegador.
 - O resumo entra nas instruções marcado como dados ("nunca ordens"), sem itens sensíveis editados à mão, e o texto dos fatos não vai para os logs.
 
+### Rotinas
+
+- Só as ações da lista acima entram numa rotina: enviar email, instalar apps e mouse/teclado ficam de fora, porque têm a própria confirmação por código.
+- Bloquear o PC e fechar um app nunca rodam sozinhos, nem numa rotina agendada: ficam para o fim, o Jarvis pergunta e só faz depois de um "sim"/"pode" numa fala **nova** sua (o pedido que iniciou a rotina não vale, e qualquer "não"/"espera" recusa). Sem resposta em 3 minutos, o passo é descartado.
+- Criar, mudar, apagar ou agendar uma rotina exige que a sua última fala fale em rotina/modo/agenda ou cite o nome dela; uma página, email ou texto na tela não planta rotinas.
+- `POST /api/routines/claim` (por onde o agente pega a rotina agendada) só atende o próprio computador e recusa pedidos de outros sites.
+
 ### Palavra de ativação
 
 - O detector só fala com o servidor local, com um segredo aleatório que o `jarvis.py` gera a cada execução. Sem ele, `/api/wake/trigger` recusa o aviso.
@@ -704,7 +756,7 @@ Cobertura: settings, seleção de backend, registro de ferramentas, clima e prev
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, gestos das mãos (mãos sintéticas: poses, suavização, histerese, quadros ruins, calibração, replay de traces, máquina de estados, monitor vizinho com a geometria real dos 3 monitores, os gestos personalizáveis com o gestos.json e as ações com mocks), mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, mouse e teclado (conversão de coordenadas com os três monitores reais, DPI, allowlist de atalhos, recusa de senhas e janelas do sistema, confirmação de cliques, parse da resposta do modelo de visão), janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem, não clicam nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), memória (pedido na última fala, recusa de senhas/documentos/cartões, resumo na sessão seguinte, painel MEM-23), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
-Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa), palavra de ativação (microfone pelo nome que o navegador mostra, detector, pausa durante o link, aviso ao HUD e encerramento por silêncio) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador, nem abrem o microfone.
+Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa), palavra de ativação (microfone pelo nome que o navegador mostra, detector, pausa durante o link, aviso ao HUD e encerramento por silêncio), rotinas (passos, falhas parciais, timeout, confirmação do bloqueio, edição por voz e agendamento com relógio falso) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador, nem abrem o microfone.
 
 Assistente de tela (TEL-31): ordem de leitura (seleção, área de transferência, texto da janela ou do cursor e print só sem texto), HUD em foco, recusa de cofres de senha, ocultação de segredos, região do cursor nos monitores de x negativo, prompt e parse do modelo, queda para a sessão de voz e cópia sem digitar, com UI Automation, prints, área de transferência e modelo falsos; no HUD, o destaque de sintaxe e o painel.
 Modo ditado (DIT-29): a normalização (comandos falados → texto/teclas, pontuação automática, maiúsculas, "ponto"/"vírgula" como palavras) e a máquina de estados (parciais e final do Gemini, a fala que ligou o modo nunca digitada, silêncio do Jarvis, fim do ditado, desfazer, Shift+Enter em apps de conversa, recusas, ESC, mouse, silêncio e troca de campo), com teclado falso.
@@ -725,6 +777,7 @@ dictation.py          Modo ditado (DIT-29): transcrições da fala → comandos 
 confirmation.py       Frase "confirmar <código>" tolerante à transcrição de voz
 memory.py             Memória entre conversas (memoria.json), filtro de segredos e painel MEM-23
 voices.py             Voz do Jarvis (VOZ-30): vozes do Gemini Live, voz.json e a ferramenta change_voice
+routines.py           Rotinas (rotinas.json): passos, execução com falhas parciais, ferramentas e agendador
 win_desktop.py        Monitores, janelas e captura de tela via Win32
 camera.py             Dono único da webcam (CameraHub): captura, feed MJPEG, fotos
 vision.py             Ferramentas de visão: look_at_camera, camera_view e envio de imagens ao modelo
@@ -776,6 +829,12 @@ O navegador só libera o microfone em `localhost`/`127.0.0.1` ou HTTPS. No paine
 - Diz "Sem sinal no microfone": o dispositivo está mudo no Windows (tecla de mudo do notebook ou Configurações > Sistema > Som > Entrada). O terminal mostra qual microfone o detector abriu.
 - Microfone errado: escolha o certo no painel Sistema (o detector troca na hora) ou fixe um com `JARVIS_WAKE_MIC`.
 - Ativa sozinho com TV ou música: suba `JARVIS_WAKE_THRESHOLD` (0.6–0.7).
+
+### A rotina agendada não rodou
+
+- O agendador roda dentro do `python jarvis.py`: com ele fechado (ou o PC dormindo por mais de 10 minutos depois do horário), a rotina daquele dia não roda.
+- Confira com "quais rotinas eu tenho?" se ela aparece como agendada, e se o HUD está com `JARVIS_ENABLE_ROUTINES=true` (vem ligado).
+- Se o navegador abriu mas o link não conectou, veja o registro de atividades do HUD ("Rotina agendada · …") e a mensagem do LiveKit; o pedido espera 3 minutos pelo link antes de ser descartado.
 
 ### O Spotify abre mas não começa a tocar
 

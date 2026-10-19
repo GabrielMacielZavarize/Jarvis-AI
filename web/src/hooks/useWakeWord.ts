@@ -54,6 +54,7 @@ const isVisible = () => typeof document === 'undefined' || document.visibilitySt
 /**
  * WAK-22: the local detector heard "Jarvis" → chime and connect the link; silence for
  * JARVIS_WAKE_SILENCE_SECONDS → close it, so the detector goes back to listening.
+ * ROT-24: a scheduled routine that came due arrives as the same wake, with its name.
  */
 export function useWakeWord(options: WakeOptions): WakeWord {
   const { enabled, canConnect, ready, connected, busy, demo, mode, error, lineCount, micLabel } = options;
@@ -77,7 +78,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const report = useCallback((result: 'connected' | 'failed' | 'ignored') => post('/api/wake/result', { client: clientId, result }), [clientId]);
 
   const onWake = useCallback(
-    (score: number) => {
+    (score: number, routine?: string) => {
       const state = latest.current;
       const hud = useHud.getState();
       if (state.sessionActive || state.demo) {
@@ -85,12 +86,12 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         return;
       }
       if (!state.canConnect) {
-        hud.addLog('warn', 'Ouvi “Jarvis”, mas o LiveKit não está configurado');
+        hud.addLog('warn', routine ? `Rotina agendada “${routine}”, mas o LiveKit não está configurado` : 'Ouvi “Jarvis”, mas o LiveKit não está configurado');
         void report('failed');
         return;
       }
       playWakeChime();
-      hud.addLog('ok', `Palavra de ativação · “Jarvis” (${Math.round(score * 100)}%)`);
+      hud.addLog('ok', routine ? `Rotina agendada · “${routine}”` : `Palavra de ativação · “Jarvis” (${Math.round(score * 100)}%)`);
       setWakeAt(Date.now());
     },
     [report],
@@ -111,7 +112,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       } else if (event.type === 'status') {
         setDetector({ online: event.detector, listening: event.listening, micSilent: event.mic_silent ?? false });
       } else {
-        onWake(event.score);
+        onWake(event.score, event.routine);
       }
     };
     source.onerror = () => setDetector({ online: false, listening: false, micSilent: false });

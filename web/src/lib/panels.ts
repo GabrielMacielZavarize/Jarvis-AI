@@ -21,6 +21,7 @@ export const PANEL_META: Record<CardKind, { code: string; title: string; aliases
   pointer: { code: 'MOU-20', title: 'Mouse e teclado', aliases: ['mouse', 'teclado', 'clique', 'cursor', 'digitacao', 'atalho'] },
   memory: { code: 'MEM-23', title: 'Memória', aliases: ['memorias', 'lembranca', 'lembrancas', 'perfil', 'sobre mim'] },
   explain: { code: 'TEL-31', title: 'Assistente de tela', aliases: ['explicacao', 'erro', 'correcao', 'codigo', 'resumo', 'traducao'] },
+  routine: { code: 'ROT-24', title: 'Rotina', aliases: ['rotinas', 'modo', 'passos', 'sequencia'] },
 };
 
 const PANEL_ACTIONS: HudPanelAction[] = ['list', 'close', 'close_all', 'expand', 'collapse'];
@@ -79,6 +80,10 @@ export function panelDetail(card: HudCard, now = Date.now()): string {
     }
     case 'explain':
       return [card.data.task_label, card.data.title || card.data.source].filter(Boolean).join(' · ');
+    case 'routine': {
+      const done = card.data.steps.filter((step) => step.status === 'ok').length;
+      return `${card.data.name} · ${done}/${card.data.steps.length}`;
+    }
   }
 }
 

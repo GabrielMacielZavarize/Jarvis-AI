@@ -7,9 +7,11 @@ no formato padrão de endpoint usado pelo ``TokenSource.endpoint`` do livekit-cl
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import re
 import secrets
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import webbrowser
@@ -27,6 +29,7 @@ from pydantic import BaseModel
 import camera
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
+from routines import RoutineScheduler
 from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
 from wake_hub import WakeHub, build_wake_router
@@ -76,6 +79,14 @@ PC_TOOL_NAMES = [
     "copy_fix",
 ]
 MEMORY_TOOL_NAMES = ["remember", "recall", "forget"]
+ROUTINE_TOOL_NAMES = [
+    "list_routines",
+    "run_routine",
+    "confirm_routine_step",
+    "save_routine",
+    "delete_routine",
+    "schedule_routine",
+]
 EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", "cancel_pending_email"]
 GESTURE_TOOL_NAMES = ["gesture_control", "gesture_shortcuts"]
 INSTALL_TOOL_NAMES = ["search_apps", "prepare_app_install", "confirm_app_install", "cancel_app_install"]
@@ -199,15 +210,20 @@ def create_app(
     reload_env: bool = True,
     camera_hub: CameraHub | None = None,
     open_browser: Callable[[str], Any] = webbrowser.open,
+    routine_scheduler: RoutineScheduler | None = None,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
     ``camera_hub`` replaces the real webcam (tests); ``open_browser`` opens the HUD when
-    "Jarvis" is heard and no tab is open."""
+    "Jarvis" is heard and no tab is open. ``routine_scheduler`` replaces the clock-driven
+    scheduler of the routines (tests)."""
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        # ROT-24: as rotinas agendadas vencem aqui, no processo do servidor.
+        scheduler_task = asyncio.create_task(app.state.routines.run_forever(routines_enabled))
         yield
+        scheduler_task.cancel()
         # Ao encerrar o servidor a webcam é solta na hora (a luz apaga).
         if camera_hub is not None:
             camera_hub.off()
@@ -223,6 +239,12 @@ def create_app(
 
     def hub() -> CameraHub:
         return camera_hub if camera_hub is not None else camera.get_hub()
+
+    def routines_enabled() -> bool:
+        try:
+            return current_settings().routines_enabled
+        except SettingsError:
+            return False
 
     def camera_enabled() -> bool:
         try:
@@ -253,6 +275,7 @@ def create_app(
         tools = (
             TOOL_NAMES
             + (MEMORY_TOOL_NAMES if settings.memory_enabled else [])
+            + (ROUTINE_TOOL_NAMES if settings.routines_enabled else [])
             + (PC_TOOL_NAMES if settings.pc_control_enabled else [])
             + (GESTURE_TOOL_NAMES if settings.gestures_enabled else [])
             + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
@@ -275,6 +298,10 @@ def create_app(
             "computer_use": settings.computer_use_enabled,
             "memory": settings.memory_enabled,
             "voice": _active_voice(settings),
+            "routines": {
+                "enabled": settings.routines_enabled,
+                "scheduled": app.state.routines.scheduled_count() if settings.routines_enabled else 0,
+            },
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "errors": backend_errors + livekit_errors,
@@ -361,6 +388,22 @@ def create_app(
         )
     )
 
+    app.state.hud_url = "http://127.0.0.1:8000"
+    app.state.routines = routine_scheduler or RoutineScheduler()
+
+    def routine_due(key: str) -> None:
+        """Open the link (the HUD tab, or the browser when none is open) for a scheduled routine."""
+        if app.state.wake_hub.trigger_routine(key)["opened_browser"]:
+            threading.Thread(target=open_browser, args=(app.state.hud_url,), daemon=True).start()
+
+    app.state.routines.on_due = routine_due
+
+    @app.post("/api/routines/claim")
+    def claim_routine(request: Request) -> dict[str, Any]:
+        """The agent picks up the scheduled routine that came due (each one is handed out once)."""
+        _require_local(request)
+        return {"routine": app.state.routines.claim()}
+
     if (WEB_DIST / "index.html").exists():
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="hud")
     else:
@@ -383,6 +426,9 @@ def serve(hud_app: FastAPI, *, host: str, port: int, log_level: str) -> None:
     """``uvicorn.run`` that first ends the SSE streams of open HUD tabs, which would otherwise
     keep Ctrl+C waiting until every tab is closed."""
     import uvicorn
+
+    shown = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
+    hud_app.state.hud_url = f"http://{f'[{shown}]' if ':' in shown else shown}:{port}"
 
     class HudServer(uvicorn.Server):
         async def shutdown(self, sockets: Any = None) -> None:

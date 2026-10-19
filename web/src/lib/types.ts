@@ -22,7 +22,8 @@ export type CardKind =
   | 'camera'
   | 'pointer'
   | 'memory'
-  | 'explain';
+  | 'explain'
+  | 'routine';
 
 export interface WeatherDay {
   date: string;
@@ -187,6 +188,27 @@ export interface ExplainData {
   injection?: boolean;
 }
 
+export type RoutineStepStatus = 'pending' | 'running' | 'ok' | 'error' | 'skipped' | 'confirm' | 'cancelled';
+
+export interface RoutineStep {
+  label: string;
+  status: RoutineStepStatus;
+  /** What the tool answered, or why the step failed. */
+  detail: string;
+}
+
+/** ROT-24: one run of a routine (bom dia, modo foco...), updated as each step finishes. */
+export interface RoutineData {
+  id: string;
+  name: string;
+  /** voz = the user asked; agenda = the schedule fired it. */
+  trigger: 'voz' | 'agenda';
+  /** confirm = a dangerous step (lock the PC, close an app) waits for the user's "sim". */
+  status: 'running' | 'confirm' | 'done' | 'partial' | 'failed';
+  started_at: number;
+  steps: RoutineStep[];
+}
+
 export interface MediaData {
   service: string;
   title: string;
@@ -345,6 +367,7 @@ export interface CardDataMap {
   pointer: PointerData;
   memory: MemoryData;
   explain: ExplainData;
+  routine: RoutineData;
 }
 
 export type HudCard = {
@@ -417,5 +440,7 @@ export interface ServerStatus {
   home?: { name: string; latitude: number; longitude: number } | null;
   /** WAK-22: "Jarvis" opens the link; silence_s of quiet closes it (0 = never). */
   wake_word?: { enabled: boolean; silence_s: number };
+  /** ROT-24: with routines on, the HUD listens for the wake of a scheduled one; scheduled = how many. */
+  routines?: { enabled: boolean; scheduled: number };
   errors: string[];
 }

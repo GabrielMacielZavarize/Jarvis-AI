@@ -29,3 +29,7 @@ gestos.json.tmp
 
 # Escolha de voz feita por voz ("troca sua voz para X")
 voz.json
+
+# Rotinas do Jarvis (bom dia, modo foco...) e seus horários
+rotinas.json
+rotinas.json.tmp

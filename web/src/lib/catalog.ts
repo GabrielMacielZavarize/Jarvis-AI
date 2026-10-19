@@ -32,6 +32,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'explain_screen', code: 'TEL-31', label: 'Assistente de tela', hint: '“Explica esse erro.” · “Copia a correção.”' },
   { id: 'start_dictation', code: 'DIT-29', label: 'Modo ditado', hint: '“Jarvis, modo ditado.” · “Escreve aqui: chego em 10 minutos.”' },
   { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
+  { id: 'run_routine', code: 'ROT-24', label: 'Rotinas', hint: '“Bom dia, Jarvis.” · “Modo foco.” · “Todo dia útil às 8h roda o bom dia.”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -48,6 +49,12 @@ export const TOOL_LABELS: Record<string, string> = {
   remember: 'Gravando memória',
   recall: 'Consulta de memória',
   forget: 'Apagando memória',
+  list_routines: 'Rotinas salvas',
+  run_routine: 'Executando rotina',
+  confirm_routine_step: 'Passo confirmado',
+  save_routine: 'Gravando rotina',
+  delete_routine: 'Apagando rotina',
+  schedule_routine: 'Agendando rotina',
   show_on_hud: 'Projeção no HUD',
   check_email_address: 'Conferência de endereço',
   draft_email: 'Rascunho de email',

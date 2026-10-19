@@ -56,6 +56,8 @@ class WakeHub:
         self.pending_until = 0.0
         # Score of a wake waiting for the browser that was just opened.
         self.undelivered_score: float | None = None
+        # Scheduled routine (ROT-24) that asked for that wake.
+        self.undelivered_routine: str | None = None
         self.detector_seen_at: float | None = None
         # The detector's open microphone has delivered only silence (muted in Windows?).
         self.mic_silent = False
@@ -66,7 +68,7 @@ class WakeHub:
         client = HudClient(id=client_id, connected_at=self._clock())
         self.clients[client_id] = client
         if self.undelivered_score is not None and self._pending():
-            self._deliver(client, self.undelivered_score)
+            self._deliver(client, self.undelivered_score, self.undelivered_routine)
         return client
 
     def close(self) -> None:
@@ -116,6 +118,23 @@ class WakeHub:
         self.pending_until = self._clock() + PENDING_BROWSER_S
         return {"accepted": True, "opened_browser": True}
 
+    def trigger_routine(self, routine: str) -> dict[str, Any]:
+        """Open the link for a scheduled routine (ROT-24), the same way a heard "Jarvis" does.
+
+        With a conversation already open (or opening) nothing is needed: the agent picks the
+        routine up by itself.
+        """
+        if self._pending() or any(client.session_active for client in self.clients.values()):
+            return {"accepted": False, "opened_browser": False}
+        target = self._pick_client()
+        if target is not None:
+            self._deliver(target, 1.0, routine)
+            return {"accepted": True, "opened_browser": False}
+        self.undelivered_score = 1.0
+        self.undelivered_routine = routine
+        self.pending_until = self._clock() + PENDING_BROWSER_S
+        return {"accepted": True, "opened_browser": True}
+
     def status(self) -> dict[str, Any]:
         listening = self.detector_online() and self.listening()
         return {
@@ -133,11 +152,16 @@ class WakeHub:
     def _clear_pending(self) -> None:
         self.pending_until = 0.0
         self.undelivered_score = None
+        self.undelivered_routine = None
 
-    def _deliver(self, client: HudClient, score: float) -> None:
+    def _deliver(self, client: HudClient, score: float, routine: str | None = None) -> None:
         self.undelivered_score = None
+        self.undelivered_routine = None
         self.pending_until = self._clock() + PENDING_WAKE_S
-        client.queue.put_nowait({"type": "wake", "score": score})
+        event: dict[str, Any] = {"type": "wake", "score": score}
+        if routine:
+            event["routine"] = routine
+        client.queue.put_nowait(event)
 
     def _pick_client(self) -> HudClient | None:
         # Uma aba só conecta: a visível mais recente, senão a mais recente.

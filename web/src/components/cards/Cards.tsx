@@ -10,6 +10,8 @@ import type {
   InstallPackage,
   MediaData,
   PointerData,
+  RoutineData,
+  RoutineStepStatus,
   MemoryCategory,
   MemoryData,
   MemoryItem,
@@ -648,6 +650,53 @@ export function MemoryBody({ id, data }: { id: string; data: MemoryData }) {
           {error}
         </div>
       )}
+    </div>
+  );
+}
+
+const ROUTINE_STATUS: Record<RoutineData['status'], [string, string]> = {
+  running: ['Executando', 'status-chip--warn'],
+  confirm: ['Aguardando seu sim', 'status-chip--warn'],
+  done: ['Concluída', 'status-chip--ok'],
+  partial: ['Concluída com falhas', 'status-chip--danger'],
+  failed: ['Falhou', 'status-chip--danger'],
+};
+
+const STEP_MARK: Record<RoutineStepStatus, string> = {
+  pending: '·',
+  running: '›',
+  ok: '✓',
+  error: '✕',
+  skipped: '–',
+  confirm: '?',
+  cancelled: '–',
+};
+
+/** ROT-24: each step of the routine with what happened; a failed step does not stop the others. */
+export function RoutineBody({ data }: { data: RoutineData }) {
+  const [label, tone] = ROUTINE_STATUS[data.status];
+  const done = data.steps.filter((step) => step.status === 'ok').length;
+  return (
+    <div className="rot">
+      <div className="rot__head">
+        <span className={`status-chip ${tone}`}>{label}</span>
+        <span className="card__sub">
+          {data.name} · {done}/{data.steps.length} {data.trigger === 'agenda' ? '· agendada' : ''}
+        </span>
+      </div>
+      <ol className="rot__steps">
+        {data.steps.map((step, index) => (
+          <li key={`${index}-${step.label}`} className={`rot__step rot__step--${step.status}`}>
+            <span className="rot__mark" aria-hidden>
+              {STEP_MARK[step.status]}
+            </span>
+            <div className="rot__text">
+              <span className="rot__label">{step.label}</span>
+              {step.detail && step.status !== 'pending' && <span className="rot__detail">{step.detail}</span>}
+            </div>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

@@ -1049,3 +1049,75 @@
 .tok-tag {
   color: #f07178;
 }
+
+/* Routine (ROT-24) */
+.rot {
+  display: grid;
+  gap: 10px;
+}
+.rot__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+.rot__steps {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rot__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0 4px 10px;
+  border-left: 1px solid var(--line);
+}
+.rot__mark {
+  width: 1em;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+.rot__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.rot__detail {
+  color: var(--text-faint);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rot__step--ok {
+  border-left-color: var(--c-ok);
+}
+.rot__step--ok .rot__mark {
+  color: var(--c-ok);
+}
+.rot__step--error {
+  border-left-color: var(--c-danger);
+}
+.rot__step--error .rot__mark,
+.rot__step--error .rot__detail {
+  color: var(--c-danger);
+}
+.rot__step--running,
+.rot__step--confirm {
+  border-left-color: var(--c-accent);
+}
+.rot__step--running .rot__mark,
+.rot__step--confirm .rot__mark {
+  color: var(--c-accent);
+}
+.rot__step--pending,
+.rot__step--cancelled,
+.rot__step--skipped {
+  opacity: 0.55;
+}
