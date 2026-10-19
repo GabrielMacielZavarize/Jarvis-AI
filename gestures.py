@@ -4,6 +4,7 @@ Uso:
     python gestures.py --preview             # abre a webcam e mostra os pontos da mão e o gesto
     python gestures.py --preview --dry-run   # idem, sem mexer em nenhuma janela
     python gestures.py                       # só o overlay, sem janela de preview
+    python gestures.py --calibrate           # mede a sua mão em cada pose e grava gestos_calibracao.json
 
 O motor (GestureEngine) consome um iterador de quadros BGR e não abre a câmera sozinho: o
 runner deste arquivo abre a webcam direto para desenvolver, e o Jarvis liga/desliga tudo pela
@@ -34,7 +35,7 @@ import numpy as np
 from livekit.agents import RunContext, function_tool, get_job_context
 
 from gesture_actions import DesktopActions, DryRunActions, GestureActionError, Target, describe_direction
-from gesture_engine import Command, GestureMachine, Hand, Pose, State, Status, Tuning, classify
+from gesture_engine import Command, GestureMachine, Hand, Pose, State, Status, Tuning, classify, hand_row
 from gesture_overlay import Overlay, OverlayView
 
 logger = logging.getLogger("jarvis-gestures")
@@ -129,23 +130,36 @@ class HandTracker:
         stamp = max(self._last_ms + 1, int(t * 1000))
         self._last_ms = stamp
         result = self._landmarker.detect_for_video(image, stamp)
-        if not result.hand_landmarks:
-            return None
-        points = np.array([[p.x, p.y, p.z] for p in result.hand_landmarks[0]], dtype=float)
-        world = None
-        if result.hand_world_landmarks:
-            world = np.array([[p.x, p.y, p.z] for p in result.hand_world_landmarks[0]], dtype=float)
-        category = result.handedness[0][0] if result.handedness and result.handedness[0] else None
-        return Hand(
-            points=points,
-            world=world,
-            aspect=width / height,
-            handedness=category.category_name if category else "",
-            score=float(category.score) if category else 1.0,
-        )
+        return hand_from_result(result, width / height)
 
     def close(self) -> None:
         self._landmarker.close()
+
+
+def hand_from_result(result: Any, aspect: float) -> Hand | None:
+    """First hand of a HandLandmarkerResult, with the detector's confidence as Hand.score.
+
+    The Tasks API only reports a score for the handedness (left/right); it drops when the hand
+    is blurred, edge-on or half out of the frame, so the engine uses it to discard bad frames.
+    """
+    if not result.hand_landmarks:
+        return None
+    points = np.array([[p.x, p.y, p.z] for p in result.hand_landmarks[0]], dtype=float)
+    if points.shape != (21, 3) or not np.all(np.isfinite(points)):
+        return None
+    world = None
+    if result.hand_world_landmarks:
+        world = np.array([[p.x, p.y, p.z] for p in result.hand_world_landmarks[0]], dtype=float)
+        if world.shape != (21, 3) or not np.all(np.isfinite(world)):
+            world = None
+    category = result.handedness[0][0] if result.handedness and result.handedness[0] else None
+    return Hand(
+        points=points,
+        world=world,
+        aspect=aspect,
+        handedness=category.category_name if category else "",
+        score=float(category.score) if category else 1.0,
+    )
 
 
 # ───────────────────────── quadros ─────────────────────────
@@ -291,11 +305,12 @@ class GestureEngine:
         self.tracker = tracker
         self.overlay = overlay
         self.emit = emit or (lambda _event: None)
-        self.machine = GestureMachine(tuning)
+        self.machine = GestureMachine(tuning or Tuning.load())  # gestos_calibracao.json, se existir
         self.clock = clock
         self.preview = preview
         self.on_ready = on_ready
         self.trace = trace  # arquivo para números de calibração (nunca imagens)
+        self.calibrated = self.machine.tuning != Tuning()  # limiares pessoais em uso
         self.fps = 0.0
         self.hand: Hand | None = None
         self._requests: queue.Queue[str] = queue.Queue()
@@ -378,13 +393,17 @@ class GestureEngine:
         status = self.machine.status(t)
         row: dict[str, Any] = {"t": round(t, 3), "state": status.state.value, "pose": status.pose.value}
         if self.hand is not None:
-            shape = classify(self.hand)
+            # "raw" é a pose do quadro (pontos suavizados); "pose" é a estável, depois da histerese.
+            shape = self.machine.shape or classify(self.hand, self.machine.tuning)
+            quality = self.machine.quality
             row["raw"] = shape.pose.value
             row["center"] = [round(value, 3) for value in shape.center]
             row.update({key: round(value, 3) for key, value in shape.metrics.items()})
-            row["points"] = np.round(self.hand.points, 3).tolist()
-            if self.hand.world is not None:
-                row["world"] = np.round(self.hand.world, 4).tolist()
+            if quality is not None:
+                row["quality"] = round(quality.value, 3)
+                if quality.reason:
+                    row["rejected"] = quality.reason
+            row.update(hand_row(self.hand))  # pontos brutos: é o que o replay dos testes consome
         if commands:
             row["commands"] = [command.kind for command in commands if command.kind != "mouse_move"]
         print(json.dumps(row), file=self.trace, flush=True)
@@ -550,9 +569,11 @@ class GestureEngine:
             view.title if view else "mostre a mão aberta parada para armar",
         ]
         if self.hand is not None:
-            shape = classify(self.hand)
+            shape = self.machine.shape or classify(self.hand, self.machine.tuning)
             fingers = " ".join(f"{name[:3]}:{'E' if shape.extended[name] else ('d' if shape.folded[name] else '-')}" for name in shape.extended)
             lines.append(f"{fingers}  pinça:{shape.pinch:.2f}")
+            lines.append(confidence_line(self.machine.quality, shape.pose, status.pose))
+        lines.append("calibração: pessoal" if self.calibrated else "calibração: padrão (python gestures.py --calibrate)")
         for row, text in enumerate(lines):
             y = 24 + row * 22
             cv2.putText(canvas, _ascii(text), (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
@@ -560,6 +581,8 @@ class GestureEngine:
         if status.progress is not None:
             width = canvas.shape[1] - 20
             cv2.rectangle(canvas, (10, canvas.shape[0] - 18), (10 + int(width * status.progress), canvas.shape[0] - 10), (0, 210, 255), -1)
+        if self.hand is not None and self.machine.quality is not None:
+            draw_confidence(canvas, self.machine.quality.value)
         cv2.imshow(PREVIEW_TITLE, cv2.resize(canvas, None, fx=1.5, fy=1.5))
         key = cv2.waitKey(1) & 0xFF
         if key in (ord("q"), 27) or cv2.getWindowProperty(PREVIEW_TITLE, cv2.WND_PROP_VISIBLE) < 1:
@@ -586,6 +609,28 @@ def _ascii(text: str) -> str:
 
     text = text.replace("→", "->").replace("↓", "v").replace("·", "|").replace("…", "...")
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+
+
+def confidence_line(quality: Any, raw: Pose, stable: Pose) -> str:
+    """Preview line: detector confidence, share of the hand in the frame, raw and stable pose."""
+    if quality is None:
+        return f"pose do quadro: {raw.value}   estável: {stable.value}"
+    text = f"confiança {quality.score:.2f}  no quadro {quality.inside:.0%}  quadro: {raw.value}  estável: {stable.value}"
+    if quality.reason:
+        text += f"  DESCARTADO ({quality.reason})"
+    return text
+
+
+def draw_confidence(canvas: np.ndarray, value: float) -> None:
+    """Vertical bar on the right edge: green when the frame is trusted, red when it is not."""
+    import cv2
+
+    height, width = canvas.shape[:2]
+    top, bottom = 20, height - 30
+    level = bottom - int((bottom - top) * max(0.0, min(1.0, value)))
+    color = (80, 220, 80) if value >= 0.8 else ((0, 200, 255) if value >= 0.5 else (60, 60, 255))
+    cv2.rectangle(canvas, (width - 18, top), (width - 8, bottom), (60, 60, 60), 1)
+    cv2.rectangle(canvas, (width - 17, level), (width - 9, bottom - 1), color, -1)
 
 
 def draw_hand(canvas: np.ndarray, hand: Hand | None) -> None:
@@ -833,6 +878,73 @@ def build_gesture_tools() -> list[Any]:
     return [gesture_control]
 
 
+# ───────────────────────── calibração guiada ─────────────────────────
+
+
+CALIBRATION_TITLE = "Jarvis - calibracao dos gestos (q cancela)"
+
+
+def run_calibration(camera: int | None = None, path: Path | None = None) -> int:
+    """Ask for each pose in front of the webcam, measure it and save the personal thresholds."""
+    import cv2
+
+    import gesture_calibration
+    import gesture_engine
+
+    path = path or gesture_engine.CALIBRATION_FILE
+    session = gesture_calibration.CalibrationSession()
+    tracker = HandTracker()
+    frames = webcam_frames(camera)
+    print("Calibração: faça cada pose pedida na janela, com a mão na distância de uso. q cancela.")
+    last_step = -1
+    try:
+        for frame in frames:
+            t = time.monotonic()
+            image = _prepare(frame)
+            hand = tracker.detect(image, t)
+            prompt = session.feed(t, hand)
+            if prompt.done:
+                break
+            if prompt.step != last_step:
+                last_step = prompt.step
+                step = session.steps[prompt.step]
+                print(f"  {prompt.step + 1}/{len(session.steps)} {step.title.lower()}: {step.detail}")
+            canvas = image.copy()
+            draw_hand(canvas, hand)
+            color = (0, 210, 255) if prompt.phase == "record" else (255, 230, 120)
+            for row, text in enumerate((prompt.title, prompt.detail)):
+                y = 30 + row * 26
+                cv2.putText(canvas, _ascii(text), (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 0), 3, cv2.LINE_AA)
+                cv2.putText(canvas, _ascii(text), (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 1, cv2.LINE_AA)
+            if prompt.progress is not None:
+                width = canvas.shape[1] - 20
+                cv2.rectangle(canvas, (10, canvas.shape[0] - 18), (10 + int(width * prompt.progress), canvas.shape[0] - 10), color, -1)
+            cv2.imshow(CALIBRATION_TITLE, cv2.resize(canvas, None, fx=1.5, fy=1.5))
+            key = cv2.waitKey(1) & 0xFF
+            if key in (ord("q"), 27) or cv2.getWindowProperty(CALIBRATION_TITLE, cv2.WND_PROP_VISIBLE) < 1:
+                print("Calibração cancelada; nada foi gravado.")
+                return 1
+    finally:
+        close = getattr(frames, "close", None)
+        if callable(close):
+            close()
+        tracker.close()
+        cv2.destroyAllWindows()
+
+    if not session.samples:
+        print("Não vi a mão em nenhuma pose; nada foi gravado.")
+        return 1
+    tuning, report = gesture_calibration.calibrate(session.samples, Tuning())
+    if session.skipped:
+        report["warnings"].append("poses puladas (sem quadros bons): " + ", ".join(session.skipped))
+    saved = gesture_calibration.save(tuning, report, path)
+    print(f"Calibração gravada em {saved.name}:")
+    for line in gesture_calibration.summary(report):
+        print(line)
+    print("Para voltar ao padrão, apague o arquivo.")
+    return 0
+
+
 # ───────────────────────── runner de desenvolvimento ─────────────────────────
 
 
@@ -844,11 +956,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mouse", action="store_true", help="Já começa no modo mouse no ar.")
     parser.add_argument("--no-overlay", action="store_true", help="Sem o aviso flutuante na tela.")
     parser.add_argument("--trace", type=Path, help="Grava os números de cada quadro (sem imagens) para calibrar.")
+    parser.add_argument("--calibrate", action="store_true", help="Calibração guiada: mede cada pose e grava gestos_calibracao.json.")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
+    if args.calibrate:
+        try:
+            return run_calibration(args.camera)
+        except CameraError as exc:
+            print(exc)
+            return 1
+        except KeyboardInterrupt:
+            print("Calibração cancelada; nada foi gravado.")
+            return 1
     trace = args.trace.open("a", encoding="utf-8") if args.trace else None
     try:
         tracker = HandTracker()

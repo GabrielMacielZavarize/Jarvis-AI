@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import tempfile
 import threading
 import time
 import unittest
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -61,6 +63,10 @@ def setUpModule() -> None:
         guard = patch(target, side_effect=forbid)
         guard.start()
         _GUARDS.append(guard)
+    # A calibração pessoal (gestos_calibracao.json) não pode mudar o resultado das mãos sintéticas.
+    guard = patch("gesture_engine.CALIBRATION_FILE", Path(tempfile.gettempdir()) / "jarvis-sem-calibracao.json")
+    guard.start()
+    _GUARDS.append(guard)
 
 
 def tearDownModule() -> None:

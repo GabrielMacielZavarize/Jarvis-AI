@@ -10,17 +10,28 @@ y para baixo). Distâncias e velocidades são medidas em "alturas de quadro", co
 multiplicado pela proporção do quadro, para que um movimento valha o mesmo nos dois eixos.
 
 Proteções contra acidentes: nada acontece antes de "armar" (mão aberta parada ~1 s); cada
-pose só vale depois de estável por um instante (debounce); direções têm histerese; depois de
-uma ação há um intervalo (cooldown); e repetir exige soltar a pose antes. Armado sem uso por
-alguns segundos, ou sem a mão no quadro, ele desarma sozinho.
+pose só vale depois de estável por alguns quadros e sai com menos (histerese); quadros ruins
+(confiança baixa, mão saindo do quadro, salto de tamanho) são descartados; direções têm
+histerese; depois de uma ação há um intervalo (cooldown); e repetir exige soltar a pose antes.
+Armado sem uso por alguns segundos, ou sem a mão no quadro, ele desarma sozinho.
+
+Precisão: os 21 pontos passam por um filtro One Euro antes da pose (tira o tremor sem atrasar
+gestos rápidos) e as distâncias usam o tamanho da palma, para valer perto e longe da câmera. Os
+limiares das poses ficam no Tuning; `python gestures.py --calibrate` mede os seus e os grava em
+gestos_calibracao.json, que o Tuning.load() usa quando existe.
 """
 
 from __future__ import annotations
 
+import json
+import logging
 import math
 from collections import deque
-from dataclasses import dataclass, field
+from collections.abc import Iterable
+from dataclasses import dataclass, field, replace
 from enum import Enum
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -36,6 +47,10 @@ INDEX_MCP = 5
 MIDDLE_MCP = 9
 PALM_POINTS = (0, 5, 9, 13, 17)
 DIRECTIONS = ("up", "down", "left", "right")
+CALIBRATION_FILE = Path(__file__).resolve().parent / "gestos_calibracao.json"
+CALIBRATION_VERSION = 1
+
+logger = logging.getLogger("jarvis-gestures")
 
 
 class Pose(str, Enum):
@@ -120,6 +135,85 @@ class Tuning:
     mouse_box: tuple[float, float, float, float] = (0.2, 0.15, 0.8, 0.7)  # região do quadro → todas as telas
     mouse_epsilon: float = 0.0004
 
+    # Poses (classify). Ângulos em graus; "reach" e distâncias do polegar em tamanhos de palma.
+    # São os valores que a calibração (python gestures.py --calibrate) ajusta para a sua mão.
+    extend_bend: float = 70.0  # dedo esticado: curva menor que isso...
+    extend_reach: float = 1.12  # ...e ponta longe do pulso (ponta→pulso / junta do meio→pulso)
+    fold_bend: float = 80.0  # dedo dobrado: curva maior que isso ou ponta perto do pulso
+    fold_reach: float = 1.0
+    open_bend: float = 30.0  # dedo "claramente aberto": impede o polegar para baixo
+    open_reach: float = 1.25
+    thumb_extend_bend: float = 40.0
+    thumb_extend_out: float = 0.6
+    thumb_fold_out: float = 0.45
+    pinch_pose: float = 0.3  # polegar–indicador abaixo disso é pinça
+    thumb_down_min: float = 0.25  # componente vertical do polegar (1 = apontando reto para baixo)
+    thumb_down_curl: float = 42.0  # curva média mínima dos dedos no polegar para baixo
+    reference_palm: float = 0.18  # palma na distância de uso (alturas de quadro); escala swipes e "parada"
+
+    # Histerese das poses: entrar pede N quadros seguidos (e stable_pose_s); sair, menos.
+    pose_enter_frames: int = 4
+    pose_exit_frames: int = 3
+
+    # Qualidade: quadros piores que isso valem como "sem mão" (a tolerância lost_grace_s cobre os curtos).
+    min_score: float = 0.5  # confiança do MediaPipe (handedness)
+    min_inside: float = 0.8  # fração dos 21 pontos dentro do quadro (mão saindo pela borda)
+    max_palm_jump: float = 0.35  # a palma não muda tanto de tamanho em um quadro: é erro do detector
+
+    # Suavização One Euro. Velocidades em palmas/s (relativas a reference_palm), então o filtro
+    # se comporta igual com a mão perto ou longe da câmera.
+    landmark_min_cutoff: float = 3.0
+    landmark_beta: float = 0.6
+    center_min_cutoff: float = 1.5
+    center_beta: float = 0.5
+    pointer_min_cutoff: float = 0.8
+    pointer_beta: float = 4.0
+
+    @classmethod
+    def load(cls, path: Path | str | None = None, base: Tuning | None = None) -> Tuning:
+        """Tuning with the personal thresholds of gestos_calibracao.json, when the file exists.
+
+        Only the calibrated fields are read; a broken or foreign file is ignored with a warning.
+        """
+        base = base or cls()
+        path = Path(path) if path is not None else CALIBRATION_FILE
+        if not path.exists():
+            return base
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            values = data.get("tuning", {}) if isinstance(data, dict) else {}
+            if not isinstance(values, dict):
+                raise ValueError("campo 'tuning' inválido")
+            changes: dict[str, float] = {}
+            for name in CALIBRATED_FIELDS:
+                value = values.get(name)
+                if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0:
+                    changes[name] = float(value)
+            logger.info("Gestos: calibração pessoal carregada de %s (%d limiares).", path.name, len(changes))
+            return replace(base, **changes)
+        except (OSError, ValueError, TypeError) as exc:
+            logger.warning("Gestos: ignorei %s (%s); usando os limiares padrão.", path.name, exc)
+            return base
+
+
+# Limiares que a calibração mede e grava (o resto do Tuning é comportamento, não a sua mão).
+CALIBRATED_FIELDS = (
+    "extend_bend",
+    "extend_reach",
+    "fold_bend",
+    "fold_reach",
+    "thumb_extend_bend",
+    "thumb_extend_out",
+    "thumb_fold_out",
+    "pinch_pose",
+    "pinch_on",
+    "pinch_off",
+    "closing_pinch",
+    "thumb_down_min",
+    "thumb_down_curl",
+    "reference_palm",
+)
+
 
 @dataclass(frozen=True)
 class Command:
@@ -139,6 +233,9 @@ class Status:
     progress: float | None = None
     direction: str | None = None
     dragging: bool = False
+
+
+DEFAULT_TUNING = Tuning()
 
 
 # ───────────────────────── poses ─────────────────────────
@@ -161,12 +258,27 @@ def _shape_points(hand: Hand) -> np.ndarray:
     return points
 
 
-def classify(hand: Hand) -> Shape:
-    """Pose of one hand, using joint angles (works with the hand tilted or far away)."""
+def palm_size(hand: Hand) -> float:
+    """Wrist → middle-finger base in frame heights (how big the hand looks)."""
+    flat = np.asarray(hand.points, dtype=float)[:, :2] * (hand.aspect, 1.0)
+    return max(float(np.linalg.norm(flat[MIDDLE_MCP] - flat[WRIST])), 1e-6)
+
+
+def anchors(hand: Hand) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Palm center (frame heights, x * aspect) and index base (0..1) of a hand."""
+    points = np.asarray(hand.points, dtype=float)
+    center = points[list(PALM_POINTS), :2].mean(axis=0) * (hand.aspect, 1.0)
+    pointer = points[INDEX_MCP, :2]
+    return (float(center[0]), float(center[1])), (float(pointer[0]), float(pointer[1]))
+
+
+def classify(hand: Hand, tuning: Tuning | None = None) -> Shape:
+    """Pose of one hand, using joint angles and palm-relative distances (tilted, near or far)."""
+    tuning = tuning or DEFAULT_TUNING
     s = _shape_points(hand)
     flat = np.asarray(hand.points, dtype=float)[:, :2] * (hand.aspect, 1.0)
     palm3d = max(float(np.linalg.norm(s[MIDDLE_MCP] - s[WRIST])), 1e-6)
-    palm = max(float(np.linalg.norm(flat[MIDDLE_MCP] - flat[WRIST])), 1e-6)
+    palm = palm_size(hand)
 
     extended: dict[str, bool] = {}
     folded: dict[str, bool] = {}
@@ -176,15 +288,15 @@ def classify(hand: Hand) -> Shape:
         reach = float(np.linalg.norm(s[tip] - s[WRIST])) / max(float(np.linalg.norm(s[pip] - s[WRIST])), 1e-6)
         # Calibrado com a mão real: palma aberta tem dedos com até ~65° de curva; num punho
         # frouxo o mindinho fica em ~60–75° com a ponta quase na altura da junta do meio.
-        extended[name] = bend < 70 and reach > 1.12
-        folded[name] = bend > 80 or reach < 1.0
+        extended[name] = bend < tuning.extend_bend and reach > tuning.extend_reach
+        folded[name] = bend > tuning.fold_bend or reach < tuning.fold_reach
         metrics[f"{name}_bend"], metrics[f"{name}_reach"] = bend, reach
 
     cmc, mcp, ip, tip = THUMB
     thumb_bend = _angle(s[ip] - s[mcp], s[tip] - s[ip])
     thumb_out = float(np.linalg.norm(s[tip] - s[INDEX_MCP])) / palm3d
-    extended["thumb"] = thumb_bend < 40 and thumb_out > 0.6
-    folded["thumb"] = thumb_out < 0.45
+    extended["thumb"] = thumb_bend < tuning.thumb_extend_bend and thumb_out > tuning.thumb_extend_out
+    folded["thumb"] = thumb_out < tuning.thumb_fold_out
     pinch = float(np.linalg.norm(s[tip] - s[FINGERS["index"][3]])) / palm3d
     thumb_dir = flat[tip] - flat[mcp]
     thumb_down = float(thumb_dir[1] / max(float(np.linalg.norm(thumb_dir)), 1e-6))
@@ -194,7 +306,9 @@ def classify(hand: Hand) -> Shape:
         thumb_down = max(thumb_down, float(vector[1] / max(float(np.linalg.norm(vector)), 1e-6)))
     four = ("index", "middle", "ring", "pinky")
     curl = sum(metrics[f"{f}_bend"] for f in four) / 4
-    clearly_open = any(metrics[f"{f}_bend"] < 30 and metrics[f"{f}_reach"] > 1.25 for f in four)
+    clearly_open = any(
+        metrics[f"{f}_bend"] < tuning.open_bend and metrics[f"{f}_reach"] > tuning.open_reach for f in four
+    )
     metrics.update(
         thumb_bend=thumb_bend,
         thumb_out=thumb_out,
@@ -206,7 +320,7 @@ def classify(hand: Hand) -> Shape:
     )
 
     pose = Pose.NONE
-    if extended["thumb"] and thumb_down >= 0.25 and curl >= 42 and not clearly_open:
+    if extended["thumb"] and thumb_down >= tuning.thumb_down_min and curl >= tuning.thumb_down_curl and not clearly_open:
         # Polegar para baixo como sai de verdade na webcam: dedos semidobrados (~50°, vistos de
         # lado) e o polegar esticado, uns 20° abaixo da horizontal. Segurar 1,2 s fecha a janela.
         pose = Pose.THUMB_DOWN
@@ -218,7 +332,7 @@ def classify(hand: Hand) -> Shape:
             others = [i for i in range(21) if i not in (ip, tip)]
             if metrics["thumb_dir_y"] < -0.7 and flat[tip][1] < flat[others, 1].min() - 0.1 * palm:
                 pose = Pose.THUMB_UP
-    elif pinch < 0.3:
+    elif pinch < tuning.pinch_pose:
         pose = Pose.PINCH
     elif all(extended[f] for f in four):
         pose = Pose.OPEN
@@ -227,18 +341,51 @@ def classify(hand: Hand) -> Shape:
     elif extended["index"] and extended["middle"] and folded["ring"] and folded["pinky"]:
         pose = Pose.TWO
 
-    center = flat[list(PALM_POINTS)].mean(axis=0)
-    pointer = np.asarray(hand.points, dtype=float)[INDEX_MCP, :2]
+    center, pointer = anchors(hand)
     return Shape(
         pose=pose,
         extended=extended,
         folded=folded,
         pinch=pinch,
         palm=palm,
-        center=(float(center[0]), float(center[1])),
-        pointer=(float(pointer[0]), float(pointer[1])),
+        center=center,
+        pointer=pointer,
         metrics=metrics,
     )
+
+
+# ───────────────────────── qualidade do quadro ─────────────────────────
+
+
+@dataclass(frozen=True)
+class Quality:
+    score: float  # confiança do MediaPipe
+    inside: float  # fração dos pontos dentro do quadro
+    reason: str | None = None  # por que o quadro foi descartado ("confiança", "borda", "salto")
+
+    @property
+    def ok(self) -> bool:
+        return self.reason is None
+
+    @property
+    def value(self) -> float:
+        return min(self.score, self.inside)
+
+
+def hand_quality(hand: Hand, tuning: Tuning | None = None, previous_palm: float | None = None) -> Quality:
+    """How trustworthy one detection is; reason is set when the frame should be ignored."""
+    tuning = tuning or DEFAULT_TUNING
+    xy = np.asarray(hand.points, dtype=float)[:, :2]
+    inside = float(np.mean(np.all((xy >= 0.0) & (xy <= 1.0), axis=1)))
+    score = float(hand.score)
+    reason = None
+    if score < tuning.min_score:
+        reason = "confiança"
+    elif inside < tuning.min_inside:
+        reason = "borda"
+    elif previous_palm and abs(palm_size(hand) / previous_palm - 1.0) > tuning.max_palm_jump:
+        reason = "salto"
+    return Quality(score=score, inside=inside, reason=reason)
 
 
 # ───────────────────────── suavização ─────────────────────────
@@ -263,14 +410,15 @@ class OneEuroFilter:
         tau = 1.0 / (2 * math.pi * cutoff)
         return 1.0 / (1.0 + tau / dt)
 
-    def __call__(self, t: float, x: float) -> float:
+    def __call__(self, t: float, x: float, scale: float = 1.0) -> float:
+        """Filtered x; `scale` divides the speed that opens the filter (palm size relative to normal)."""
         if self._t is None or t <= self._t:
             self._t, self._x, self._dx = t, x, 0.0
             return x
         dt = t - self._t
         dx = (x - self._x) / dt
         self._dx += self._alpha(self.d_cutoff, dt) * (dx - self._dx)
-        cutoff = self.min_cutoff + self.beta * abs(self._dx)
+        cutoff = self.min_cutoff + self.beta * abs(self._dx) / max(scale, 1e-6)
         self._x += self._alpha(cutoff, dt) * (x - self._x)
         self._t = t
         return self._x
@@ -285,8 +433,49 @@ class Filter2D:
         self._x.reset()
         self._y.reset()
 
-    def __call__(self, t: float, point: tuple[float, float]) -> tuple[float, float]:
-        return self._x(t, point[0]), self._y(t, point[1])
+    def __call__(self, t: float, point: tuple[float, float], scale: float = 1.0) -> tuple[float, float]:
+        return self._x(t, point[0], scale), self._y(t, point[1], scale)
+
+
+class LandmarkFilter:
+    """One Euro filter over the 21 points of a hand (and its world points), vectorized.
+
+    Each point gets its own cutoff from its own speed, measured in palms per second: a finger
+    closing opens the filter for that finger at once, while the still ones keep the jitter out.
+    """
+
+    def __init__(self, min_cutoff: float = 3.0, beta: float = 0.6, d_cutoff: float = 1.0) -> None:
+        self.min_cutoff = min_cutoff
+        self.beta = beta
+        self.d_cutoff = d_cutoff
+        self.reset()
+
+    def reset(self) -> None:
+        self._t: float | None = None
+        self._x: np.ndarray | None = None
+        self._dx: np.ndarray | None = None
+        self._world: np.ndarray | None = None
+
+    def __call__(self, t: float, hand: Hand) -> Hand:
+        points = np.asarray(hand.points, dtype=float)
+        world = None if hand.world is None else np.asarray(hand.world, dtype=float)
+        if self._t is None or self._x is None or t <= self._t or self._x.shape != points.shape:
+            self._t, self._x, self._dx, self._world = t, points.copy(), np.zeros_like(points), world
+            return hand
+        dt = t - self._t
+        palm = palm_size(hand)
+        dx = (points - self._x) / dt
+        self._dx = self._dx + OneEuroFilter._alpha(self.d_cutoff, dt) * (dx - self._dx)
+        speed = np.linalg.norm(self._dx[:, :2] * (hand.aspect, 1.0), axis=1) / palm  # palmas/s
+        cutoff = self.min_cutoff + self.beta * speed
+        alpha = (1.0 / (1.0 + (1.0 / (2 * math.pi * cutoff)) / dt))[:, None]
+        self._x = self._x + alpha * (points - self._x)
+        if world is not None:
+            self._world = world if self._world is None else self._world + alpha * (world - self._world)
+        else:
+            self._world = None
+        self._t = t
+        return replace(hand, points=self._x.copy(), world=None if self._world is None else self._world.copy())
 
 
 # ───────────────────────── máquina de estados ─────────────────────────
@@ -314,8 +503,15 @@ class GestureMachine:
         self._pose_since = 0.0
         self._candidate = Pose.NONE
         self._candidate_since = 0.0
-        self._center_filter = Filter2D(min_cutoff=1.5, beta=0.5)
-        self._pointer_filter = Filter2D(min_cutoff=0.8, beta=4.0)
+        self._candidate_frames = 0
+        self._off_frames = 0  # quadros seguidos em que a pose bruta não é a estável
+        tuning = self.tuning
+        self._landmark_filter = LandmarkFilter(tuning.landmark_min_cutoff, tuning.landmark_beta)
+        self._center_filter = Filter2D(tuning.center_min_cutoff, tuning.center_beta)
+        self._pointer_filter = Filter2D(tuning.pointer_min_cutoff, tuning.pointer_beta)
+        self._scale = 1.0  # tamanho da palma / reference_palm (perto da câmera > 1)
+        self._last_palm: float | None = None
+        self.quality: Quality | None = None  # do último quadro com mão (preview e trace)
         self._history: deque[tuple[float, float, float]] = deque()
         self._still_since = 0.0
         self._last_seen: float | None = None
@@ -339,6 +535,11 @@ class GestureMachine:
         self._last_point: tuple[float, float] | None = None
         self._charging: tuple[str, float] | None = None
         self._shape: Shape | None = None
+
+    @property
+    def shape(self) -> Shape | None:
+        """Shape of the last accepted frame (smoothed landmarks), for the preview and the trace."""
+        return self._shape
 
     # ── controle externo (voz, teclado do preview) ──
 
@@ -402,31 +603,45 @@ class GestureMachine:
     def step(self, t: float, hand: Hand | None) -> list[Command]:
         out: list[Command] = []
         self._charging = None
+        tuning = self.tuning
+        fresh = self._last_seen is None or t - self._last_seen > tuning.lost_grace_s
+        if hand is not None:
+            # Quadro ruim (confiança baixa, mão saindo pela borda, palma que "pula" de tamanho)
+            # vale como quadro sem mão: a tolerância lost_grace_s segura os curtos.
+            self.quality = hand_quality(hand, tuning, None if fresh else self._last_palm)
+            if not self.quality.ok:
+                hand = None
         if hand is None:
             self._lost(t, out)
             return out
 
-        tuning = self.tuning
-        if self._last_seen is None or t - self._last_seen > tuning.lost_grace_s:
+        if fresh:
+            self._landmark_filter.reset()
             self._center_filter.reset()
             self._pointer_filter.reset()
             self._history.clear()
             self._candidate = self.pose = Pose.NONE
             self._candidate_since = self._pose_since = self._still_since = t
+            self._candidate_frames = self._off_frames = 0
         self._last_seen = t
+        self._last_palm = palm_size(hand)
 
-        shape = classify(hand)
+        # A pose sai dos pontos suavizados; centro e ponteiro saem dos brutos, que já têm o
+        # próprio filtro (assim o mouse e os arremessos não somam o atraso de dois filtros).
+        center, pointer = anchors(hand)
+        shape = replace(classify(self._landmark_filter(t, hand), tuning), center=center, pointer=pointer)
         self._shape = shape
+        self._scale = min(1.6, max(0.6, shape.palm / tuning.reference_palm))
         if self._debounce(t, shape.pose):
             self._history.clear()
             self._still_since = t
             self._pending_swipe = None
             self._touch(t)
-        cx, cy = self._center_filter(t, shape.center)
+        cx, cy = self._center_filter(t, shape.center, self._scale)
         self._history.append((t, cx, cy))
         while self._history and t - self._history[0][0] > max(tuning.wipe_window_s, tuning.swipe_max_s) + 0.2:
             self._history.popleft()
-        if self._speed(t) > tuning.still_speed:
+        if self._speed(t) > tuning.still_speed * self._scale:
             self._still_since = t
 
         handler = {
@@ -569,7 +784,7 @@ class GestureMachine:
 
     def _mouse(self, t: float, shape: Shape, center: tuple[float, float], out: list[Command]) -> None:
         tuning = self.tuning
-        px, py = self._pointer_filter(t, shape.pointer)
+        px, py = self._pointer_filter(t, shape.pointer, self._scale)
         x0, y0, x1, y1 = tuning.mouse_box
         point = (min(1.0, max(0.0, (px - x0) / (x1 - x0))), min(1.0, max(0.0, (py - y0) / (y1 - y0))))
 
@@ -658,13 +873,31 @@ class GestureMachine:
         self._last_activity = t
 
     def _debounce(self, t: float, pose: Pose) -> bool:
-        """Update the stable pose; True when it changed."""
+        """Update the stable pose with hysteresis; True when it changed.
+
+        A new pose needs pose_enter_frames frames in a row (and stable_pose_s); the current one
+        is let go after pose_exit_frames frames of something else, so letting go is quicker than
+        taking a pose and a one-frame flicker changes nothing.
+        """
+        tuning = self.tuning
         if pose != self._candidate:
             self._candidate = pose
             self._candidate_since = t
-        if self._candidate != self.pose and t - self._candidate_since >= self.tuning.stable_pose_s:
+            self._candidate_frames = 0
+        self._candidate_frames += 1
+        self._off_frames = 0 if pose == self.pose else self._off_frames + 1
+        if (
+            self._candidate != self.pose
+            and self._candidate_frames >= tuning.pose_enter_frames
+            and t - self._candidate_since >= tuning.stable_pose_s
+        ):
             self.pose = self._candidate
             self._pose_since = self._candidate_since
+            self._off_frames = 0
+            return True
+        if self.pose != Pose.NONE and self._off_frames >= tuning.pose_exit_frames:
+            self.pose = Pose.NONE
+            self._pose_since = t
             return True
         return False
 
@@ -695,7 +928,8 @@ class GestureMachine:
         dx, dy = x1 - start[1], y1 - start[2]
         distance = math.hypot(dx, dy)
         elapsed = max(t - start[0], 1e-3)
-        if distance < tuning.swipe_distance or distance / elapsed < tuning.swipe_min_speed:
+        scale = self._scale  # perto da câmera o mesmo gesto atravessa mais o quadro
+        if distance < tuning.swipe_distance * scale or distance / elapsed < tuning.swipe_min_speed * scale:
             return None
         if abs(dx) >= 2 * abs(dy):
             return ("right" if dx > 0 else "left"), (dx, dy)
@@ -709,25 +943,68 @@ class GestureMachine:
         xs = [sample[1] for sample in self._history if t - sample[0] <= tuning.wipe_window_s]
         if len(xs) < 4:
             return False
+        amplitude = tuning.wipe_amplitude * self._scale
         pivot = extreme = xs[0]
         heading = 0
         strokes = 0
         for x in xs[1:]:
             if heading == 0:
-                if abs(x - pivot) >= tuning.wipe_amplitude:
+                if abs(x - pivot) >= amplitude:
                     heading = 1 if x > pivot else -1
                     extreme = x
                     strokes = 1
             elif heading > 0:
                 if x > extreme:
                     extreme = x
-                elif extreme - x >= tuning.wipe_amplitude:
+                elif extreme - x >= amplitude:
                     heading, pivot, extreme = -1, extreme, x
                     strokes += 1
             else:
                 if x < extreme:
                     extreme = x
-                elif x - extreme >= tuning.wipe_amplitude:
+                elif x - extreme >= amplitude:
                     heading, pivot, extreme = 1, extreme, x
                     strokes += 1
         return strokes >= tuning.wipe_segments
+
+
+# ───────────────────────── traces (python gestures.py --trace) ─────────────────────────
+
+
+def hand_row(hand: Hand) -> dict[str, Any]:
+    """The numbers of one detection as a trace stores them (never images)."""
+    row: dict[str, Any] = {
+        "points": np.round(np.asarray(hand.points, dtype=float), 4).tolist(),
+        "aspect": round(float(hand.aspect), 4),
+        "score": round(float(hand.score), 3),
+    }
+    if hand.world is not None:
+        row["world"] = np.round(np.asarray(hand.world, dtype=float), 4).tolist()
+    return row
+
+
+def load_trace(lines: Iterable[str]) -> list[tuple[float, Hand | None]]:
+    """Frames of a --trace file (JSON lines) back as (t, hand), to replay them in a GestureMachine.
+
+    Rows without "points" are frames without a hand; rows without "t" (e.g. a {"expect": [...]}
+    header) are skipped. Traces older than the "aspect"/"score" fields assume 16:9 and score 1.
+    """
+    frames: list[tuple[float, Hand | None]] = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        if "t" not in row:
+            continue
+        hand = None
+        if row.get("points") is not None:
+            world = row.get("world")
+            hand = Hand(
+                points=np.asarray(row["points"], dtype=float),
+                world=None if world is None else np.asarray(world, dtype=float),
+                aspect=float(row.get("aspect", 16 / 9)),
+                score=float(row.get("score", 1.0)),
+            )
+        frames.append((float(row["t"]), hand))
+    return frames

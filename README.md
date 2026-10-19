@@ -137,9 +137,29 @@ Para testar e calibrar sem o agente:
 ```bash
 python gestures.py --preview             # webcam com os pontos da mão, a pose e o estado
 python gestures.py --preview --dry-run   # reconhece tudo, mas não mexe em nenhuma janela
+python gestures.py --calibrate           # mede a sua mão em cada pose (grava gestos_calibracao.json)
 ```
 
 No preview: `q` sai, `a` arma, `d` desarma, `m` liga/desliga o mouse no ar. Se a webcam errada abrir, use `JARVIS_CAMERA_INDEX=1`. Na primeira execução o modelo de mãos do MediaPipe (≈8 MB) é baixado para `.cache/models/` e conferido por SHA-256.
+
+#### Precisão e calibração
+
+- **Sem tremor e sem atraso**: os 21 pontos da mão passam por um filtro One Euro antes de virar pose, e o centro da mão e o mouse no ar têm o seu. Parado, o filtro segura a tremedeira; num movimento rápido ele abre na hora, então arremessos e swipes não ficam para trás.
+- **Pose estável com histerese**: uma pose nova só vale depois de 4 quadros seguidos; a atual é solta com 3. Um quadro errado no meio (o detector em dúvida) não muda nada.
+- **Quadros ruins são descartados**: confiança baixa do MediaPipe, mão saindo pela borda do quadro ou palma que "pula" de tamanho de um quadro para o outro valem como "sem mão". Assim, levar a mão para fora do quadro segurando uma janela cancela em vez de jogá-la.
+- **Perto ou longe da câmera**: as distâncias usam o tamanho da palma. O swipe de abas, o "apagar o quadro" e o "mão parada" se ajustam à distância.
+- **Calibração guiada**: `python gestures.py --calibrate` abre a webcam e pede, uma de cada vez, mão aberta, punho, pinça, indicador, dois dedos e polegar para baixo (contagem de 2,5 s, depois 2 s medindo). Ele mede as curvas dos dedos, o alcance, o polegar e a pinça da **sua** mão, põe cada limiar no meio do vão entre as poses e grava em `gestos_calibracao.json` (fica fora do git). Se os limiares medidos acertarem menos que os padrão, nada muda. No fim mostra o acerto de cada pose antes e depois. Daí em diante gestos e preview usam o arquivo; para voltar ao padrão, apague-o. Faça na distância e na luz de uso.
+- **Preview**: além do estado, mostra a confiança do detector, quanto da mão está no quadro, a pose do quadro e a pose estável, avisa quando um quadro foi descartado (e por quê) e se a calibração é pessoal ou a padrão. A barra à direita é a confiança (verde, amarela, vermelha).
+- **Traces de regressão**: `python gestures.py --preview --dry-run --trace meu_gesto.jsonl` grava só números (pontos, confiança, pose, comandos), nunca imagens. Para virar teste, ponha o arquivo em `tests/traces/` com uma primeira linha `{"expect": ["armed", "grab", "aim", "throw"]}` (os comandos esperados); o teste reproduz o trace no `GestureMachine` e confere. Já há traces sintéticos de casos difíceis: punho frouxo que não pode virar pinça, mão saindo do quadro e tremor.
+
+Roteiro rápido para testar em casa (Windows, webcam do notebook):
+
+1. `python gestures.py --calibrate`: faça as 6 poses e confira que todas terminam com acerto alto (≥ 90%).
+2. `python gestures.py --preview --dry-run`: com a mão parada, a confiança fica verde e a pose estável não pisca; feche a mão devagar e confira que o punho frouxo continua `fist` (não `pinch`).
+3. Arme, segure uma janela com o punho e leve a mão para fora do quadro pela lateral: deve aparecer "Cancelado", sem mover nada.
+4. Repita os gestos com a mão a ~30 cm e a ~1 m da câmera: abas com dois dedos e "apagar o quadro" devem funcionar nas duas distâncias.
+5. Mouse no ar (`m` no preview, sem `--dry-run`): com o indicador parado o cursor não treme; um movimento rápido chega no outro monitor sem arrastar atrás.
+6. Se algo falhar, grave com `--trace`, mande o arquivo e ele vira teste.
 
 ## Pré-requisitos
 
@@ -339,6 +359,7 @@ Opções úteis:
 | `python jarvis.py --rebuild` | Recompila a interface |
 | `python jarvis.py --gestures` | Liga também os gestos das mãos (com a sessão de voz; sem agente, rodam no próprio launcher) |
 | `python gestures.py --preview` | Só os gestos, com a imagem da webcam para testar |
+| `python gestures.py --calibrate` | Calibração guiada dos gestos para a sua mão (grava `gestos_calibracao.json`) |
 
 ### Desenvolvimento do HUD (hot reload)
 
@@ -495,7 +516,7 @@ cd web && npm test && npm run build
 ```
 
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores (numeração das Configurações, nomes, apelidos, layouts e desfazer em lote), câmera (hub com webcam falsa e vários consumidores, contagem de referência, endpoints e as ferramentas de visão), mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
-Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, gestos das mãos (mãos sintéticas: poses, máquina de estados, monitor vizinho com a geometria real dos 3 monitores e as ações com mocks), mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
+Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, gestos das mãos (mãos sintéticas: poses, suavização, histerese, quadros ruins, calibração, replay de traces, máquina de estados, monitor vizinho com a geometria real dos 3 monitores e as ações com mocks), mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, mouse e teclado (conversão de coordenadas com os três monitores reais, DPI, allowlist de atalhos, recusa de senhas e janelas do sistema, confirmação de cliques, parse da resposta do modelo de visão), janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem, não clicam nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), memória (pedido na última fala, recusa de senhas/documentos/cartões, resumo na sessão seguinte, painel MEM-23), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador.
 Cobertura: settings, seleção de backend, registro de ferramentas, clima e previsão, pesquisa, notícias, horário, diagnóstico, timers, painéis do HUD, publicação no data channel, fluxo de email (endereço ditado e confirmação por voz), instalação via winget, janelas entre monitores, mídia (lives do YouTube com HTML de exemplo, Twitch, Spotify e fechamento da aba certa), palavra de ativação (microfone pelo nome que o navegador mostra, detector, pausa durante o link, aviso ao HUD e encerramento por silêncio) e o servidor de tokens (formato do endpoint e sanitização), sempre com mocks: os testes não instalam, não tocam, não abrem nem movem nada no seu computador, nem abrem o microfone.
@@ -516,7 +537,8 @@ win_desktop.py        Monitores, janelas e captura de tela via Win32
 camera.py             Dono único da webcam (CameraHub): captura, feed MJPEG, fotos
 vision.py             Ferramentas de visão: look_at_camera, camera_view e envio de imagens ao modelo
 gestures.py           Gestos das mãos: detector MediaPipe, motor, serviço, ferramenta de voz e runner --preview
-gesture_engine.py     Poses, filtro One Euro e máquina de estados dos gestos (lógica pura)
+gesture_engine.py     Poses, filtro One Euro, qualidade dos quadros, histerese, traces e máquina de estados (lógica pura)
+gesture_calibration.py Calibração guiada (--calibrate): mede cada pose e grava gestos_calibracao.json
 gesture_actions.py    O que cada gesto faz: monitor vizinho, janelas, abas e mouse no ar (SendInput)
 gesture_overlay.py    Aviso flutuante Win32 (sempre no topo, sem foco e sem cliques)
 prompts.py            Persona e saudação por horário
