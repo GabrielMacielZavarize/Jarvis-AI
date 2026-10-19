@@ -818,3 +818,105 @@
     bottom: 16px;
   }
 }
+
+/* Modo ditado (DIT-29): fica abaixo do aviso de câmera, com o texto saindo. */
+.dict-alert {
+  position: fixed;
+  top: 132px;
+  left: 50%;
+  z-index: 60;
+  width: min(560px, calc(100vw - 32px));
+  padding: 8px 14px 10px;
+  transform: translateX(-50%);
+  border: 1px solid rgb(var(--c-accent-rgb) / 0.7);
+  background: rgb(18 10 2 / 0.82);
+  color: #ffe6c2;
+  font-family: var(--font-display);
+  box-shadow: 0 0 22px rgb(var(--c-accent-rgb) / 0.25);
+}
+.dict-alert--warn {
+  border-color: rgb(255 90 90 / 0.75);
+}
+.dict-alert--off {
+  opacity: 0.75;
+  border-style: dashed;
+}
+.dict-alert__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+.dict-alert__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  box-shadow: 0 0 10px var(--c-accent);
+  animation: blink 1.2s steps(2) infinite;
+}
+.dict-alert--off .dict-alert__dot {
+  animation: none;
+  opacity: 0.4;
+}
+.dict-alert__badge {
+  padding: 1px 6px;
+  border: 1px solid rgb(var(--c-accent-rgb) / 0.6);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+}
+.dict-alert__meta {
+  margin-left: auto;
+  overflow: hidden;
+  max-width: 50%;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgb(255 230 194 / 0.6);
+}
+.dict-alert__text {
+  margin: 6px 0 0;
+  max-height: 4.8em;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dict-alert__text mark {
+  background: rgb(var(--c-accent-rgb) / 0.22);
+  color: #fff4e2;
+}
+.dict-alert__caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--c-accent);
+  animation: blink 1s steps(2) infinite;
+}
+.dict-alert__hint {
+  color: rgb(255 230 194 / 0.55);
+}
+.dict-alert__msg {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: rgb(255 230 194 / 0.7);
+}
+
+@media (max-width: 1080px) {
+  .dict-alert {
+    top: auto;
+    bottom: 60px;
+  }
+}

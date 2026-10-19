@@ -28,6 +28,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'end_session', code: 'PWR-17', label: 'Encerrar sessão', hint: '“Tchau, Jarvis.” · “Pode desligar.”' },
   { id: 'look_at_camera', code: 'CAM-19', label: 'Câmera', hint: '“O que você está vendo?” · “Mostra a câmera.”' },
   { id: 'click_on_screen', code: 'MOU-20', label: 'Mouse & teclado', hint: '“Clica no botão de play.” · “Rola a página.”' },
+  { id: 'start_dictation', code: 'DIT-29', label: 'Modo ditado', hint: '“Jarvis, modo ditado.” · “Escreve aqui: chego em 10 minutos.”' },
   { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
 ];
 
@@ -78,6 +79,8 @@ export const TOOL_LABELS: Record<string, string> = {
   do_on_screen: 'Tarefa na tela',
   confirm_screen_action: 'Clique confirmado',
   cancel_screen_action: 'Clique cancelado',
+  start_dictation: 'Modo ditado',
+  write_here: 'Escrevendo no campo',
 };
 
 export const MODE_LABELS: Record<JarvisMode, string> = {

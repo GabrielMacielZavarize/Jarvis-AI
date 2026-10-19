@@ -6,6 +6,7 @@ import { BootSequence } from './components/BootSequence';
 import { CameraIndicator } from './components/CameraIndicator';
 import { CardStage } from './components/cards/CardStage';
 import { ControlDock } from './components/ControlDock';
+import { DictationIndicator } from './components/DictationIndicator';
 import { ConversationPanel } from './components/ConversationPanel';
 import { SystemPanel } from './components/SystemPanel';
 import { TopBar } from './components/TopBar';
@@ -37,6 +38,7 @@ export default function App() {
       <Hud status={status} booted={booted} live={canConnect ? live : OFFLINE_LIVE} />
       {!booted && <BootSequence onDone={() => setBooted(true)} />}
       <CameraIndicator />
+      <DictationIndicator />
     </>
   );
 }

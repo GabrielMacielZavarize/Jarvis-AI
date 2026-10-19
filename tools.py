@@ -1343,4 +1343,7 @@ def build_tools(settings: Settings) -> list[Any]:
         from computer_use import build_computer_use_tools
 
         tools.extend(build_computer_use_tools(settings.google_api_key, settings.computer_use_model))
+        from dictation import build_dictation_tools
+
+        tools.extend(build_dictation_tools())
     return tools

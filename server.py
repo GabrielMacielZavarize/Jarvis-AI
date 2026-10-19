@@ -89,6 +89,8 @@ COMPUTER_USE_TOOL_NAMES = [
     "do_on_screen",
     "confirm_screen_action",
     "cancel_screen_action",
+    "start_dictation",  # modo ditado (dictation.py), junto com o mouse e teclado
+    "write_here",
 ]
 
 

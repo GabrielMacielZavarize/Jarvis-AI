@@ -178,6 +178,45 @@ export interface CameraData {
 }
 
 /** GET /api/camera/state: the webcam owned by the HUD server (camera.CameraHub). */
+export type DictationPhase = 'on' | 'typing' | 'warn' | 'off' | 'once';
+export type DictationBeep = 'start' | 'tick' | 'error' | 'end';
+
+/** Dictation mode (DIT-29), sent by dictation.py on the jarvis.hud topic. */
+export interface DictationEvent {
+  type: 'dictation';
+  state: DictationPhase;
+  active: boolean;
+  message?: string;
+  /** End of what this dictation wrote in the field. */
+  tail?: string;
+  /** Text just typed (may start with a space or a line break). */
+  typed?: string;
+  /** What the user said in this utterance. */
+  heard?: string;
+  erased?: number;
+  commands?: string[];
+  caps?: boolean;
+  window?: string | null;
+  beep?: DictationBeep | null;
+  ts: number;
+}
+
+/** What the DITADO indicator shows. */
+export interface DictationState {
+  active: boolean;
+  phase: DictationPhase;
+  tail: string;
+  /** The last typed piece, highlighted at the end of the tail. */
+  typed: string;
+  heard: string;
+  message: string;
+  commands: string[];
+  caps: boolean;
+  window: string | null;
+  chars: number;
+  updatedAt: number;
+}
+
 export interface CameraState {
   enabled: boolean;
   /** Device open (or opening): the webcam light is on. */
@@ -287,6 +326,7 @@ export type HudEvent =
   | { type: 'voice'; state: 'speaking'; ts: number }
   | { type: 'net'; hosts: string[]; kind: LinkKind; ts: number }
   | { type: 'hud'; action: 'close' | 'clear'; kinds: CardKind[]; ts: number }
+  | DictationEvent
   | { [K in CardKind]: { type: 'card'; kind: K; data: CardDataMap[K]; ts: number } }[CardKind];
 
 export type LinkKind = 'request' | 'source' | 'model' | 'link';
