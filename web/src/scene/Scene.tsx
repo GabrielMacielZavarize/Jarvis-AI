@@ -11,6 +11,7 @@ import { GridFloor } from './GridFloor';
 import { HudRings } from './HudRings';
 import { Orbits } from './Orbits';
 import { ParticleDisk } from './ParticleDisk';
+import { ProjectorBeam } from './ProjectorBeam';
 import { ReactorCore } from './ReactorCore';
 import { scene, updateScene } from './sceneState';
 import { Spectrum } from './Spectrum';
@@ -85,6 +86,7 @@ export function Scene({ visible }: { visible: boolean }) {
       <CameraRig />
       <Hologram visible={visible} />
       <GridFloor />
+      <ProjectorBeam visible={visible} />
       <Sparkles count={profile.sparkles} scale={[20, 11, 10]} size={2.2} speed={0.25} opacity={0.45} color="#7fe9ff" noise={0.6} />
       {profile.postprocessing === 'full' ? (
         <EffectComposer multisampling={0} enableNormalPass={false}>

@@ -7,7 +7,7 @@ export function SoundControls() {
   const percent = Math.round(sounds.volume * 100);
 
   return (
-    <div className="stat sound-controls" style={{ gridColumn: '1 / -1' }}>
+    <div className="stat stat--setting sound-controls" style={{ gridColumn: '1 / -1' }}>
       <dt>
         <label htmlFor="sound-volume">Sons da interface · VOZ-30</label>
       </dt>

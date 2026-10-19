@@ -103,6 +103,65 @@ export const TOOL_LABELS: Record<string, string> = {
   cancel_calendar_change: 'Mudança cancelada',
 };
 
+/** Protocol code of every agent tool, as in the README table. */
+const PROTOCOL_TOOLS: Record<string, string[]> = {
+  'WX-01': ['get_weather'],
+  'NET-02': ['search_web'],
+  'NWS-03': ['search_news'],
+  'CHR-04': ['get_current_time'],
+  'SYS-05': ['run_diagnostics'],
+  'TMR-06': ['set_timer', 'get_timers'],
+  'HUD-07': ['show_on_hud', 'manage_hud_panels'],
+  'MED-08': ['play_youtube', 'open_streaming', 'media_control'],
+  'PC-09': ['open_app', 'close_app', 'open_folder', 'lock_computer', 'take_screenshot'],
+  'WEB-10': ['open_website', 'browser_tab', 'save_shortcut'],
+  'AUD-11': ['set_volume'],
+  'COM-12': ['check_email_address', 'draft_email', 'confirm_email_send', 'cancel_pending_email'],
+  'JAN-13': ['manage_window', 'manage_screens'],
+  'VIS-14': ['look_at_screen'],
+  'APP-15': ['search_apps', 'prepare_app_install', 'confirm_app_install', 'cancel_app_install'],
+  'MIC-16': ['check_microphone'],
+  'PWR-17': ['end_session'],
+  'GST-18': ['gesture_control', 'gesture_shortcuts'],
+  'CAM-19': ['look_at_camera', 'camera_view'],
+  'MOU-20': [
+    'click_on_screen',
+    'move_mouse',
+    'type_text',
+    'press_keys',
+    'scroll',
+    'do_on_screen',
+    'confirm_screen_action',
+    'cancel_screen_action',
+  ],
+  'LAY-21': ['manage_layouts', 'arrange_windows'],
+  'MEM-23': ['remember', 'recall', 'forget'],
+  'ROT-24': ['run_routine', 'list_routines', 'save_routine', 'delete_routine', 'schedule_routine', 'confirm_routine_step'],
+  'PRS-25': ['presence_control'],
+  'AGD-27': [
+    'get_agenda',
+    'next_meeting',
+    'prepare_calendar_event',
+    'prepare_calendar_update',
+    'prepare_calendar_delete',
+    'confirm_calendar_change',
+    'cancel_calendar_change',
+  ],
+  'PRO-28': ['set_reminder', 'list_reminders', 'cancel_reminder', 'configure_alerts'],
+  'DIT-29': ['start_dictation', 'write_here'],
+  'VOZ-30': ['change_voice'],
+  'TEL-31': ['explain_screen', 'copy_fix'],
+};
+
+const TOOL_CODES = new Map(
+  Object.entries(PROTOCOL_TOOLS).flatMap(([code, tools]) => tools.map((tool) => [tool, code] as const)),
+);
+
+/** "get_weather" → "WX-01"; unknown tools get a generic code. */
+export function toolCode(name: string): string {
+  return TOOL_CODES.get(name) ?? 'PRT';
+}
+
 export const MODE_LABELS: Record<JarvisMode, string> = {
   offline: 'Offline',
   standby: 'Em espera',

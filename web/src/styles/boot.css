@@ -4,28 +4,157 @@
   z-index: 50;
   display: grid;
   place-items: center;
+  overflow: hidden;
   background: radial-gradient(circle at 50% 50%, #021320 0%, #010409 70%);
   cursor: pointer;
 }
+/* Faint drafting grid that fades out towards the edges. */
+.boot__grid {
+  position: absolute;
+  inset: -48px;
+  background-image:
+    linear-gradient(rgb(var(--c-primary-rgb) / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--c-primary-rgb) / 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 62%);
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 62%);
+  animation: boot-drift 8s linear infinite;
+  pointer-events: none;
+}
+@keyframes boot-drift {
+  to {
+    transform: translateY(48px);
+  }
+}
 .boot__inner {
+  position: relative;
   width: min(560px, 86vw);
 }
+
+.boot__reactor {
+  display: block;
+  width: 112px;
+  height: 112px;
+  margin: 0 auto 22px;
+  overflow: visible;
+  filter: drop-shadow(0 0 10px rgb(var(--c-primary-rgb) / 0.7));
+}
+.boot__ring {
+  fill: none;
+  stroke: var(--c-primary);
+  transform-origin: 60px 60px;
+}
+.boot__ring--outer {
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+  opacity: 0.6;
+  animation: spin 12s linear infinite;
+}
+.boot__ring--dash {
+  stroke-width: 5;
+  stroke-dasharray: 9 4;
+  opacity: 0.35;
+  animation: spin 7s linear infinite reverse;
+}
+.boot__ring--progress {
+  stroke-width: 3;
+  stroke-dasharray: 100;
+  transform: rotate(-90deg);
+  transition: stroke-dashoffset 0.35s ease-out;
+}
+.boot__tri {
+  fill: rgb(var(--c-primary-rgb) / 0.1);
+  stroke: var(--c-primary);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.boot__core {
+  fill: #eaffff;
+  transition: r 0.4s;
+}
+.boot--online .boot__core {
+  r: 9px;
+}
+
 .boot__title {
+  position: relative;
   margin: 0 0 6px;
   font-family: var(--font-display);
   font-size: clamp(24px, 4vw, 38px);
   font-weight: 700;
   letter-spacing: 0.38em;
+  text-align: center;
   color: var(--text);
   text-shadow: 0 0 22px rgb(var(--c-primary-rgb) / 0.85);
+}
+/* Two offset copies flicker through a few slices while the title settles. */
+.boot__title::before,
+.boot__title::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 0 100% 0);
+  pointer-events: none;
+}
+.boot__title::before {
+  color: rgb(255 70 120 / 0.75);
+  animation: glitch-a 0.9s steps(1) 2 both;
+}
+.boot__title::after {
+  color: rgb(var(--c-primary-rgb) / 0.9);
+  animation: glitch-b 0.9s steps(1) 0.15s 2 both;
+}
+@keyframes glitch-a {
+  0% {
+    clip-path: inset(12% 0 68% 0);
+    transform: translateX(-4px);
+  }
+  20% {
+    clip-path: inset(58% 0 18% 0);
+    transform: translateX(3px);
+  }
+  40% {
+    clip-path: inset(32% 0 46% 0);
+    transform: translateX(-2px);
+  }
+  60% {
+    clip-path: inset(78% 0 6% 0);
+    transform: translateX(4px);
+  }
+  80%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+    transform: none;
+  }
+}
+@keyframes glitch-b {
+  0% {
+    clip-path: inset(70% 0 10% 0);
+    transform: translateX(4px);
+  }
+  25% {
+    clip-path: inset(8% 0 76% 0);
+    transform: translateX(-3px);
+  }
+  50% {
+    clip-path: inset(44% 0 36% 0);
+    transform: translateX(2px);
+  }
+  75%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+    transform: none;
+  }
 }
 .boot__subtitle {
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.24em;
+  text-align: center;
   color: var(--text-faint);
   text-transform: uppercase;
 }
+
 .boot__lines {
   margin: 26px 0 18px;
   padding: 0;
@@ -36,27 +165,57 @@
   color: var(--text-dim);
   min-height: 9em;
 }
-.boot__lines li span {
-  float: right;
+.boot__lines li {
+  display: flex;
+  gap: 10px;
+}
+.boot__addr {
+  color: rgb(var(--c-accent-rgb) / 0.8);
+}
+.boot__ok {
+  margin-left: auto;
   color: var(--c-ok);
 }
+
+.boot__meter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .boot__bar {
-  height: 3px;
-  background: rgb(var(--c-primary-rgb) / 0.12);
+  flex: 1;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, rgb(var(--c-primary-rgb) / 0.14) 0 10px, transparent 10px 12px);
   overflow: hidden;
 }
 .boot__bar i {
   display: block;
   height: 100%;
-  background: var(--c-primary);
-  box-shadow: 0 0 12px var(--c-primary);
+  background: repeating-linear-gradient(90deg, var(--c-primary) 0 10px, transparent 10px 12px);
+  filter: drop-shadow(0 0 6px var(--c-primary));
   transition: width 0.25s ease-out;
+}
+.boot__pct {
+  min-width: 4ch;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--c-primary);
+  text-align: right;
 }
 .boot__skip {
   margin-top: 14px;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.18em;
+  text-align: center;
   color: var(--text-faint);
   text-transform: uppercase;
+}
+.boot--online .boot__skip {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.42em;
+  color: var(--c-primary);
+  text-shadow: 0 0 14px rgb(var(--c-primary-rgb) / 0.9);
+  animation: blink 0.45s steps(2) 1;
 }

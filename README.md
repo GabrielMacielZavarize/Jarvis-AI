@@ -13,7 +13,8 @@ Short English summary: real-time voice assistant built on LiveKit Agents (Gemini
 - **Modo simulação** para explorar a interface sem credenciais.
 - **Controle do computador** (opcional): abrir e fechar apps, sites, YouTube e streamings, abas do navegador, mídia, volume, pastas, captura e bloqueio de tela.
 - **Globo 3D com conexões**: enquanto pensa ou busca algo, o núcleo vira um globo holográfico que desenha arcos da sua cidade até os serviços consultados.
-- **Seletor de microfone** e diagnóstico de captação no HUD.
+- **Seletor de microfone** e diagnóstico de captação no HUD (botão **Ajustes** do painel Sistema).
+- **Visual do HUD refinado**: boot com o anel do reator se completando, painéis que se materializam depois do boot, marca de reator arc na barra superior, placa sobre o núcleo com o protocolo em execução (código, nome, alvo e o resultado), transcrição com hora, registro em linha do tempo, radar no piso e feixe de luz do projetor. O HUD inteiro troca de cor com o modo (âmbar ao processar, vermelho na falha).
 - **Visão pela webcam** (opcional): o Jarvis olha pela câmera quando você pede e o HUD mostra o feed ao vivo num painel holográfico, com o aviso CÂMERA ATIVA sempre visível.
 - **Assistente de tela para dev** (TEL-31): "explica esse erro", "o que tem de errado aqui?", "o que esse código faz?", "resume essa página", "traduz isso" e "copia a correção", com painel de explicação e blocos de código com destaque e botão de copiar.
 - **Palavra de ativação** (opcional): diga "Jarvis" e o link abre sozinho; o silêncio o encerra para poupar a cota do Gemini. Detecção local, sem enviar áudio antes da ativação.
@@ -577,19 +578,19 @@ A troca por comando só existe com o Gemini Live. Na OpenAI, a voz é a de `OPEN
 
 **Persona.** O prompt (`prompts.py`) dá ao Jarvis o tom do filme: mordomo britânico educado, que chama você de "senhor", fica calmo quando algo dá errado, tem humor seco e responde em no máximo duas frases. As regras das ferramentas não mudaram.
 
-**Sons de interface.** O HUD gera os sons por código (Web Audio, sem arquivos de terceiros): link abrindo e fechando, ferramenta começando e terminando, confirmação por código aceita, erro e timer acabando. No painel **Sistema**, em "Sons da interface", dá para ligar ou desligar, ajustar o volume e tocar um teste. A escolha fica salva no navegador. O bipe da palavra de ativação segue a mesma configuração, e quando o silêncio encerra o link toca um som só.
+**Sons de interface.** O HUD gera os sons por código (Web Audio, sem arquivos de terceiros): link abrindo e fechando, ferramenta começando e terminando, confirmação por código aceita, erro e timer acabando. No painel **Sistema**, botão **Ajustes**, em "Sons da interface", dá para ligar ou desligar, ajustar o volume e tocar um teste. A escolha fica salva no navegador. O bipe da palavra de ativação segue a mesma configuração, e quando o silêncio encerra o link toca um som só.
 
 **Núcleo 3D.** Quando o Gemini está pensando, três arcos de varredura giram em volta do plasma e quatro "bits" orbitam o núcleo. Enquanto uma ferramenta roda, aparecem um anel de marcações girando e um giroscópio duplo, e ao fim dela uma onda de choque se expande do núcleo (vermelha se a ferramenta falhou). O modo Simulação também mostra as animações e toca os sons.
 
 **Roteiro de teste ao vivo** (com fone, para ouvir bem os sons):
 
-1. `python jarvis.py`, abra o HUD e confira no painel Sistema a linha "Voz · VOZ-30" (Charon) e "Sons da interface" ligado. Clique em **Testar**: três notas subindo.
+1. `python jarvis.py`, abra o HUD e confira no painel Sistema a linha "Voz · VOZ-30" (Charon) e, em **Ajustes**, "Sons da interface" ligado. Clique em **Testar**: três notas subindo.
 2. Inicialize o link: ao ficar online toca o som de abertura. A saudação deve ser no tom do mordomo ("Boa noite, senhor...").
 3. "Como está o tempo em Lisboa?": bipe curto ao começar a ferramenta, anel girando e giroscópio no núcleo, bipe duplo e onda de choque ao terminar.
 4. Faça uma pergunta que exija pensar ("explica em uma frase o que é fusão nuclear"): os arcos de varredura giram enquanto ele pensa.
 5. "Quais vozes você tem?" (painel com a lista) e depois "troca sua voz para Orus": ele confirma e a resposta seguinte já sai na voz nova. Encerre e reabra o link: continua Orus. "Volta pra sua voz normal" devolve a Charon.
 6. "Timer de 10 segundos": ao acabar, três bipes de alarme.
-7. Desligue os sons no painel Sistema, recarregue a página (F5) e confira que continuam desligados. Religue, baixe o volume e repita o passo 3.
+7. Desligue os sons em **Ajustes**, no painel Sistema, recarregue a página (F5) e confira que continuam desligados. Religue, baixe o volume e repita o passo 3.
 8. "Tchau, Jarvis": som de link fechando (um só, mesmo com a palavra de ativação ligada).
 
 Se algo soar alto demais ou repetitivo, me diga qual som; os tons ficam em `web/src/lib/sounds.ts` (`SOUND_CUES`).
@@ -783,6 +784,8 @@ Sem LiveKit configurado, o botão **Simulação** roda uma conversa roteirizada 
 | `M` | Silenciar / ativar microfone |
 | `/` | Focar a linha de comando de texto |
 | `Esc` | Limpar os painéis holográficos |
+
+O microfone e os sons da interface ficam no botão **Ajustes** do painel Sistema (a escolha de deixar aberto ou fechado fica salva no navegador). Se o microfone escolhido não entregar som, os ajustes abrem sozinhos junto do aviso.
 
 ### Outros modos do agente
 

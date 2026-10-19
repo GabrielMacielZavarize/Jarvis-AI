@@ -104,7 +104,7 @@ export function useDemo(): DemoState {
           }
           case 'tool':
             setMode('thinking');
-            hud.setActiveTool(beat.name);
+            hud.setActiveTool(beat.name, beat.detail);
             playCue('toolStart');
             hud.addLog('tool', `${TOOL_LABELS[beat.name] ?? beat.name}${beat.detail ? ` · ${beat.detail}` : ''}`);
             if (beat.hosts) hud.addLinks(beat.hosts, 'request');

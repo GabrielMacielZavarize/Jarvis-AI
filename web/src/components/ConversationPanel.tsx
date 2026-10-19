@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { formatClock } from '../lib/format';
 import type { ChatLine } from '../lib/types';
 import { Panel } from './Panel';
 
@@ -74,6 +75,11 @@ export function ConversationPanel({ lines, thinking, canSend, onSend }: Conversa
       <div ref={scroller} className="scroller">
         {lines.length === 0 && !thinking ? (
           <div className="empty">
+            <div className="empty__wave" aria-hidden>
+              {Array.from({ length: 9 }, (_, index) => (
+                <i key={index} style={{ animationDelay: `${index * -0.13}s` }} />
+              ))}
+            </div>
             <div className="empty__glyph">Canal aberto</div>
             <div>Fale com o Jarvis ou digite um comando.</div>
           </div>
@@ -81,7 +87,10 @@ export function ConversationPanel({ lines, thinking, canSend, onSend }: Conversa
           <div className="transcript">
             {lines.map((line) => (
               <div key={line.id} className={`line line--${line.role}`}>
-                <div className="line__who">{line.role === 'agent' ? 'J.A.R.V.I.S.' : 'VOCÊ'}</div>
+                <div className="line__who">
+                  {line.role === 'agent' ? 'J.A.R.V.I.S.' : 'VOCÊ'}
+                  <time>{formatClock(line.ts).slice(0, 5)}</time>
+                </div>
                 <div className="line__text">{line.text}</div>
               </div>
             ))}

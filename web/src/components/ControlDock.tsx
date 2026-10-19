@@ -1,5 +1,6 @@
 import { MODE_LABELS } from '../lib/catalog';
 import type { JarvisMode } from '../lib/types';
+import { ToolPlate } from './ToolPlate';
 
 interface ControlDockProps {
   mode: JarvisMode;
@@ -42,6 +43,7 @@ export function ControlDock(props: ControlDockProps) {
 
   return (
     <div className="dock">
+      <ToolPlate />
       <div className="dock__state" aria-live="polite">
         {MODE_LABELS[mode]}
       </div>

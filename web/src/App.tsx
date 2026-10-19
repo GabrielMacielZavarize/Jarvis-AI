@@ -181,6 +181,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
       <Suspense fallback={null}>
         <Scene visible={booted} />
       </Suspense>
+      <div className="fx fx--ambient" />
       <div className="fx fx--sweep" />
       <div className="fx fx--scanlines" />
       <div className="fx fx--frame" />
@@ -193,7 +194,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
         </button>
       )}
 
-      <div className="hud">
+      <div className={`hud ${booted ? 'hud--online' : ''}`}>
         <div className="hud__top">
           <TopBar
             mode={mode}

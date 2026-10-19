@@ -1,24 +1,34 @@
 :root {
   --c-primary-rgb: 95 244 255;
   --c-accent-rgb: 255 182 72;
-  --c-primary: rgb(var(--c-primary-rgb));
-  --c-accent: rgb(var(--c-accent-rgb));
   --c-danger: #ff5a5a;
   --c-ok: #52ffb0;
   --bg: #010409;
   --panel-bg: linear-gradient(160deg, rgb(8 34 52 / 0.55), rgb(2 12 22 / 0.35));
-  --line: rgb(var(--c-primary-rgb) / 0.22);
-  --line-strong: rgb(var(--c-primary-rgb) / 0.55);
   --text: #dcfcff;
   --text-dim: rgb(220 252 255 / 0.58);
   --text-faint: rgb(220 252 255 / 0.36);
-  --glow: 0 0 18px rgb(var(--c-primary-rgb) / 0.35);
   --font-display: 'Orbitron', 'Rajdhani', sans-serif;
   --font-ui: 'Rajdhani', 'Segoe UI', sans-serif;
   --font-mono: 'Share Tech Mono', ui-monospace, monospace;
   --side: clamp(300px, 24vw, 430px);
   --cut: 14px;
   color-scheme: dark;
+}
+
+/*
+ * Tokens built from the rgb triplets. A custom property resolves var() where it is declared, so
+ * every scope that changes a triplet (the modes on .app, the red buttons) must declare them again.
+ */
+:root,
+.app,
+.btn--danger,
+.btn--muted {
+  --c-primary: rgb(var(--c-primary-rgb));
+  --c-accent: rgb(var(--c-accent-rgb));
+  --line: rgb(var(--c-primary-rgb) / 0.22);
+  --line-strong: rgb(var(--c-primary-rgb) / 0.55);
+  --glow: 0 0 18px rgb(var(--c-primary-rgb) / 0.35);
 }
 
 *,
@@ -102,6 +112,11 @@ a {
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+/* Screen edges take the colour of the mode: amber while processing, red on a failure. */
+.fx--ambient {
+  box-shadow: inset 0 0 16vmin rgb(var(--c-primary-rgb) / 0.1);
+  transition: box-shadow 0.9s ease;
 }
 .fx--scanlines {
   background: repeating-linear-gradient(

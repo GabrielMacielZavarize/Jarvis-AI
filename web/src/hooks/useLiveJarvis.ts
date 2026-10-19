@@ -116,7 +116,7 @@ function handleHudEvent(event: HudEvent) {
     const label = TOOL_LABELS[event.name] ?? event.name;
     const detail = event.detail ? ` · ${event.detail}` : '';
     if (event.status === 'running') {
-      hud.setActiveTool(event.name);
+      hud.setActiveTool(event.name, event.detail);
       hud.addLog('tool', `${label}${detail}`);
     } else {
       if (hud.activeTool === event.name) hud.setActiveTool(null);

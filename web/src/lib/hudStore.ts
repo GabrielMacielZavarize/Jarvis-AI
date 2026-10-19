@@ -58,6 +58,8 @@ function cardKey(kind: CardKind, data: CardDataMap[CardKind]): string {
 interface HudState {
   mode: JarvisMode;
   activeTool: string | null;
+  /** What the active tool is working on ("São Paulo"), shown under the core. */
+  activeToolDetail: string | null;
   demo: boolean;
   /** Last time the agent reported hearing the user's voice. */
   userHeardAt: number | null;
@@ -74,7 +76,7 @@ interface HudState {
   /** Dictation mode (DIT-29) shown by the DITADO indicator. */
   dictation: DictationState | null;
   setMode: (mode: JarvisMode) => void;
-  setActiveTool: (name: string | null) => void;
+  setActiveTool: (name: string | null, detail?: string | null) => void;
   setDemo: (demo: boolean) => void;
   setUserHeardAt: (ts: number | null) => void;
   addVoiceStart: (ts: number) => void;
@@ -105,6 +107,7 @@ interface HudState {
 export const useHud = create<HudState>((set, get) => ({
   mode: 'standby',
   activeTool: null,
+  activeToolDetail: null,
   demo: false,
   userHeardAt: null,
   voiceStarts: [],
@@ -116,7 +119,7 @@ export const useHud = create<HudState>((set, get) => ({
   camera: null,
   dictation: null,
   setMode: (mode) => set((s) => (s.mode === mode ? s : { mode })),
-  setActiveTool: (activeTool) => set({ activeTool }),
+  setActiveTool: (activeTool, detail = null) => set({ activeTool, activeToolDetail: activeTool ? detail : null }),
   setDemo: (demo) => set({ demo }),
   setUserHeardAt: (userHeardAt) => set({ userHeardAt }),
   addVoiceStart: (ts) => set((s) => ({ voiceStarts: [...s.voiceStarts, ts].slice(-MAX_VOICE_STARTS) })),
