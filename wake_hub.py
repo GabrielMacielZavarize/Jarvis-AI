@@ -6,6 +6,9 @@ servidor abre o navegador e entrega o aviso à primeira aba que se conectar.
 
 O detector só ouve quando nenhum HUD está em conversa: durante o link quem capta a voz é o
 navegador, e os dois nunca disputam o microfone.
+
+O aviso de reunião da agenda (AGD-27) usa o mesmo caminho: o servidor guarda o aviso numa fila,
+acorda o HUD com ``reason="calendar"`` e o agente busca a fila assim que o link abre.
 """
 
 from __future__ import annotations
@@ -36,6 +39,8 @@ STATUS_INTERVAL_S = 5.0
 KEEPALIVE_S = 15.0
 CLIENT_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
 MAX_LABEL = 160
+# Avisos da agenda que ninguém buscou somem depois deste tempo (a reunião já começou).
+REMINDER_TTL_S = 15 * 60
 
 
 @dataclass(eq=False)
@@ -56,6 +61,9 @@ class WakeHub:
         self.pending_until = 0.0
         # Score of a wake waiting for the browser that was just opened.
         self.undelivered_score: float | None = None
+        self.undelivered_reason = "wake"
+        # Calendar reminders waiting for the agent: (expires_at, payload).
+        self.reminders: list[tuple[float, dict[str, Any]]] = []
         self.detector_seen_at: float | None = None
         # The detector's open microphone has delivered only silence (muted in Windows?).
         self.mic_silent = False
@@ -66,7 +74,7 @@ class WakeHub:
         client = HudClient(id=client_id, connected_at=self._clock())
         self.clients[client_id] = client
         if self.undelivered_score is not None and self._pending():
-            self._deliver(client, self.undelivered_score)
+            self._deliver(client, self.undelivered_score, self.undelivered_reason)
         return client
 
     def close(self) -> None:
@@ -104,17 +112,38 @@ class WakeHub:
     def detector_online(self) -> bool:
         return self.detector_seen_at is not None and self._clock() - self.detector_seen_at < DETECTOR_STALE_S
 
-    def trigger(self, score: float) -> dict[str, Any]:
+    def trigger(self, score: float, reason: str = "wake") -> dict[str, Any]:
         """Hand the wake to one HUD tab, or ask for a browser when none is open."""
         if not self.listening():
             return {"accepted": False, "opened_browser": False}
         target = self._pick_client()
         if target is not None:
-            self._deliver(target, score)
+            self._deliver(target, score, reason)
             return {"accepted": True, "opened_browser": False}
         self.undelivered_score = score
+        self.undelivered_reason = reason
         self.pending_until = self._clock() + PENDING_BROWSER_S
         return {"accepted": True, "opened_browser": True}
+
+    # --- Avisos da agenda ------------------------------------------------------------------------
+
+    def push_reminders(self, reminders: list[dict[str, Any]]) -> dict[str, Any]:
+        """Queue reminders for the agent and wake a HUD when no link is open.
+
+        With a link open the agent picks them up by itself (claim_reminders); a wake already on
+        its way also ends in a link, so the reminder waits for it.
+        """
+        expires = self._clock() + REMINDER_TTL_S
+        self.reminders.extend((expires, reminder) for reminder in reminders)
+        if any(client.session_active for client in self.clients.values()):
+            return {"accepted": True, "opened_browser": False}
+        return self.trigger(1.0, reason="calendar")
+
+    def claim_reminders(self) -> list[dict[str, Any]]:
+        now = self._clock()
+        fresh = [reminder for expires, reminder in self.reminders if expires > now]
+        self.reminders = []
+        return fresh
 
     def status(self) -> dict[str, Any]:
         listening = self.detector_online() and self.listening()
@@ -134,10 +163,13 @@ class WakeHub:
         self.pending_until = 0.0
         self.undelivered_score = None
 
-    def _deliver(self, client: HudClient, score: float) -> None:
+    def _deliver(self, client: HudClient, score: float, reason: str = "wake") -> None:
         self.undelivered_score = None
         self.pending_until = self._clock() + PENDING_WAKE_S
-        client.queue.put_nowait({"type": "wake", "score": score})
+        event: dict[str, Any] = {"type": "wake", "score": score}
+        if reason != "wake":
+            event["reason"] = reason
+        client.queue.put_nowait(event)
 
     def _pick_client(self) -> HudClient | None:
         # Uma aba só conecta: a visível mais recente, senão a mais recente.
@@ -161,6 +193,24 @@ class TriggerRequest(BaseModel):
     score: float = Field(ge=0, le=1)
 
 
+def _config_event(settings: Settings) -> dict[str, Any]:
+    config: dict[str, Any] = {
+        "type": "config",
+        "enabled": settings.wake_word_enabled,
+        "silence_s": settings.wake_silence_seconds,
+    }
+    if settings.calendar_enabled and settings.calendar_reminder_minutes > 0:
+        # Os avisos da agenda também acordam o HUD; sem a palavra de ativação o link não fecha
+        # sozinho por silêncio.
+        config.update(
+            enabled=True,
+            reminders=True,
+            wake_word=settings.wake_word_enabled,
+            silence_s=settings.wake_silence_seconds if settings.wake_word_enabled else 0,
+        )
+    return config
+
+
 def _sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
@@ -169,7 +219,7 @@ async def hud_events(hub: WakeHub, client_id: str, settings: Settings) -> AsyncI
     """SSE stream of one HUD tab: config, detector status changes and wakes."""
     client = hub.connect(client_id)
     try:
-        yield _sse({"type": "config", "enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds})
+        yield _sse(_config_event(settings))
         last_status = hub.status()
         yield _sse(last_status)
         idle = 0.0
