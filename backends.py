@@ -68,9 +68,11 @@ def _memory_summary() -> str | None:
 class JarvisAgent(Agent):
     def __init__(self, instructions: str | None = None) -> None:
         super().__init__(instructions=instructions or build_agent_instructions())
+        # Link aberto por um aviso proativo (PRO-28): a primeira fala é o aviso, não a saudação.
+        self.first_reply_instruction: str | None = None
 
     async def on_enter(self) -> None:
-        self.session.generate_reply(instructions=build_initial_reply_instruction())
+        self.session.generate_reply(instructions=self.first_reply_instruction or build_initial_reply_instruction())
 
 
 def build_backend_components(settings: Settings) -> BackendComponents:

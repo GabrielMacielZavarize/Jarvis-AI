@@ -343,5 +343,7 @@ export interface ServerStatus {
   home?: { name: string; latitude: number; longitude: number } | null;
   /** WAK-22: "Jarvis" opens the link; silence_s of quiet closes it (0 = never). */
   wake_word?: { enabled: boolean; silence_s: number };
+  /** PRO-28: reminders and background monitors speak up on their own. */
+  proactive?: boolean;
   errors: string[];
 }

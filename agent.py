@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 
 from livekit import agents
@@ -17,6 +18,13 @@ async def jarvis_agent(ctx: agents.JobContext):
     settings = load_settings()
     runtime = build_runtime(settings)
     watch_user_voice(runtime.session)
+    if settings.proactive_enabled:
+        from proactive import announcement_instruction, fetch_notices
+
+        # Link aberto por um aviso (PRO-28): ele vira a primeira fala, no lugar da saudação.
+        waiting = await asyncio.to_thread(fetch_notices, settings.hud_url)
+        if waiting:
+            runtime.agent.first_reply_instruction = announcement_instruction(waiting)
 
     await runtime.session.start(
         room=ctx.room,
@@ -29,11 +37,21 @@ async def jarvis_agent(ctx: agents.JobContext):
 
         serve_memory_panel(ctx.room)
 
+    if settings.proactive_enabled:
+        from proactive import announce_loop
+
+        task = asyncio.create_task(announce_loop(runtime.session, settings.hud_url))
+        ctx.add_shutdown_callback(lambda: _cancel(task))
+
     if settings.gestures_enabled:
         from gestures import autostart_requested, start_for_session
 
         if autostart_requested():  # python jarvis.py --gestures
             await start_for_session(ctx)
+
+
+async def _cancel(task: asyncio.Task[None]) -> None:
+    task.cancel()
 
 
 def _validate_startup() -> None:

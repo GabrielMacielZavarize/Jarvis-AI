@@ -10,6 +10,7 @@ import argparse
 import os
 import re
 import secrets
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import webbrowser
@@ -27,6 +28,7 @@ from pydantic import BaseModel
 import camera
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
+from proactive import ProactiveEngine, build_proactive_router
 from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
 from wake_hub import WakeHub, build_wake_router
@@ -80,6 +82,7 @@ CAMERA_TOOL_NAMES = ["look_at_camera", "camera_view"]
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 NO_STORE = {"Cache-Control": "no-store"}
 MJPEG_BOUNDARY = "frame"
+PROACTIVE_TOOL_NAMES = ["set_reminder", "list_reminders", "cancel_reminder", "configure_alerts"]
 COMPUTER_USE_TOOL_NAMES = [
     "click_on_screen",
     "move_mouse",
@@ -185,15 +188,34 @@ def create_app(
     reload_env: bool = True,
     camera_hub: CameraHub | None = None,
     open_browser: Callable[[str], Any] = webbrowser.open,
+    proactive: Callable[[WakeHub], ProactiveEngine | None] | None = None,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
     ``camera_hub`` replaces the real webcam (tests); ``open_browser`` opens the HUD when
-    "Jarvis" is heard and no tab is open."""
+    "Jarvis" is heard and no tab is open. ``proactive`` builds the PRO-28 notice engine
+    (tests); by default it runs when JARVIS_PROACTIVE=true."""
+
+    def default_engine(wake_hub: WakeHub) -> ProactiveEngine | None:
+        try:
+            settings = current_settings()
+        except SettingsError:
+            return None
+        if not settings.proactive_enabled:
+            return None
+        # webbrowser.open pode demorar: fora do loop do servidor.
+        opener = lambda url: threading.Thread(target=open_browser, args=(url,), daemon=True).start()  # noqa: E731
+        return ProactiveEngine.for_settings(settings, wake_hub, open_browser=opener)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        engine = (proactive or default_engine)(app.state.wake_hub)
+        app.state.proactive = engine
+        if engine is not None:
+            engine.start()
         yield
+        if engine is not None:
+            await engine.stop()
         # Ao encerrar o servidor a webcam é solta na hora (a luz apaga).
         if camera_hub is not None:
             camera_hub.off()
@@ -245,6 +267,7 @@ def create_app(
             + (INSTALL_TOOL_NAMES if settings.app_install_enabled else [])
             + (CAMERA_TOOL_NAMES if settings.camera_enabled else [])
             + (COMPUTER_USE_TOOL_NAMES if settings.computer_use_enabled else [])
+            + (PROACTIVE_TOOL_NAMES if settings.proactive_enabled else [])
         )
         return {
             "version": APP_VERSION,
@@ -260,6 +283,7 @@ def create_app(
             "gestures": settings.gestures_enabled,
             "computer_use": settings.computer_use_enabled,
             "memory": settings.memory_enabled,
+            "proactive": settings.proactive_enabled,
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "errors": backend_errors + livekit_errors,
@@ -337,6 +361,8 @@ def create_app(
         webcam.off()
         return {"enabled": camera_enabled(), **webcam.state()}
     app.state.wake_hub = WakeHub()
+    app.state.proactive = None
+    app.include_router(build_proactive_router(lambda: app.state.proactive))
     app.include_router(
         build_wake_router(
             app.state.wake_hub,

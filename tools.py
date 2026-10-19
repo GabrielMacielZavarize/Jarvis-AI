@@ -1343,4 +1343,8 @@ def build_tools(settings: Settings) -> list[Any]:
         from computer_use import build_computer_use_tools
 
         tools.extend(build_computer_use_tools(settings.google_api_key, settings.computer_use_model))
+    if settings.proactive_enabled:
+        from proactive import build_proactive_tools
+
+        tools.extend(build_proactive_tools())
     return tools

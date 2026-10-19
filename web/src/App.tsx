@@ -121,6 +121,7 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
   // WAK-22: saying "Jarvis" connects; silence closes the link and the detector listens again.
   const wake = useWakeWord({
     enabled: server?.wake_word?.enabled ?? false,
+    proactive: server?.proactive ?? false,
     canConnect,
     ready: canConnect && live !== OFFLINE_LIVE,
     connected: live.connected,
