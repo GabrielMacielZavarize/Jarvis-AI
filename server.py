@@ -91,6 +91,15 @@ EMAIL_TOOL_NAMES = ["check_email_address", "draft_email", "confirm_email_send", 
 GESTURE_TOOL_NAMES = ["gesture_control", "gesture_shortcuts"]
 INSTALL_TOOL_NAMES = ["search_apps", "prepare_app_install", "confirm_app_install", "cancel_app_install"]
 CAMERA_TOOL_NAMES = ["look_at_camera", "camera_view"]
+CALENDAR_TOOL_NAMES = [
+    "get_agenda",
+    "next_meeting",
+    "prepare_calendar_event",
+    "prepare_calendar_update",
+    "prepare_calendar_delete",
+    "confirm_calendar_change",
+    "cancel_calendar_change",
+]
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 NO_STORE = {"Cache-Control": "no-store"}
 MJPEG_BOUNDARY = "frame"
@@ -163,14 +172,15 @@ def _geocode_home(city: str) -> dict[str, Any] | None:
     return home
 
 
-def _require_local(request: Request) -> None:
-    """A webcam só atende este computador: recusa Host estranho (DNS rebinding) e páginas de
-    outros sites abertas no navegador (Sec-Fetch-Site), que poderiam ligá-la com um <img>."""
+def _require_local(request: Request, name: str = "A câmera") -> None:
+    """A webcam (e a fila de avisos da agenda) só atende este computador: recusa Host estranho
+    (DNS rebinding) e páginas de outros sites abertas no navegador (Sec-Fetch-Site), que poderiam
+    ligá-la com um <img>."""
     host = (request.url.hostname or "").strip("[]").lower()
     if host not in LOCAL_HOSTS:
-        raise HTTPException(status_code=403, detail="A câmera só pode ser acessada pelo próprio computador.")
+        raise HTTPException(status_code=403, detail=f"{name} só pode ser acessada pelo próprio computador.")
     if request.headers.get("sec-fetch-site") not in (None, "same-origin", "none"):
-        raise HTTPException(status_code=403, detail="Pedido de outro site bloqueado: a câmera só atende o HUD do Jarvis.")
+        raise HTTPException(status_code=403, detail=f"Pedido de outro site bloqueado: {name.lower()} só atende o HUD do Jarvis.")
 
 
 async def _mjpeg(hub: CameraHub, ticket: int, first: bytes, seq: int, quality: int) -> AsyncIterator[bytes]:
@@ -187,6 +197,18 @@ async def _mjpeg(hub: CameraHub, ticket: int, first: bytes, seq: int, quality: i
         pass  # o HUD mostra o motivo lendo /api/camera/state
     finally:
         hub.stop(ticket)
+
+
+def _calendar_status(settings: Settings) -> dict[str, Any] | None:
+    if not settings.calendar_enabled:
+        return None
+    from calendar_tools import is_connected
+
+    return {
+        "connected": is_connected(),
+        "reminder_minutes": settings.calendar_reminder_minutes,
+        "reminders": settings.calendar_reminder_minutes > 0,
+    }
 
 
 def _requested_agent_name(body: TokenRequest) -> str:
@@ -211,19 +233,24 @@ def create_app(
     camera_hub: CameraHub | None = None,
     open_browser: Callable[[str], Any] = webbrowser.open,
     routine_scheduler: RoutineScheduler | None = None,
+    calendar_reminders: bool = True,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
     ``camera_hub`` replaces the real webcam (tests); ``open_browser`` opens the HUD when
-    "Jarvis" is heard and no tab is open. ``routine_scheduler`` replaces the clock-driven
-    scheduler of the routines (tests)."""
+    "Jarvis" is heard (or a meeting is about to start) and no tab is open. ``routine_scheduler``
+    replaces the clock-driven scheduler of the routines (tests); ``calendar_reminders=False``
+    turns off the meeting reminders loop (tests)."""
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         # ROT-24: as rotinas agendadas vencem aqui, no processo do servidor.
         scheduler_task = asyncio.create_task(app.state.routines.run_forever(routines_enabled))
+        reminders = asyncio.create_task(_calendar_reminders()) if calendar_reminders else None
         yield
         scheduler_task.cancel()
+        if reminders is not None:
+            reminders.cancel()
         # Ao encerrar o servidor a webcam é solta na hora (a luz apaga).
         if camera_hub is not None:
             camera_hub.off()
@@ -258,6 +285,18 @@ def create_app(
             raise HTTPException(status_code=403, detail=CAMERA_DISABLED)
         return hub()
 
+    async def _calendar_reminders() -> None:
+        """AGD-27: N minutos antes de uma reunião, acorda o HUD (como o "Jarvis") e deixa o aviso
+        na fila para o agente falar."""
+        from calendar_tools import reminder_payload, run_reminder_loop
+
+        async def on_due(events: list[Any]) -> None:
+            result = app.state.wake_hub.push_reminders([reminder_payload(event) for event in events])
+            if result.get("opened_browser"):
+                await asyncio.to_thread(open_browser, app.state.base_url or current_settings().hud_url + "/")
+
+        await run_reminder_loop(current_settings, on_due)
+
     @app.get("/api/status")
     def status() -> dict[str, Any]:
         try:
@@ -281,6 +320,7 @@ def create_app(
             + (EMAIL_TOOL_NAMES if settings.email_tool_enabled else [])
             + (INSTALL_TOOL_NAMES if settings.app_install_enabled else [])
             + (CAMERA_TOOL_NAMES if settings.camera_enabled else [])
+            + (CALENDAR_TOOL_NAMES if settings.calendar_enabled else [])
             + (COMPUTER_USE_TOOL_NAMES if settings.computer_use_enabled else [])
         )
         return {
@@ -302,6 +342,7 @@ def create_app(
                 "enabled": settings.routines_enabled,
                 "scheduled": app.state.routines.scheduled_count() if settings.routines_enabled else 0,
             },
+            "calendar": _calendar_status(settings),
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "errors": backend_errors + livekit_errors,
@@ -378,7 +419,14 @@ def create_app(
         webcam = hub()
         webcam.off()
         return {"enabled": camera_enabled(), **webcam.state()}
+    @app.post("/api/calendar/reminders/claim")
+    def claim_calendar_reminders(request: Request) -> dict[str, Any]:
+        """O agente busca os avisos de reunião que o servidor guardou (cada um sai uma vez só)."""
+        _require_local(request, "A agenda")
+        return {"reminders": app.state.wake_hub.claim_reminders()}
+
     app.state.wake_hub = WakeHub()
+    app.state.base_url = None
     app.include_router(
         build_wake_router(
             app.state.wake_hub,
@@ -435,6 +483,7 @@ def serve(hud_app: FastAPI, *, host: str, port: int, log_level: str) -> None:
             hud_app.state.wake_hub.close()
             await super().shutdown(sockets)
 
+    hud_app.state.base_url = f"http://{'127.0.0.1' if host in {'0.0.0.0', '::'} else host}:{port}/"
     config = uvicorn.Config(
         hud_app, host=host, port=port, log_level=log_level, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_S
     )

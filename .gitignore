@@ -33,3 +33,7 @@ voz.json
 # Rotinas do Jarvis (bom dia, modo foco...) e seus horários
 rotinas.json
 rotinas.json.tmp
+
+# Google Agenda: credenciais OAuth do app e token de acesso (pessoais, nunca no git)
+google_credentials.json
+google_token.json

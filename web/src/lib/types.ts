@@ -23,7 +23,8 @@ export type CardKind =
   | 'pointer'
   | 'memory'
   | 'explain'
-  | 'routine';
+  | 'routine'
+  | 'calendar';
 
 export interface WeatherDay {
   date: string;
@@ -209,6 +210,35 @@ export interface RoutineData {
   steps: RoutineStep[];
 }
 
+/** One Google Calendar event (calendar_tools.Evento.to_card); times are ISO in America/Sao_Paulo. */
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  all_day: boolean;
+  location?: string | null;
+  /** Video call link (Meet, Zoom...). */
+  link?: string | null;
+}
+
+/** AGD-27: the day's agenda, or a change waiting for "confirmar agenda <código>". */
+export interface CalendarData {
+  status: 'agenda' | 'pending' | 'created' | 'updated' | 'deleted' | 'cancelled';
+  /** "hoje (segunda, 19 de outubro)". */
+  label: string;
+  /** ISO date of the day shown. */
+  date: string;
+  events: CalendarEvent[];
+  action?: 'create' | 'update' | 'delete';
+  code?: string | null;
+  /** The change being prepared, as Jarvis understood it. */
+  pending?: { title: string; when: string; location?: string | null; before?: string | null } | null;
+  /** Id of the event the change/reminder is about. */
+  highlight?: string | null;
+  message?: string | null;
+}
+
 export interface MediaData {
   service: string;
   title: string;
@@ -368,6 +398,7 @@ export interface CardDataMap {
   memory: MemoryData;
   explain: ExplainData;
   routine: RoutineData;
+  calendar: CalendarData;
 }
 
 export type HudCard = {
@@ -437,6 +468,8 @@ export interface ServerStatus {
   memory?: boolean;
   /** VOZ-30: Gemini Live voice the next session starts with (null on OpenAI). */
   voice?: string | null;
+  /** AGD-27: null when JARVIS_ENABLE_CALENDAR=false. */
+  calendar?: { connected: boolean; reminder_minutes: number; reminders: boolean } | null;
   home?: { name: string; latitude: number; longitude: number } | null;
   /** WAK-22: "Jarvis" opens the link; silence_s of quiet closes it (0 = never). */
   wake_word?: { enabled: boolean; silence_s: number };

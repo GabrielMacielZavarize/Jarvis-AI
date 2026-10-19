@@ -33,6 +33,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'start_dictation', code: 'DIT-29', label: 'Modo ditado', hint: '“Jarvis, modo ditado.” · “Escreve aqui: chego em 10 minutos.”' },
   { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
   { id: 'run_routine', code: 'ROT-24', label: 'Rotinas', hint: '“Bom dia, Jarvis.” · “Modo foco.” · “Todo dia útil às 8h roda o bom dia.”' },
+  { id: 'get_agenda', code: 'AGD-27', label: 'Google Agenda', hint: '“O que eu tenho hoje?” · “Marca dentista sexta às 15h.”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -93,6 +94,13 @@ export const TOOL_LABELS: Record<string, string> = {
   cancel_screen_action: 'Clique cancelado',
   start_dictation: 'Modo ditado',
   write_here: 'Escrevendo no campo',
+  get_agenda: 'Consulta da agenda',
+  next_meeting: 'Próxima reunião',
+  prepare_calendar_event: 'Preparando evento',
+  prepare_calendar_update: 'Preparando alteração',
+  prepare_calendar_delete: 'Preparando exclusão',
+  confirm_calendar_change: 'Gravando na agenda',
+  cancel_calendar_change: 'Mudança cancelada',
 };
 
 export const MODE_LABELS: Record<JarvisMode, string> = {

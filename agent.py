@@ -48,6 +48,12 @@ async def jarvis_agent(ctx: agents.JobContext):
 
         watch_scheduled_routines(runtime.session, settings.hud_url)
 
+    if settings.calendar_enabled and settings.calendar_reminder_minutes > 0:
+        # Avisos de reunião que o servidor do HUD guardou (inclusive o que abriu este link).
+        from calendar_tools import start_reminder_relay
+
+        start_reminder_relay(runtime.session, settings.hud_url)
+
     if settings.gestures_enabled:
         from gestures import MIC, autostart_requested, start_for_session
 

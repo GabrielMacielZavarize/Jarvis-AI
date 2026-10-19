@@ -364,7 +364,7 @@ const EMAIL_STATUS: Record<EmailData['status'], [string, string]> = {
   cancelled: ['Cancelado', 'status-chip--off'],
 };
 
-function ConfirmCode({ action, code }: { action: string; code: string }) {
+export function ConfirmCode({ action, code }: { action: string; code: string }) {
   return (
     <div className="mail__code">
       {action}

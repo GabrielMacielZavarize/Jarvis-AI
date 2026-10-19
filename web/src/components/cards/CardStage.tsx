@@ -5,6 +5,7 @@ import { useHud } from '../../lib/hudStore';
 import { PANEL_META, panelTitle } from '../../lib/panels';
 import type { HudCard } from '../../lib/types';
 import { ProtocolsPanel } from '../ProtocolsPanel';
+import { CalendarBody } from './CalendarCard';
 import { CameraBody } from './CameraFeed';
 import { ExplainBody } from './ExplainCard';
 import {
@@ -59,6 +60,8 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <ExplainBody data={card.data} />;
     case 'routine':
       return <RoutineBody data={card.data} />;
+    case 'calendar':
+      return <CalendarBody data={card.data} />;
   }
 }
 

@@ -1121,3 +1121,86 @@
 .rot__step--skipped {
   opacity: 0.55;
 }
+
+
+/* AGD-27: Google Agenda */
+.agd {
+  display: grid;
+  gap: 10px;
+}
+.agd__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+.agd__message {
+  padding: 6px 10px;
+  border-left: 2px solid var(--line-strong);
+  background: rgb(var(--c-primary-rgb) / 0.05);
+  color: var(--text-dim);
+  font-size: 13.5px;
+}
+.agd__empty {
+  color: var(--text-faint);
+  font-size: 14px;
+}
+.agd__day {
+  display: grid;
+  gap: 4px;
+}
+.agd__label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+.agd__list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.agd__item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0 5px 10px;
+  border-left: 1px solid var(--line);
+}
+.agd__item--now {
+  border-left-color: var(--c-ok);
+}
+.agd__item--hl {
+  border-left-color: var(--c-accent);
+  background: linear-gradient(90deg, rgb(var(--c-primary-rgb) / 0.12), transparent 70%);
+}
+.agd__time {
+  flex: none;
+  min-width: 92px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.agd__text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.agd__title {
+  font-size: 14.5px;
+  line-height: 1.25;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.agd__meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}

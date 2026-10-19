@@ -785,6 +785,7 @@ HUD_PANEL_KINDS = {
     "memory": "Memória",
     "explain": "Assistente de tela",
     "routine": "Rotina",
+    "calendar": "Agenda",
 }
 LAST_PANEL = "last"
 MAX_PANEL_TARGETS = 6
@@ -1344,6 +1345,10 @@ def build_tools(settings: Settings) -> list[Any]:
         tools.extend(build_gesture_tools())
     if settings.email_tool_enabled:
         tools.extend(build_email_tools(settings))
+    if settings.calendar_enabled:
+        from calendar_tools import build_calendar_tools
+
+        tools.extend(build_calendar_tools())
     if settings.app_install_enabled:
         from installer import build_install_tools
 

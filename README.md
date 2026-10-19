@@ -86,6 +86,9 @@ Os protocolos MED, PC, WEB, AUD, JAN e VIS só existem com `JARVIS_ENABLE_PC_CON
 | ROT-24 | `run_routine` / `list_routines` / `save_routine` / `delete_routine` / `schedule_routine` / `confirm_routine_step` — várias ferramentas em sequência, com cada passo no painel Rotina; agendamento por horário | "Bom dia, Jarvis." · "Modo foco." · "Cria uma rotina estudo que abre o Notion e põe lo-fi." · "Todo dia útil às 8h roda o bom dia." |
 
 Os protocolos MED, PC, WEB, AUD, JAN, VIS e TEL só existem com `JARVIS_ENABLE_PC_CONTROL=true`; COM só com `JARVIS_ENABLE_EMAIL_TOOL=true`; APP só com `JARVIS_ENABLE_APP_INSTALL=true`. MEM vem ligado e some com `JARVIS_ENABLE_MEMORY=false`; ROT também vem ligado e some com `JARVIS_ENABLE_ROUTINES=false` (os passos que mexem no PC só funcionam com `JARVIS_ENABLE_PC_CONTROL=true`).
+| AGD-27 | `get_agenda` / `next_meeting` — lê o Google Agenda · `prepare_calendar_event` / `prepare_calendar_update` / `prepare_calendar_delete` / `confirm_calendar_change` / `cancel_calendar_change` — cria, altera e apaga eventos com código de confirmação; painel Agenda e aviso antes das reuniões | "O que eu tenho hoje?" · "E amanhã?" · "Qual minha próxima reunião?" · "Marca dentista sexta às 15h." · "Desmarca a reunião das 10." |
+
+AGD só existe com `JARVIS_ENABLE_CALENDAR=true` (veja [Google Agenda](#google-agenda-agd-27)).
 
 ### Memória entre conversas
 
@@ -488,6 +491,51 @@ Limites conhecidos: frases longas sem pausa só saem quando você pausa; "apaga 
 6. **Travas**: no meio de um ditado, mexa no mouse enquanto ele digita uma frase longa (para, bipe grave); ligue de novo e aperte ESC entre frases (desliga); clique num campo de senha e dite algo (recusa no HUD, nada digitado); dite "4111 1111 1111 1111" (recusado).
 7. **PhpStorm** e **Discord**: um ditado curto em cada, conferindo acentos (ç, ã, é) e que o "nova linha" no Discord não envia.
 8. Fora do ditado: "escreve aqui: chego em 10 minutos" no Bloco de Notas → `Chego em 10 minutos` sem ponto, e o terminal registra `[DIT-29]`.
+### Google Agenda (AGD-27)
+
+O Jarvis lê e mexe na sua agenda principal do Google. Ler não pede nada; criar, alterar e apagar seguem o padrão do email: a ferramenta prepara a mudança, mostra o código no painel **Agenda** e só grava quando você diz **"confirmar agenda"** e o código.
+
+```env
+JARVIS_ENABLE_CALENDAR=true
+JARVIS_CALENDAR_REMINDER_MINUTES=10   # aviso antes de cada reunião; 0 = sem aviso
+```
+
+**Credenciais OAuth (uma vez só).** O acesso é de "app para computador": nenhuma senha vai para o `.env`, e o token fica só no seu PC.
+
+1. Abra o [Google Cloud Console](https://console.cloud.google.com/) e crie um projeto (ex.: `Jarvis`).
+2. **APIs e serviços → Biblioteca** → procure **Google Calendar API** → **Ativar**.
+3. **APIs e serviços → Tela de consentimento OAuth** (ou "Google Auth Platform"): tipo **Externo**, preencha nome do app e seu email. Em **Público-alvo → Usuários de teste**, adicione o seu Gmail. O app pode ficar "Em teste" para sempre: só você usa.
+4. **Credenciais → Criar credenciais → ID do cliente OAuth** → tipo **App para computador** → Criar.
+5. **Baixar JSON** e salve como `google_credentials.json` na pasta do projeto (ao lado do `jarvis.py`).
+6. Rode `python calendar_tools.py --login`: o navegador abre, você escolhe a conta, passa pelo aviso "o Google não verificou este app" (**Continuar**, ou **Avançado → Acessar Jarvis**) e autoriza a agenda. O token vai para `google_token.json` e se renova sozinho.
+
+`google_credentials.json` e `google_token.json` estão no `.gitignore`. `python calendar_tools.py --hoje` testa a conexão; `--logout` apaga o token (revogue também em [myaccount.google.com/permissions](https://myaccount.google.com/permissions)). A permissão pedida é só `calendar.events` (eventos), sem acesso a outros dados da conta.
+
+**Como falar.** As datas são entendidas em português, no fuso `America/Sao_Paulo`:
+
+- "o que eu tenho hoje?", "e amanhã?", "e sexta?", "e essa semana?" → `get_agenda` (o resumo é falado, a lista completa fica no painel);
+- "qual minha próxima reunião?" → `next_meeting` (diz quanto falta e oferece abrir o link do Meet);
+- "marca dentista sexta às 15h", "marca reunião com o Pedro depois de amanhã às 9 por meia hora", "marca o aniversário da Ana dia 25 o dia inteiro" → `prepare_calendar_event` (avisa se conflita com outro evento);
+- "passa o dentista para as 16h", "muda o almoço para amanhã" → `prepare_calendar_update` (um horário sozinho mantém o dia; a duração é mantida);
+- "desmarca a reunião das 10", "cancela o dentista de sexta" → `prepare_calendar_delete`. Sem dia, ele procura de hoje até a próxima semana; se vários eventos combinarem, ele pergunta qual.
+
+Formatos aceitos: hoje, amanhã, depois de amanhã, segunda… domingo (sozinho = a próxima ocorrência, hoje incluso; "próxima sexta" pula hoje; "sexta da semana que vem"), dia 25, 25/12, 3 de novembro, daqui a 2 horas, 15h, 15h30, 15:30, às 9 e meia, 3 da tarde, meio-dia. "Às 3" sem "da manhã" vira 15h (de 1 a 6 sem período, conta como tarde), e um horário que já passou hoje, sem dia dito, vai para amanhã. Na dúvida, confira o dia e a hora que o Jarvis repete antes de confirmar.
+
+**Aviso antes das reuniões.** Com `JARVIS_CALENDAR_REMINDER_MINUTES` > 0, o servidor do HUD olha a agenda a cada minuto. N minutos antes de um evento com horário, ele guarda o aviso numa fila e acorda o HUD pelo mesmo caminho da palavra de ativação: se não houver link, a aba conecta sozinha (o servidor abre o navegador se nenhuma estiver aberta); com o link aberto, o agente busca a fila em até 15 s. O Jarvis então avisa em uma frase ("Senhor, a Daily começa em 10 minutos") e oferece abrir o link da chamada. Eventos de dia inteiro e convites recusados não geram aviso, e cada evento avisa uma vez só. Sem `JARVIS_WAKE_WORD`, o link aberto pelo aviso não fecha sozinho por silêncio.
+
+**Para outros módulos.** `calendar_tools` expõe funções simples, sem voz: `eventos_de_hoje()`, `eventos_do_dia(data, dias=1)`, `proximo_evento()` (todas levantam `CalendarError` se não houver login) e `resumo_do_dia()`, que devolve uma frase pronta e nunca levanta erro (boa para o "bom dia" das rotinas). `ReminderWatcher(lead_minutes=10).check()` devolve os eventos que acabaram de entrar na janela de aviso, para quem quiser avisar de outro jeito.
+
+**Teste ao vivo (roteiro).**
+
+1. Com o `google_credentials.json` salvo, rode `python calendar_tools.py --login` e depois `python calendar_tools.py --hoje`: deve listar os eventos de hoje.
+2. Ponha `JARVIS_ENABLE_CALENDAR=true` no `.env`, rode `python jarvis.py --rebuild` e confira `python doctor.py` ("Google Agenda (AGD-27): ativado, conectado").
+3. "Jarvis, o que eu tenho hoje?" → resumo falado e painel **Agenda** com os horários certos (compare com o calendar.google.com). "E amanhã?" e "e sexta?" também.
+4. "Qual minha próxima reunião?" → título, horário e quanto falta.
+5. "Marca dentista sexta às 15h" → o Jarvis repete "sexta, dia X, 15:00–16:00" e fala o código. Diga "pode marcar": não pode gravar. Diga "confirmar agenda" e o código: o evento aparece no Google Agenda (celular também).
+6. "Passa o dentista para as 16h" e confirme → o evento muda de horário no Google. "Desmarca o dentista" e confirme → some.
+7. "Marca um teste daqui a 12 minutos", confirme, feche o link e espere: uns 10 minutos antes a aba conecta sozinha e o Jarvis avisa. Repita com o HUD fechado (o navegador deve abrir) e com o link aberto.
+8. Rode `python calendar_tools.py --logout` e pergunte a agenda: o Jarvis deve explicar que falta o login.
+
 ### Palavra de ativação "Jarvis" (WAK-22)
 
 ```env
@@ -653,7 +701,7 @@ Enviar email, instalar app e cliques arriscados do mouse usam o mesmo código de
 - "Confirmar 482 913." · "Jarvis, confirma 4-8-2-9-1-3"
 - "Confirmar quatro oito dois nove um três" · "confirmar quatrocentos e oitenta e dois, novecentos e treze"
 
-O que **não** vale: "pode ir", "manda", "sim", "não confirmar 482913", "confirmar 482913 e …" (qualquer palavra fora da frase) e frases que não sejam a sua última fala. Para instalar, a palavra "instalação" é obrigatória; para o mouse, a palavra "clique" ("confirmar clique 482913"). Uma frase não serve para a outra. Se a transcrição da sua fala chegar um instante atrasada, o Jarvis espera até 3 segundos por ela.
+O que **não** vale: "pode ir", "manda", "sim", "não confirmar 482913", "confirmar 482913 e …" (qualquer palavra fora da frase) e frases que não sejam a sua última fala. Para instalar, a palavra "instalação" é obrigatória; para o mouse, a palavra "clique" ("confirmar clique 482913"); para a agenda, "agenda" ou "evento" ("confirmar agenda 482913"). Uma frase não serve para a outra. Se a transcrição da sua fala chegar um instante atrasada, o Jarvis espera até 3 segundos por ela.
 
 ### Mouse e teclado
 
@@ -709,6 +757,12 @@ Uma memória falsa plantada por uma página seria um prompt injection persistent
 - Os endpoints que o HUD usa (`/api/wake/events`, `/hud`, `/result`) recusam pedidos vindos de outros sites (`Sec-Fetch-Site`), então uma página aberta no navegador não consegue abrir o link nem desligar o detector.
 - A ativação só conecta o mesmo link do botão "Inicializar": as regras de email, instalação e controle do PC continuam iguais.
 
+### Google Agenda
+
+- O login é OAuth de app para computador, com a permissão mínima `calendar.events`. O token (`google_token.json`) e as credenciais do app (`google_credentials.json`) ficam só na pasta do projeto, fora do git; quem tiver o token lê e mexe na sua agenda, então não compartilhe a pasta com ele.
+- Ler é livre; criar, alterar e apagar só acontecem com "confirmar agenda" + código na sua última fala. Texto de eventos, emails ou páginas nunca confirma nada.
+- A fila de avisos (`/api/calendar/reminders/claim`) só atende o próprio computador e recusa pedidos de outros sites. Ela guarda só título, horário, local e link dos eventos que vão começar, e cada aviso sai uma vez.
+
 ### Leitura de tela
 
 `look_at_screen` só roda quando você pede. O print aparece no HUD e é **enviado ao Gemini (Google)** para análise, incluindo tudo o que estiver visível naquela tela ou janela. Feche arquivos sensíveis (como o `.env`) antes de pedir. O Jarvis é instruído a nunca ler senhas, chaves ou tokens em voz alta.
@@ -762,6 +816,8 @@ Assistente de tela (TEL-31): ordem de leitura (seleção, área de transferênci
 Modo ditado (DIT-29): a normalização (comandos falados → texto/teclas, pontuação automática, maiúsculas, "ponto"/"vírgula" como palavras) e a máquina de estados (parciais e final do Gemini, a fala que ligou o modo nunca digitada, silêncio do Jarvis, fim do ditado, desfazer, Shift+Enter em apps de conversa, recusas, ESC, mouse, silêncio e troca de campo), com teclado falso.
 Voz e sons (VOZ-30): `tests/test_voices.py` confere `JARVIS_VOICE`, a lista de vozes contra a do plugin, `voz.json`, a ferramenta `change_voice` (troca na hora depois da resposta) e o tom do prompt; `web/src/lib/sounds.test.ts` e `coreActivity.test.ts` cobrem qual som cada evento toca, o volume salvo no navegador e os estados "pensando"/"executando" do núcleo.
 
+Agenda (AGD-27): datas em português com relógio fixo, busca do evento falado ("a reunião das 10"), criar/alterar/apagar só com "confirmar agenda" + código, erros de login e de rede, aviso antes das reuniões (janela, uma vez só, fila no servidor e despertar do HUD), com a API do Google falsa.
+
 ## Estrutura
 
 ```
@@ -778,6 +834,7 @@ confirmation.py       Frase "confirmar <código>" tolerante à transcrição de 
 memory.py             Memória entre conversas (memoria.json), filtro de segredos e painel MEM-23
 voices.py             Voz do Jarvis (VOZ-30): vozes do Gemini Live, voz.json e a ferramenta change_voice
 routines.py           Rotinas (rotinas.json): passos, execução com falhas parciais, ferramentas e agendador
+calendar_tools.py     Google Agenda (AGD-27): login OAuth, datas em português, ferramentas e avisos de reunião
 win_desktop.py        Monitores, janelas e captura de tela via Win32
 camera.py             Dono único da webcam (CameraHub): captura, feed MJPEG, fotos
 vision.py             Ferramentas de visão: look_at_camera, camera_view e envio de imagens ao modelo

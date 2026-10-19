@@ -121,9 +121,11 @@ function Hud({ status, booted, live }: { status: StatusResult; booted: boolean; 
   const stop = () => (demo.running ? demo.stop() : void live.stop());
 
   // WAK-22: saying "Jarvis" connects; silence closes the link and the detector listens again.
+  // AGD-27: a meeting about to start connects too, so Jarvis can warn about it.
   const wake = useWakeWord({
-    // Scheduled routines (ROT-24) open the link through the same stream, even without the wake word.
-    enabled: (server?.wake_word?.enabled ?? false) || (server?.routines?.enabled ?? false),
+    // Scheduled routines (ROT-24) and meeting reminders (AGD-27) open the link through the same
+    // stream, even without the wake word.
+    enabled: Boolean(server?.wake_word?.enabled || server?.routines?.enabled || server?.calendar?.reminders),
     canConnect,
     ready: canConnect && live !== OFFLINE_LIVE,
     connected: live.connected,

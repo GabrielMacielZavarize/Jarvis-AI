@@ -1,4 +1,5 @@
-"""Confirmação por código para ações sensíveis (enviar email, instalar app, clique arriscado).
+"""Confirmação por código para ações sensíveis (enviar email, instalar app, clique arriscado,
+mexer na agenda).
 
 A barreira de segurança: a ação só roda quando a ÚLTIMA fala do próprio usuário
 contém a frase de confirmação com o código de 6 dígitos. Texto de páginas, emails
@@ -20,7 +21,7 @@ import secrets
 import unicodedata
 from typing import Any, Literal
 
-ConfirmAction = Literal["email", "install", "screen"]
+ConfirmAction = Literal["email", "install", "screen", "calendar"]
 
 # Quanto tempo esperar a transcrição da fala do usuário chegar ao histórico. O Gemini
 # Live às vezes entrega a chamada de ferramenta antes do texto final da fala.
@@ -35,6 +36,8 @@ ACTION_WORDS: dict[ConfirmAction, set[str]] = {
     "install": {"instalacao", "instalar"},
     # Mouse e teclado (computer_use.py): "confirmar clique 482913".
     "screen": {"clique", "click", "acao", "tecla"},
+    # Google Agenda (calendar_tools.py): "confirmar agenda 482913".
+    "calendar": {"agenda", "evento"},
 }
 LEADING_WORDS = {"jarvis", "ok"}
 TRAILING_WORDS = {"jarvis", "por", "favor"}
@@ -222,6 +225,7 @@ def parse_confirmation(text: str | None, action: ConfirmAction) -> str | None:
     email:   "confirmar <código>" (aceita "confirma", "confirmar o envio", "confirmar código").
     install: "confirmar instalação <código>" (a palavra instalação é obrigatória).
     screen:  "confirmar clique <código>" (a palavra clique é obrigatória).
+    calendar: "confirmar agenda <código>" (a palavra agenda ou evento é obrigatória).
     """
     if not text:
         return None
@@ -239,7 +243,7 @@ def parse_confirmation(text: str | None, action: ConfirmAction) -> str | None:
     while index < len(tokens) and (tokens[index] in FILLER_WORDS or tokens[index] in action_words):
         saw_action = saw_action or tokens[index] in action_words
         index += 1
-    if action in {"install", "screen"} and not saw_action:
+    if action in {"install", "screen", "calendar"} and not saw_action:
         return None
     return digits_from_tokens(tokens[index:])
 
@@ -249,6 +253,8 @@ def confirmation_phrase(action: ConfirmAction, code: str) -> str:
         return f"confirmar instalação {code}"
     if action == "screen":
         return f"confirmar clique {code}"
+    if action == "calendar":
+        return f"confirmar agenda {code}"
     return f"confirmar {code}"
 
 
