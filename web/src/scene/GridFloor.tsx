@@ -33,7 +33,9 @@ const fragment = /* glsl */ `
     float minor = gridLine(vWorld.xz, 1.0, 1.0) * 0.22;
     float major = gridLine(vWorld.xz, 5.0, 1.3) * 0.55;
     float wave = mod(uTime * 4.5, 32.0);
-    float ring = smoothstep(1.4, 0.0, abs(d - wave)) * (1.0 - wave / 32.0);
+    // The wave fades in as it leaves the pad: born at full strength it lit a disc right under the
+    // core that the bloom turned into a flash every few seconds.
+    float ring = smoothstep(1.4, 0.0, abs(d - wave)) * (1.0 - wave / 32.0) * smoothstep(2.0, 4.5, wave);
     float pad = smoothstep(0.08, 0.0, abs(d - 3.0)) * 0.6 + smoothstep(0.05, 0.0, abs(d - 3.6)) * 0.3;
     // Radar sweep: a beam turning around the pad that lights the grid and leaves a fading wake.
     // atan(0, 0) is undefined: one NaN pixel at the centre would be smeared black by the bloom.

@@ -19,6 +19,7 @@ import { useDemo } from './hooks/useDemo';
 import { useIdle } from './hooks/useIdle';
 import { usePanelDrag } from './hooks/usePanelDrag';
 import { useReactorHum } from './hooks/useReactorHum';
+import { useSettledMode } from './hooks/useSettledMode';
 import { usePresence } from './hooks/usePresence';
 import { useLanAccess } from './hooks/useLanAccess';
 import { type LiveJarvis, OFFLINE_LIVE, useLiveJarvis } from './hooks/useLiveJarvis';
@@ -108,9 +109,11 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   const canConnect = server?.livekit_configured ?? false;
   const offline = status.state === 'unreachable' || (server !== null && !server.ready);
 
-  let mode: JarvisMode = demo.running ? demo.mode : live.mode;
-  if (!demo.running && !live.connected && offline) mode = 'offline';
-  if (busy && mode === 'standby') mode = 'connecting';
+  let rawMode: JarvisMode = demo.running ? demo.mode : live.mode;
+  if (!demo.running && !live.connected && offline) rawMode = 'offline';
+  if (busy && rawMode === 'standby') rawMode = 'connecting';
+  // What the HUD paints: a quick "thinking" or a pause between sentences does not repaint it.
+  const mode = useSettledMode(rawMode);
   const connected = demo.running || live.connected;
   const lines = demo.running ? demo.lines : live.lines;
 

@@ -63,6 +63,10 @@ const target = {
   accent: new Color(),
 };
 
+/** Seconds between two surges: a tool that starts right after the voice does not flash the core twice. */
+export const SURGE_GAP_S = 1.6;
+let lastSurgeAt = -Infinity;
+
 export function updateScene(time: number, delta: number) {
   sampleAudio(time);
 
@@ -70,7 +74,10 @@ export function updateScene(time: number, delta: number) {
   const effective: JarvisMode = activeTool && mode !== 'speaking' ? 'thinking' : mode;
   if (effective !== scene.mode) {
     scene.mode = effective;
-    scene.surge = 1;
+    if (time - lastSurgeAt >= SURGE_GAP_S) {
+      scene.surge = 1;
+      lastSurgeAt = time;
+    }
   }
 
   const look = MODE_LOOK[effective];

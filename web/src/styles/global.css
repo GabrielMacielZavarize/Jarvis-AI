@@ -1,10 +1,23 @@
+/*
+ * Theme tokens (lib/themes.ts): each colour is three channels (r g b) so the HUD can glide between
+ * modes and themes; a plain custom property cannot be animated, these registered ones can.
+ */
+@property --hud-pr { syntax: '<number>'; inherits: true; initial-value: 95; }
+@property --hud-pg { syntax: '<number>'; inherits: true; initial-value: 244; }
+@property --hud-pb { syntax: '<number>'; inherits: true; initial-value: 255; }
+@property --hud-ar { syntax: '<number>'; inherits: true; initial-value: 255; }
+@property --hud-ag { syntax: '<number>'; inherits: true; initial-value: 182; }
+@property --hud-ab { syntax: '<number>'; inherits: true; initial-value: 72; }
+
 :root {
-  /* Theme tokens (lib/themes.ts): base colours, the "processing" pair and offline. */
-  --theme-primary: 95 244 255;
-  --theme-accent: 255 182 72;
-  --theme-think: 255 193 94;
-  --theme-think-accent: 95 244 255;
-  --theme-offline: 112 182 214;
+  /* Base colours, the "processing" pair and offline, as r g b channels. */
+  --tp-r: 95;  --tp-g: 244; --tp-b: 255;
+  --ta-r: 255; --ta-g: 182; --ta-b: 72;
+  --tt-r: 255; --tt-g: 193; --tt-b: 94;
+  --tta-r: 95; --tta-g: 244; --tta-b: 255;
+  --to-r: 112; --to-g: 182; --to-b: 214;
+  --theme-primary: var(--tp-r) var(--tp-g) var(--tp-b);
+  --theme-accent: var(--ta-r) var(--ta-g) var(--ta-b);
   --c-primary-rgb: var(--theme-primary);
   --c-accent-rgb: var(--theme-accent);
   --c-danger: #ff5a5a;
@@ -23,33 +36,33 @@
 }
 
 :root[data-theme='mark3'] {
-  --theme-primary: 255 190 80;
-  --theme-accent: 255 84 64;
-  --theme-think: 255 236 205;
-  --theme-think-accent: 255 190 80;
-  --theme-offline: 170 140 100;
+  --tp-r: 255; --tp-g: 190; --tp-b: 80;
+  --ta-r: 255; --ta-g: 84;  --ta-b: 64;
+  --tt-r: 255; --tt-g: 236; --tt-b: 205;
+  --tta-r: 255; --tta-g: 190; --tta-b: 80;
+  --to-r: 170; --to-g: 140; --to-b: 100;
   --panel-bg: linear-gradient(160deg, rgb(52 22 8 / 0.55), rgb(22 6 2 / 0.35));
   --text: #fff3e2;
   --text-dim: rgb(255 243 226 / 0.6);
   --text-faint: rgb(255 243 226 / 0.38);
 }
 :root[data-theme='friday'] {
-  --theme-primary: 190 150 255;
-  --theme-accent: 255 130 220;
-  --theme-think: 255 160 232;
-  --theme-think-accent: 190 150 255;
-  --theme-offline: 140 130 170;
+  --tp-r: 190; --tp-g: 150; --tp-b: 255;
+  --ta-r: 255; --ta-g: 130; --ta-b: 220;
+  --tt-r: 255; --tt-g: 160; --tt-b: 232;
+  --tta-r: 190; --tta-g: 150; --tta-b: 255;
+  --to-r: 140; --to-g: 130; --to-b: 170;
   --panel-bg: linear-gradient(160deg, rgb(36 18 62 / 0.55), rgb(14 6 28 / 0.35));
   --text: #f4ecff;
   --text-dim: rgb(244 236 255 / 0.6);
   --text-faint: rgb(244 236 255 / 0.38);
 }
 :root[data-theme='stealth'] {
-  --theme-primary: 225 235 242;
-  --theme-accent: 95 224 200;
-  --theme-think: 95 224 200;
-  --theme-think-accent: 225 235 242;
-  --theme-offline: 140 152 160;
+  --tp-r: 225; --tp-g: 235; --tp-b: 242;
+  --ta-r: 95;  --ta-g: 224; --ta-b: 200;
+  --tt-r: 95;  --tt-g: 224; --tt-b: 200;
+  --tta-r: 225; --tta-g: 235; --tta-b: 242;
+  --to-r: 140; --to-g: 152; --to-b: 160;
   --panel-bg: linear-gradient(160deg, rgb(30 36 42 / 0.6), rgb(10 12 14 / 0.4));
   --text: #f2f6f8;
   --text-dim: rgb(242 246 248 / 0.6);
@@ -123,17 +136,45 @@ a {
   outline-offset: 3px;
 }
 
-/* Mode-driven palette — kept in sync with the 3D scene colours. */
+/*
+ * Mode-driven palette, kept in sync with the 3D scene colours. The channels glide (0.8 s) instead of
+ * snapping, so amber while processing and the theme changes fade in rather than blink.
+ */
+.app {
+  --hud-pr: var(--tp-r);
+  --hud-pg: var(--tp-g);
+  --hud-pb: var(--tp-b);
+  --hud-ar: var(--ta-r);
+  --hud-ag: var(--ta-g);
+  --hud-ab: var(--ta-b);
+  --c-primary-rgb: var(--hud-pr) var(--hud-pg) var(--hud-pb);
+  --c-accent-rgb: var(--hud-ar) var(--hud-ag) var(--hud-ab);
+  transition-property: --hud-pr, --hud-pg, --hud-pb, --hud-ar, --hud-ag, --hud-ab;
+  transition-duration: 0.8s;
+  transition-timing-function: ease;
+}
 .app[data-mode='thinking'] {
-  --c-primary-rgb: var(--theme-think);
-  --c-accent-rgb: var(--theme-think-accent);
+  --hud-pr: var(--tt-r);
+  --hud-pg: var(--tt-g);
+  --hud-pb: var(--tt-b);
+  --hud-ar: var(--tta-r);
+  --hud-ag: var(--tta-g);
+  --hud-ab: var(--tta-b);
 }
 .app[data-mode='error'] {
-  --c-primary-rgb: 255 90 90;
-  --c-accent-rgb: 255 160 75;
+  --hud-pr: 255;
+  --hud-pg: 90;
+  --hud-pb: 90;
+  --hud-ar: 255;
+  --hud-ag: 160;
+  --hud-ab: 75;
+  /* A failure shows at once. */
+  transition-duration: 0.15s;
 }
 .app[data-mode='offline'] {
-  --c-primary-rgb: var(--theme-offline);
+  --hud-pr: var(--to-r);
+  --hud-pg: var(--to-g);
+  --hud-pb: var(--to-b);
 }
 
 .app {

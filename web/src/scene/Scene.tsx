@@ -2,13 +2,14 @@ import { Sparkles } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import { BlendFunction } from 'postprocessing';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { type Group, Vector2 } from 'three';
 import { CoreActivity } from './CoreActivity';
 import { useHud } from '../lib/hudStore';
 import { currentSceneProfile } from '../lib/lan';
 import { usePrefs } from '../lib/prefs';
-import { type AutoState, autoStep, fixedLevel, QUALITY_PROFILES, startAuto } from '../lib/quality';
+import { type AutoState, autoStep, fixedLevel, LEVEL_LABELS, QUALITY_PROFILES, startAuto } from '../lib/quality';
+import type { SceneLevel } from '../lib/types';
 import { EarthGlobe } from './EarthGlobe';
 import { GridFloor } from './GridFloor';
 import { HudRings } from './HudRings';
@@ -32,12 +33,20 @@ function SceneDriver() {
 const FPS_WINDOW_S = 4;
 
 /** Measures the frame rate and reports it; in automatic mode it also moves the quality. */
-function FrameMonitor({ onWindow }: { onWindow: (fps: number) => void }) {
+function FrameMonitor({ level, onWindow }: { level: SceneLevel; onWindow: (fps: number) => void }) {
   const sample = useRef({ frames: 0, time: 0 });
+  // Right after a level change the new shaders compile: that window says nothing about the speed.
+  useEffect(() => {
+    sample.current = { frames: 0, time: -FPS_WINDOW_S };
+  }, [level]);
   useFrame((_, delta) => {
     // A hidden tab or a long hitch is not the scene's speed: drop that window.
     if (delta > 0.5) {
       sample.current = { frames: 0, time: 0 };
+      return;
+    }
+    if (sample.current.time < 0) {
+      sample.current.time = Math.min(0, sample.current.time + delta);
       return;
     }
     const w = sample.current;
@@ -95,7 +104,11 @@ function Hologram({ visible, particles }: { visible: boolean; particles: number 
   );
 }
 
-export function Scene({ visible }: { visible: boolean }) {
+/**
+ * Memoised: the HUD re-renders on every transcript chunk, and re-rendering the whole 3D tree that
+ * often cost frames, which made the automatic quality step down (a blank frame) mid-conversation.
+ */
+export const Scene = memo(function Scene({ visible }: { visible: boolean }) {
   const aberration = useMemo(() => new Vector2(0.0007, 0.0005), []);
   // LAN-26: a phone starts on the lighter scene; the quality in Ajustes can change it.
   const { lite } = useMemo(currentSceneProfile, []);
@@ -107,6 +120,15 @@ export function Scene({ visible }: { visible: boolean }) {
   useEffect(() => {
     if (quality === 'auto') setAuto(startAuto(lite));
   }, [quality, lite]);
+
+  // The automatic quality says when it changes, so a one-off change of look has an explanation.
+  const announced = useRef(level);
+  useEffect(() => {
+    if (quality !== 'auto' || announced.current === level) return;
+    const fps = useHud.getState().sceneQuality.fps;
+    useHud.getState().addLog('info', `Qualidade da cena: ${LEVEL_LABELS[level]}${fps ? ` (${fps} fps)` : ''}`);
+    announced.current = level;
+  }, [level, quality]);
 
   const onWindow = (fps: number) => {
     useHud.getState().setSceneQuality(level, Math.round(fps));
@@ -123,7 +145,7 @@ export function Scene({ visible }: { visible: boolean }) {
       <color attach="background" args={['#010409']} />
       <fog attach="fog" args={['#010409', 12, 34]} />
       <SceneDriver />
-      <FrameMonitor onWindow={onWindow} />
+      <FrameMonitor level={level} onWindow={onWindow} />
       <CameraRig />
       <Hologram visible={visible} particles={profile.particles} />
       <GridFloor />
@@ -145,4 +167,4 @@ export function Scene({ visible }: { visible: boolean }) {
       )}
     </Canvas>
   );
-}
+});
