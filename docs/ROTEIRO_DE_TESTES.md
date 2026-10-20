@@ -314,3 +314,20 @@ Detalhes em [saude.md](saude.md).
 - [ ] Peça o clima de uma cidade inventada até a ferramenta falhar. Ela aparece em Ferramentas com erro.
 - [ ] No celular pareado o painel aparece sem o botão Limpar. No PC, Limpar zera tudo.
 - [ ] Com `JARVIS_HEALTH=false` o painel mostra "desligado" e nada novo é gravado.
+
+## 28. Ícone na bandeja
+
+Detalhes em [bandeja.md](bandeja.md). Só no Windows.
+
+- [ ] `pythonw jarvis.py --tray`: nenhuma janela de terminal abre, o ícone aparece ao lado do relógio e o HUD abre no navegador. O ícone fica cinza e depois azul em poucos segundos.
+- [ ] Pare o mouse sobre o ícone: a dica mostra servidor, agente e link. Com `JARVIS_WAKE_WORD=true`, o centro do ícone acende e a dica diz "Palavra de ativação: ouvindo".
+- [ ] Botão direito, Iniciar o link: o HUD toca o som de ativação, o Registro mostra "Bandeja · abrindo o link" e o ícone fica verde. Feche a aba antes e repita: o navegador abre e conecta sozinho.
+- [ ] Com o link aberto, Encerrar o link: o link fecha, o Registro mostra "Bandeja · link encerrado" e o ícone volta ao azul. Sem link aberto, o item vira Iniciar o link de novo.
+- [ ] Com `JARVIS_ENABLE_GESTURES=true`, Gestos: a webcam liga, aparece a notificação e o item fica marcado. De novo: a webcam apaga.
+- [ ] Iniciar com o Windows: o item fica marcado e a entrada `Jarvis` aparece em Configurações, Aplicativos, Inicialização. Saia da conta e entre de novo: o ícone aparece sem terminal e sem abrir aba nova. Desmarque e confira que a entrada sumiu.
+- [ ] Abrir a pasta de logs: o `jarvis.log` tem as linhas `[jarvis]`, `[jarvis.agente]` e `[jarvis.ativacao]`. A pasta `logs` não entra no `git status`.
+- [ ] Reiniciar o Jarvis: o ícone some e volta em alguns segundos, sem aba nova no navegador, e o HUD aberto reconecta.
+- [ ] Mate o processo do agente pelo Gerenciador de Tarefas: o ícone fica amarelo e a dica diz "Agente: parado".
+- [ ] Reinicie o Explorer pelo Gerenciador de Tarefas: o ícone volta sozinho.
+- [ ] Sair: o ícone some e não sobra nenhum `pythonw.exe` do Jarvis no Gerenciador de Tarefas. A webcam e o microfone ficam livres.
+- [ ] Com 125% ou 150% de escala no Windows, o ícone fica nítido.

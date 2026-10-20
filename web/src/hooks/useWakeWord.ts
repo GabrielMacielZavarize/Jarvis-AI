@@ -93,6 +93,8 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const [noticeLink, setNoticeLink] = useState(false);
   /** Presence (PRS-25) is on: the webcam opens links and silence closes them. */
   const [presenceOn, setPresenceOn] = useState(false);
+  /** The tray icon (BAN-41) needs this tab's link state to show it and to close the link. */
+  const [trayOn, setTrayOn] = useState(false);
   const [reports, setReports] = useState(0);
   const [detector, setDetector] = useState({ online: false, listening: false, micSilent: false, words: [] as string[] });
   const [silenceS, setSilenceS] = useState(0);
@@ -117,7 +119,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const report = useCallback((result: 'connected' | 'failed' | 'ignored') => post('/api/wake/result', { client: clientId, result }), [clientId]);
 
   const onWake = useCallback(
-    (score: number, routine?: string, reason?: 'calendar' | 'notice' | 'presence' | 'context', word?: string, persona?: string) => {
+    (score: number, routine?: string, reason?: 'calendar' | 'notice' | 'presence' | 'context' | 'tray', word?: string, persona?: string) => {
       const byPresence = reason === 'presence';
       const heard = `“${wakeWordLabel(word)}”`;
       const state = latest.current;
@@ -155,6 +157,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         hud.addLog('ok', 'Aviso do Jarvis · abrindo o link');
         setNoticeLink(true);
       } else if (byPresence) hud.addLog('ok', 'Presença · você voltou, abrindo o link');
+      else if (reason === 'tray') hud.addLog('ok', 'Bandeja · abrindo o link');
       else hud.addLog('ok', `Palavra de ativação · ${heard} (${Math.round(score * 100)}%)`);
       heardWake.current = routine || reason ? null : { word: word || 'jarvis', at: Date.now() };
       setWakeAt(Date.now());
@@ -174,6 +177,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         setWakeWord(event.wake_word ?? true);
         setNoticesOn(event.proactive ?? false);
         setPresenceOn(event.presence ?? false);
+        setTrayOn(event.tray ?? false);
         setSilenceS(event.silence_s);
         // The server knows this tab now: (re)send its state, also after a server restart.
         setReports((count) => count + 1);
@@ -191,6 +195,12 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         // Spoken notices have Jarvis's voice and the link chime; the silent ones get a sound of their own.
         if (event.route === 'hud') playCue('notice');
         hud.addLog(noticeLogLevel(event.priority), `${event.title} · ${event.message}`);
+      } else if (event.type === 'sleep') {
+        const state = latest.current;
+        if (!state.sessionActive || state.demo) return;
+        playSleepChime();
+        useHud.getState().addLog('info', 'Bandeja · link encerrado');
+        void state.stop();
       } else {
         onWake(event.score, event.routine, event.reason, event.word, event.persona);
       }
@@ -202,6 +212,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       setWakeWord(true);
       setNoticesOn(false);
       setPresenceOn(false);
+      setTrayOn(false);
     };
   }, [enabled, proactive, presence, clientId, onWake]);
 
@@ -214,9 +225,9 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   // While a link is open (or opening) the detector releases the microphone.
   // A notice only opens the link when no conversation is already open (or opening) in this tab.
   useEffect(() => {
-    if ((!subscribed && !noticesOn && !presenceOn) || reports === 0) return;
+    if ((!subscribed && !noticesOn && !presenceOn && !trayOn) || reports === 0) return;
     void post('/api/wake/hud', { client: clientId, session_active: sessionActive, visible, mic_label: micLabel });
-  }, [subscribed, noticesOn, presenceOn, reports, clientId, sessionActive, visible, micLabel]);
+  }, [subscribed, noticesOn, presenceOn, trayOn, reports, clientId, sessionActive, visible, micLabel]);
 
   // Connect as soon as this tab can (a tab the server just opened is still booting).
   useEffect(() => {

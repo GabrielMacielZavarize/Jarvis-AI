@@ -27,6 +27,8 @@ export type WakeEvent =
       proactive?: boolean;
       /** PRS-25: the webcam opens the link when the user sits back down. */
       presence?: boolean;
+      /** BAN-41: the tray icon opens and closes the link. */
+      tray?: boolean;
     }
   /** words: the names the detector hears ("jarvis", "friday"); missing on older servers. */
   | { type: 'status'; detector: boolean; listening: boolean; mic_silent?: boolean; words?: string[] }
@@ -34,17 +36,20 @@ export type WakeEvent =
    * routine: a scheduled routine (ROT-24) opened the link; reason: why it woke instead of a heard
    * "Jarvis" (calendar = AGD-27 meeting reminder, notice = PRO-28 proactive notice, presence =
    * PRS-25: the webcam saw the user sit back down; context = the routine was fired by a context
-   * trigger, such as an app opening, instead of the clock). word: the name heard ("friday"); persona: the
-   * persona that name calls, already saved on the server, when the HUD must switch to it.
+   * trigger, such as an app opening, instead of the clock; tray = BAN-41: the tray icon menu).
+   * word: the name heard ("friday"); persona: the persona that name calls, already saved on the
+   * server, when the HUD must switch to it.
    */
   | {
       type: 'wake';
       score: number;
       routine?: string;
-      reason?: 'calendar' | 'notice' | 'presence' | 'context';
+      reason?: 'calendar' | 'notice' | 'presence' | 'context' | 'tray';
       word?: string;
       persona?: string;
     }
+  /** BAN-41: "Encerrar o link" in the tray icon menu. */
+  | { type: 'sleep'; reason?: 'tray' }
   | NoticeEvent;
 
 /** ROT-24: how the HUD names a routine that opened the link (by the clock or by a context trigger). */
@@ -58,7 +63,7 @@ export function parseWakeEvent(raw: string): WakeEvent | null {
     if (event?.type === 'notice') {
       return typeof event.title === 'string' && typeof event.message === 'string' ? (event as NoticeEvent) : null;
     }
-    if (event?.type === 'config' || event?.type === 'status' || event?.type === 'wake') return event as WakeEvent;
+    if (event?.type === 'config' || event?.type === 'status' || event?.type === 'wake' || event?.type === 'sleep') return event as WakeEvent;
   } catch {
     // A malformed line is ignored; the stream keeps going.
   }

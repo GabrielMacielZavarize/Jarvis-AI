@@ -46,6 +46,8 @@ from lan_access import DeviceRegistry, LanGuard, TlsFiles, build_lan_router, dev
 from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
 from wake_hub import WakeHub, build_wake_router
+from tray import SECRET_ENV as TRAY_SECRET_ENV
+from tray import build_tray_router
 
 APP_VERSION = "2.0.0"
 DEFAULT_AGENT_NAME = "jarvis"
@@ -566,6 +568,7 @@ def create_app(
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "lan": bool(app.state.lan_urls),
             "mcp": _mcp_status(settings),
+            "tray": bool(os.environ.get(TRAY_SECRET_ENV)),
             # HUD persona chosen on any device (None: nobody chose yet, the browser keeps its own).
             "persona": saved_persona(),
             "errors": backend_errors + livekit_errors,
@@ -782,6 +785,11 @@ def create_app(
         )
     )
 
+    # BAN-41: o ícone da bandeja (tray.py) abre e fecha o link por aqui.
+    app.include_router(
+        build_tray_router(app.state.wake_hub, secret=os.environ.get(TRAY_SECRET_ENV), open_browser=open_browser)
+    )
+
     app.state.hud_url = "http://127.0.0.1:8000"
     app.state.routines = routine_scheduler or RoutineScheduler()
 
@@ -898,6 +906,8 @@ def serve(hud_app: FastAPI, *, host: str, port: int, log_level: str, lan_ips: li
         hud_app, host=host, port=port, log_level=log_level, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_S
     )
     main_server = HudServer(config)
+    # O menu Sair/Reiniciar da bandeja encerra por aqui, como um Ctrl+C.
+    hud_app.state.uvicorn = main_server
     tls: TlsFiles | None = hud_app.state.tls
     for ip in lan_ips or []:
         if tls is None:

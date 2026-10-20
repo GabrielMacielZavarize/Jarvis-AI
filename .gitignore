@@ -67,3 +67,6 @@ mcp.json
 # Painel de saúde (SAU-40): histórico local de tempo de resposta, ativações e falhas
 saude.db
 saude.db-journal
+
+# Logs do Jarvis rodando pela bandeja ou pelo pythonw (BAN-41), com rotação
+logs/
