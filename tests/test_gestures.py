@@ -25,7 +25,7 @@ from gesture_actions import (
     throw_bias,
 )
 from gesture_engine import Command, GestureMachine, OneEuroFilter, Pose, State, classify
-from gesture_overlay import OverlayView, premultiplied_bgra, render
+from gesture_overlay import OverlayView, premultiplied_bgra, render, render_reticle
 from gestures import GestureEngine, GestureService, voice_action
 from hand_fixtures import FPS, POSES, absent, end_of, hold, make_hand, move
 from settings import load_settings
@@ -387,6 +387,112 @@ class MachineTests(unittest.TestCase):
         drag = hold("pinch", 0.0, 0.8)
         self.assertIn("mouse_down", kinds(play(machine, drag)))
         self.assertEqual(kinds(machine.disarm(end_of(drag))), ["mouse_up", "disarmed"])
+
+
+class PointingTests(unittest.TestCase):
+    def test_pointing_marks_the_spot_without_touching_the_cursor(self) -> None:
+        machine, t = armed_machine()
+        point = hold("point", t, 0.6, center=(0.3, 0.3))
+        commands = play(machine, point)
+
+        self.assertEqual(kinds(commands), [])
+        self.assertFalse(any(command.kind == "mouse_move" for command in commands))
+        spot = machine.pointed_at(end_of(point), 2.5)
+        self.assertIsNotNone(spot)
+        self.assertLess(spot[0], 0.5)  # mão à esquerda do quadro: lado esquerdo das telas
+        self.assertEqual(machine.aim(end_of(point), 1.0), spot)
+
+    def test_lowering_the_hand_keeps_the_spot_and_it_expires(self) -> None:
+        machine, t = armed_machine()
+        point = hold("point", t, 0.6, center=(0.3, 0.3))
+        play(machine, point)
+        spot = machine.pointed_at(end_of(point), 2.5)
+
+        lower = move("point", end_of(point), 0.2, (0.3, 0.3), (0.3, 0.75))
+        gone = absent(end_of(lower), 1.5)
+        play(machine, lower, gone)
+
+        self.assertEqual(machine.pointed_at(end_of(lower), 2.5), spot)
+        self.assertIsNone(machine.aim(end_of(gone), 1.0))  # a mira some 1 s depois de baixar a mão
+        self.assertIsNone(machine.pointed_at(end_of(point) + 3.0, 2.5))
+
+    def test_pointing_while_talking_never_turns_into_the_air_mouse(self) -> None:
+        machine, t = armed_machine()
+        machine.set_talking(t, True)
+        point = hold("point", t, 1.6)
+        commands = play(machine, point)
+
+        self.assertNotIn("mouse_on", kinds(commands))
+        self.assertTrue(machine.pointing)
+        self.assertEqual(machine.state, State.ARMED)
+
+        # A fala acabou, mas o mesmo indicador continua sendo só o ponteiro.
+        machine.set_talking(end_of(point), False)
+        still = hold("point", end_of(point), 3.0)
+        self.assertNotIn("mouse_on", kinds(play(machine, still)))
+
+        # Baixar a mão e apontar de novo, longe de uma fala, volta a ligar o mouse no ar.
+        rest = hold("open", end_of(still), 0.4)
+        again = hold("point", end_of(rest), 1.2)
+        self.assertEqual(kinds(play(machine, rest, again)), ["mouse_on"])
+
+    def test_speech_that_starts_while_the_mouse_charges_cancels_it(self) -> None:
+        machine, t = armed_machine()
+        start = hold("point", t, 0.5)
+        play(machine, start)
+        machine.set_talking(end_of(start), True)
+
+        rest = hold("point", end_of(start), 1.0)
+
+        self.assertNotIn("mouse_on", kinds(play(machine, rest)))
+        self.assertIsNotNone(machine.pointed_at(end_of(rest), 2.5))
+
+    def test_engine_gives_the_pointed_pixel_and_draws_the_crosshair(self) -> None:
+        overlay = MagicMock()
+        actions = MagicMock()
+        actions.virtual_bounds.return_value = (-1440, 0, 2560, 2684)
+        machine, t = armed_machine()
+        point = hold("point", t, 0.6, center=(0.3, 0.3))
+        engine = GestureEngine([], actions, tracker=FakeTracker([]), overlay=overlay, clock=lambda: end_of(point))
+        engine.machine = machine
+        play(machine, point)
+
+        pixel = engine.pointed_screen_point(2.5)
+        engine._refresh_overlay(end_of(point))
+
+        self.assertIsNotNone(pixel)
+        self.assertTrue(-1440 <= pixel[0] < 2560 and 0 <= pixel[1] < 2684)
+        overlay.aim.assert_called_with(pixel)
+        actions.mouse_move.assert_not_called()
+
+        machine.set_talking(end_of(point), True)
+        play(machine, hold("point", end_of(point), 0.2, center=(0.3, 0.3)))
+        self.assertEqual(engine.view(end_of(point) + 0.2).title, "APONTANDO")
+
+    def test_service_reports_the_point_and_the_voice(self) -> None:
+        service = GestureService()
+        self.assertIsNone(service.pointed_screen_point(2.5))  # gestos desligados
+
+        engine = MagicMock()
+        engine.pointed_screen_point.return_value = (-800, 900)
+        service._engine = engine
+        with patch.object(GestureService, "running", new=True):
+            self.assertEqual(service.pointed_screen_point(2.5), (-800, 900))
+            service.set_talking(True)
+            service.set_talking(False)
+        engine.request.assert_has_calls([unittest.mock.call("talk_on"), unittest.mock.call("talk_off")])
+
+    def test_voice_session_tells_the_gestures_when_the_user_talks(self) -> None:
+        handlers: dict[str, Any] = {}
+        session = MagicMock()
+        session.on.side_effect = lambda name: lambda handler: handlers.setdefault(name, handler)
+        service = MagicMock()
+
+        gestures.watch_voice(session, service)
+        handlers["user_state_changed"](MagicMock(new_state="speaking"))
+        handlers["user_state_changed"](MagicMock(new_state="listening"))
+
+        service.set_talking.assert_has_calls([unittest.mock.call(True), unittest.mock.call(False)])
 
 
 class NeighborMonitorTests(unittest.TestCase):
@@ -754,6 +860,15 @@ class OverlayRenderTests(unittest.TestCase):
         pixels = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 4)
         self.assertEqual(pixels[0, 0, 3], 0)  # canto arredondado transparente
         self.assertTrue((pixels[..., :3] <= pixels[..., 3:4]).all())  # alpha pré-multiplicado
+
+    def test_crosshair_is_centered_and_transparent_around(self) -> None:
+        image = render_reticle(1.5)
+        width, height = image.size
+        self.assertEqual(width, height)
+        self.assertEqual(width % 2, 1)
+        pixels = np.asarray(image)
+        self.assertEqual(pixels[0, 0, 3], 0)
+        self.assertEqual(pixels[height // 2, width // 2, 3], 255)
 
 
 def endless_frames(stop: threading.Event) -> Any:

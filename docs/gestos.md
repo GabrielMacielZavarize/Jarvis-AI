@@ -20,6 +20,18 @@ Ligue com `JARVIS_ENABLE_GESTURES=true` e diga "liga os gestos", ou suba já lig
 | Indicador parado por 1 s | Liga o mouse no ar: a mão move o cursor por todos os monitores, inclusive o vertical. Pinça ou fechar a mão rápido clica, segurar arrasta e a palma aberta parada por 1 s sai. Por voz: "liga o mouse no ar", "desliga o mouse no ar" |
 | Com uma janela pega, 1, 2 ou 3 dedos parados por meio segundo | Manda a janela para a tela 1, 2 ou 3 (os números do Identificar do Windows). O aviso mostra "TELA 2" enquanto conta |
 
+## Apontar e falar
+
+Com os gestos armados, aponte com o indicador para um lugar de qualquer monitor e diga "Jarvis, explica isso aqui". O "aqui" passa a ser o ponto para onde a mão aponta, não o cursor do mouse, que fica onde estava. Funciona com o "o que tem de errado aqui?" e os outros pedidos do [assistente de tela](assistente-de-tela.md#apontando-com-o-dedo).
+
+Enquanto o indicador está esticado, uma mira pequena aparece no ponto, e some cerca de 1 s depois de você baixar a mão. Ela não captura cliques e não aparece nos prints. O ponto usa o mesmo mapeamento do mouse no ar: a mão funciona como um trackpad no ar, não como um raio saindo do dedo. Por isso a mira serve para acertar o lugar antes de falar.
+
+Apontar nunca clica nem move o cursor. O ponto vale por 2,5 s depois da última vez que o dedo ficou parado, então dá tempo de terminar a frase com a mão já baixada.
+
+O indicador parado também liga o mouse no ar, e a regra para os dois não brigarem é a fala: se você começa a falar enquanto aponta (ou até 2 s depois de uma fala), o indicador vira só o ponteiro e o aviso mostra "APONTANDO". Esse mesmo indicador não liga o mouse no ar até você baixar a mão ou mudar de pose. Sem falar, o indicador parado por 1 s liga o mouse no ar como sempre. Se o mouse no ar já tiver ligado, o cursor está onde o dedo aponta e o "aqui" também funciona.
+
+A fala é percebida pela própria sessão de voz, então isso só vale com o link aberto. Precisa também do controle do PC (`JARVIS_ENABLE_PC_CONTROL=true`), que é onde fica o assistente de tela.
+
 ## Gestos personalizáveis
 
 Estes disparam uma ação que você escolhe, guardada no `gestos.json` (ignorado pelo git, só guarda o que você mudou). Os que exigem segurar mostram no aviso o nome da ação com uma contagem antes de executar, e soltar antes cancela. Os rápidos (pinça, duas mãos) mostram o nome da ação enquanto ela roda.
@@ -33,7 +45,7 @@ Estes disparam uma ação que você escolhe, guardada no `gestos.json` (ignorado
 | Palma tapando a câmera por 1 s | `tapar_camera` | Muta e desmuta o microfone do Jarvis na conversa. Funciona mesmo desarmado. Tape de novo para ele voltar a ouvir, já que mudo ele não escuta "desmuta" |
 | Duas palmas abertas se afastando ou se aproximando | `maos_afastam`, `maos_aproximam` | Maximizar ou restaurar a janela em foco |
 
-Não existe o gesto de silêncio com o indicador nos lábios: o detector só vê mãos, não o rosto, e um indicador parado já liga o mouse no ar. Tapar a câmera faz esse papel sem confusão.
+Não existe o gesto de silêncio com o indicador nos lábios: o detector só vê mãos, não o rosto, e um indicador parado já liga o mouse no ar (ou aponta, se você estiver falando). Tapar a câmera faz esse papel sem confusão.
 
 Dá para mudar por voz ("lista meus gestos", "o que faz o rock?", "quando eu fizer joinha, pausa a música", "o rock abre o Spotify", "o OK aperta ctrl+shift+m", "volta o rock ao padrão") ou editando o arquivo:
 
@@ -163,3 +175,14 @@ Precisa de Windows com webcam. Os três roteiros abaixo valem primeiro com `--pr
 4. Sem `--dry-run`: arraste uma janela que ocupa a metade esquerda do notebook para o monitor de cima e confira que ela ocupa a metade esquerda dele. Depois "apague o quadro" para desfazer. Teste também uma janela maximizada e uma do vertical para o notebook (DPIs diferentes).
 5. Indicador parado para o mouse no ar: o mapa mostra a seta amarela seguindo o cursor real e o punho clica sem pegar janelas do mapa. Palma parada sai.
 6. Dois dedos parados por 1 s fecham o painel e "Jarvis, mostra o painel de gestos" abre de novo. Com o painel aberto, o preview deve continuar perto de 30 fps.
+
+### Apontar e falar
+
+Com `JARVIS_ENABLE_PC_CONTROL=true`, os gestos armados e o link aberto:
+
+1. Deixe um erro aberto no monitor vertical e o mouse parado no notebook. Aponte para o erro: a mira aparece onde a mão aponta. Ajuste até ela ficar em cima da mensagem.
+2. Ainda apontando, diga "Jarvis, explica isso aqui". O aviso mostra "APONTANDO", o mouse não sai do lugar e o painel do assistente de tela diz "texto onde você apontou" (ou "print de onde você apontou"), com a explicação do erro certo.
+3. Baixe a mão: a mira some em cerca de 1 s.
+4. Sem apontar, "o que tem de errado aqui?" volta a usar o cursor do mouse.
+5. Calado, indicador parado por 1 s: o mouse no ar liga como antes.
+6. No `python gestures.py --preview`, aponte e fale perto do microfone algumas vezes. Se o mouse no ar ainda ligar antes de você começar a falar, anote quanto tempo você costuma levar entre apontar e falar.

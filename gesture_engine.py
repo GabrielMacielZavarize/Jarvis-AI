@@ -23,6 +23,10 @@ gestos_calibracao.json, que o Tuning.load() usa quando existe.
 Gestos personalizáveis (OK, pinça subindo/descendo, rock, joinha, tapar a câmera, duas mãos)
 saem como Command("gesture", name=...): o que cada um faz vem do gestos.json (gesture_mapping).
 A única exceção ao "armar antes" é tapar a câmera, que não acontece sem querer.
+
+Apontar: armado, com o indicador esticado, a máquina guarda para onde a mão aponta (o mesmo
+mapeamento do mouse no ar) sem mexer no cursor. É o "aqui" do "Jarvis, explica isso aqui"
+(pointed_at). Enquanto o usuário fala, apontar não liga o mouse no ar.
 """
 
 from __future__ import annotations
@@ -141,6 +145,8 @@ class Tuning:
     click_freeze_s: float = 0.12
     mouse_box: tuple[float, float, float, float] = (0.2, 0.15, 0.8, 0.7)  # região do quadro → todas as telas
     mouse_epsilon: float = 0.0004
+    point_still_s: float = 0.2  # indicador parado por isso marca o ponto apontado
+    point_voice_tail_s: float = 2.0  # depois de uma fala, apontar ainda não liga o mouse no ar
 
     # Poses (classify). Ângulos em graus; "reach" e distâncias do polegar em tamanhos de palma.
     # São os valores que a calibração (python gestures.py --calibrate) ajusta para a sua mão.
@@ -261,6 +267,11 @@ class CustomTuning:
     pair_change: float = 0.22  # afastar/aproximar as mãos pelo menos isso (alturas de quadro)
     pair_ratio: float = 1.4
 
+
+# Janela da velocidade da mão: o começo de um movimento só aparece depois dela.
+SPEED_WINDOW_S = 0.15
+# Pontos recentes do indicador, para escolher o ponto apontado de antes de a mão começar a baixar.
+POINT_TRAIL_S = 0.5
 
 FINGER_COUNT = {Pose.POINT: 1, Pose.TWO: 2, Pose.THREE: 3}
 HOLD_GESTURES = {Pose.THUMB_UP: "joinha", Pose.ROCK: "rock"}
@@ -590,6 +601,14 @@ class GestureMachine:
         self._lit_at: float | None = None
         self._cover: tuple[float, bool, bool] | None = None  # (desde, vale, disparou)
         self._panel_latched = False  # o painel já alternou com estes dois dedos: precisa soltar
+        # Apontar sem mover o cursor: (quando, ponto 0..1 no desktop). _aimed segue a mão; _pointed
+        # só muda com o dedo parado, então baixar a mão não arrasta o ponto escolhido.
+        self._aimed: tuple[float, tuple[float, float]] | None = None
+        self._pointed: tuple[float, tuple[float, float]] | None = None
+        self._trail: deque[tuple[float, tuple[float, float]]] = deque()
+        self._talking = False
+        self._talk_end = -math.inf
+        self._point_latched = False  # apontou falando: este indicador não vira mouse no ar
 
     @property
     def shape(self) -> Shape | None:
@@ -628,6 +647,31 @@ class GestureMachine:
             self._enter(State.ARMED, t)
             return [*out, Command("mouse_off")]
         return []
+
+    def set_talking(self, t: float, talking: bool) -> None:
+        """The user started/stopped speaking to Jarvis: pointing then means "aqui", not the air mouse."""
+        if self._talking and not talking:
+            self._talk_end = t
+        self._talking = talking
+
+    def pointed_at(self, t: float, max_age: float) -> tuple[float, float] | None:
+        """Where the index finger pointed (0..1 across every screen), if within ``max_age`` seconds."""
+        pointed = self._pointed
+        if pointed is None or t - pointed[0] > max_age:
+            return None
+        return pointed[1]
+
+    def aim(self, t: float, linger: float) -> tuple[float, float] | None:
+        """Where the finger points right now (or up to ``linger`` s ago), for the crosshair."""
+        aimed = self._aimed
+        if self.state != State.ARMED or aimed is None or t - aimed[0] > linger:
+            return None
+        return aimed[1]
+
+    @property
+    def pointing(self) -> bool:
+        """Pointing while talking: the finger marks the spot and the air mouse waits."""
+        return self.state == State.ARMED and self.pose == Pose.POINT and self._point_latched
 
     def abort(self, t: float) -> None:
         """Give up the current grab/close (e.g. there was no window to act on)."""
@@ -745,6 +789,8 @@ class GestureMachine:
             self._need_release = False
         if self.pose != Pose.TWO:
             self._panel_latched = False
+        if self.pose != Pose.POINT:
+            self._point_latched = False
         if self._pending_swipe is not None:
             if t - self._pending_swipe > tuning.swipe_settle_s:
                 self._pending_swipe = None
@@ -801,6 +847,10 @@ class GestureMachine:
                         self._touch(t)
                         out.append(Command("panel"))
         elif self.pose == Pose.POINT:
+            self._track_point(t, shape)
+            if self._point_latched or self._talking or t - self._talk_end < tuning.point_voice_tail_s:
+                self._point_latched = True
+                return
             held = self._still_for(t)
             if held > 0.25:
                 self._charging = ("mouse_on", min(1.0, held / tuning.mouse_enter_s))
@@ -872,11 +922,29 @@ class GestureMachine:
             self._need_release = True
             self._after_action(t, cooldown=self.tuning.cooldown_s * 1.5)
 
+    def _desktop_point(self, t: float, shape: Shape) -> tuple[float, float]:
+        """Base of the index finger → point 0..1 across every screen (mouse_box, like a trackpad)."""
+        px, py = self._pointer_filter(t, shape.pointer, self._scale)
+        x0, y0, x1, y1 = self.tuning.mouse_box
+        return min(1.0, max(0.0, (px - x0) / (x1 - x0))), min(1.0, max(0.0, (py - y0) / (y1 - y0)))
+
+    def _track_point(self, t: float, shape: Shape) -> None:
+        point = self._desktop_point(t, shape)
+        self._aimed = (t, point)
+        self._trail.append((t, point))
+        while t - self._trail[0][0] > POINT_TRAIL_S:
+            self._trail.popleft()
+        if self._still_for(t) < self.tuning.point_still_s:
+            return
+        # Os primeiros quadros de um movimento ainda parecem parados (a velocidade olha 0,15 s
+        # para trás): o ponto apontado é o de antes disso, de quando o dedo estava mesmo parado.
+        settled = [entry for entry in self._trail if self._still_since <= entry[0] <= t - SPEED_WINDOW_S]
+        if settled:
+            self._pointed = (t, settled[-1][1])
+
     def _mouse(self, t: float, shape: Shape, center: tuple[float, float], out: list[Command]) -> None:
         tuning = self.tuning
-        px, py = self._pointer_filter(t, shape.pointer, self._scale)
-        x0, y0, x1, y1 = tuning.mouse_box
-        point = (min(1.0, max(0.0, (px - x0) / (x1 - x0))), min(1.0, max(0.0, (py - y0) / (y1 - y0))))
+        point = self._desktop_point(t, shape)
 
         # Clique: pinça ou fechar a mão (no teste real o Gabriel clicou fechando a mão).
         pressing = shape.pinch < tuning.pinch_on or self.pose == Pose.FIST
@@ -1104,7 +1172,7 @@ class GestureMachine:
     def _still_for(self, t: float) -> float:
         return t - max(self._still_since, self._pose_since)
 
-    def _speed(self, t: float, window: float = 0.15) -> float:
+    def _speed(self, t: float, window: float = SPEED_WINDOW_S) -> float:
         if len(self._history) < 2:
             return 0.0
         newest = self._history[-1]

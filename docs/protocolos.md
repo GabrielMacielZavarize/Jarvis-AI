@@ -34,7 +34,7 @@ Cada ferramenta do Jarvis tem um código de protocolo, que aparece no HUD (na pl
 | PRO-28 | `set_reminder`, `list_reminders`, `cancel_reminder`, `configure_alerts` | Lembretes com hora e avisos sozinhos de bateria, CPU e RAM, downloads e disco | "Me lembra amanhã às 10h de ligar pro contador.", "Quais lembretes eu tenho?", "Para de me avisar sobre bateria." |
 | DIT-29 | `start_dictation`, `write_here` | Modo ditado: o que você fala vira texto no campo em foco até "fim do ditado". Ou uma frase só | "Jarvis, modo ditado.", "Escreve aqui: chego em 10 minutos." |
 | VOZ-30 | `change_voice` | Troca a voz, lista as vozes no HUD e volta à padrão | "Troca sua voz para Orus.", "Quais vozes você tem?", "Volta pra sua voz normal." |
-| TEL-31 | `explain_screen`, `copy_fix` | Lê a seleção, a janela em foco ou o trecho perto do cursor e explica no painel. Copia o código sugerido para a área de transferência | "Explica esse erro.", "O que tem de errado aqui?", "O que esse código faz?", "Resume essa página.", "Traduz isso pro inglês.", "Copia a correção." |
+| TEL-31 | `explain_screen`, `copy_fix` | Lê a seleção, a janela em foco, o trecho perto do cursor ou o lugar apontado com o dedo e explica no painel. Copia o código sugerido para a área de transferência | "Explica esse erro.", "O que tem de errado aqui?", "O que esse código faz?", "Resume essa página.", "Traduz isso pro inglês.", "Copia a correção." |
 
 A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm ferramenta de voz. Estão em [voz.md](voz.md#palavra-de-ativação) e [celular.md](celular.md).
 

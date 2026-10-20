@@ -18,6 +18,12 @@ O PhpStorm expõe pouco texto ao UI Automation, então lá costuma ir o print. S
 
 Se o HUD estiver em foco, o Jarvis lê a janela que está embaixo do mouse.
 
+### Apontando com o dedo
+
+Com os [gestos](gestos.md#apontar-e-falar) ligados, "aqui" é primeiro o lugar para onde você apontou com o indicador nos últimos 2,5 s, e só sem apontamento o cursor do mouse. O Jarvis lê a janela que está embaixo do ponto apontado, mesmo que outra esteja em foco, e ignora a seleção da janela em foco, porque você mostrou outro lugar. A resposta diz que usou o ponto apontado, e o painel mostra "texto onde você apontou" ou "print de onde você apontou".
+
+As regras são as mesmas do cursor: apontar para um cofre de senhas não lê nada, apontar para o HUD pede para apontar para outra janela e os segredos continuam ocultados antes de o texto sair do computador. O ponto é só uma coordenada; nada novo é gravado ou enviado.
+
 ## O painel
 
 O painel Assistente de tela mostra de onde leu (por exemplo "texto da janela · janela 'PowerShell'"), a causa, a correção, a explicação e os blocos de código com destaque de sintaxe (PHP, JS/TS, Python, SQL, shell, JSON, HTML, CSS) e botão Copiar. Por voz o Jarvis fala só o resumo. Código ele nunca lê em voz alta.
@@ -42,3 +48,4 @@ O que sai do computador em cada caso, e o que é ocultado antes, está em [segur
 6. Numa página em inglês: "resume essa página" e depois "traduz isso" com um parágrafo selecionado.
 7. Abra o `.env` no Bloco de Notas e peça "explica isso": o painel avisa que ocultou segredos e a chave não aparece em lugar nenhum.
 8. Com o KeePass ou o Bitwarden em foco, o Jarvis se recusa a ler.
+9. Com os gestos ligados, aponte para o erro em outro monitor e diga "explica isso aqui": deve vir "texto onde você apontou", sem o mouse sair do lugar. Os passos completos estão em [gestos.md](gestos.md#apontar-e-falar-1).

@@ -43,7 +43,8 @@ class FakeWindows:
     """Stands in for every Win32/UIA call of screen_assist."""
 
     def __init__(self, *, foreground=PHPSTORM, under_cursor=None, selection=None, window_text=None, text_at=None,
-                 clipboard=None, cursor=(-500, 300)):
+                 clipboard=None, cursor=(-500, 300), pointed=None):
+        self.pointed = pointed
         self.foreground = foreground
         self.under_cursor = under_cursor
         self.selection = selection
@@ -81,6 +82,7 @@ class FakeWindows:
             patch.object(sa, "_win_foreground", lambda: self.foreground),
             patch.object(sa, "_win_window_at", lambda point: self.under_cursor),
             patch.object(sa, "_win_cursor", lambda: self.cursor),
+            patch.object(sa, "_pointed_point", lambda: self.pointed),
             patch.object(sa, "_win_selection", selection),
             patch.object(sa, "_win_window_text", window_text),
             patch.object(sa, "_win_text_at", text_at),
@@ -184,6 +186,53 @@ class GatherTests(unittest.TestCase):
             capture = sa.gather("whats_wrong", "here")
         self.assertEqual(capture.source, "here_image")
         self.assertEqual(fake.grabbed, ["here:(-500, 300)"])
+
+    def test_here_uses_the_spot_the_finger_pointed_at(self) -> None:
+        with FakeWindows(foreground=PHPSTORM, under_cursor=TERMINAL, selection="abc", text_at=STACK, pointed=(-800, 900)) as fake:
+            capture = sa.gather("explain_error", "here")
+        self.assertTrue(capture.pointed)
+        self.assertEqual(capture.source, "here_text")
+        self.assertEqual(capture.window, TERMINAL)
+        self.assertIn("onde você apontou", capture.label)
+        self.assertEqual(capture.via, "texto onde você apontou")
+        # A seleção da janela em foco não conta: o usuário mostrou outro lugar.
+        self.assertEqual(fake.uia_calls, ["at:(-800, 900)"])
+
+    def test_pointed_spot_without_text_becomes_a_print_there(self) -> None:
+        with FakeWindows(under_cursor=TERMINAL, text_at="OK", pointed=(-800, 900)) as fake:
+            capture = sa.gather("whats_wrong", "here")
+        self.assertEqual(capture.source, "here_image")
+        self.assertEqual(capture.via, "print de onde você apontou")
+        self.assertEqual(fake.grabbed, ["here:(-800, 900)"])
+
+    def test_without_pointing_here_is_still_the_cursor(self) -> None:
+        with FakeWindows(foreground=TERMINAL, text_at=STACK) as fake:
+            capture = sa.gather("whats_wrong", "here")
+        self.assertFalse(capture.pointed)
+        self.assertIn("at:(-500, 300)", fake.uia_calls)
+
+    def test_pointing_only_matters_for_here(self) -> None:
+        with FakeWindows(window_text=STACK, under_cursor=TERMINAL, pointed=(-800, 900)) as fake:
+            capture = sa.gather("explain_error", "auto")
+        self.assertFalse(capture.pointed)
+        self.assertEqual(capture.window, PHPSTORM)
+        self.assertNotIn("at:(-800, 900)", fake.uia_calls)
+
+    def test_pointing_at_a_vault_or_at_the_hud_reads_nothing(self) -> None:
+        with FakeWindows(under_cursor=VAULT, pointed=(10, 10)), self.assertRaisesRegex(sa.ScreenAssistError, "não leio"):
+            sa.gather("explain", "here")
+        with FakeWindows(under_cursor=HUD, pointed=(10, 10)), self.assertRaisesRegex(sa.ScreenAssistError, "HUD"):
+            sa.gather("explain", "here")
+
+    def test_the_pointer_comes_from_the_gestures(self) -> None:
+        asked: list[float] = []
+        with patch.object(sa, "POINTER", lambda age: asked.append(age) or (5, 6)):
+            self.assertEqual(sa._pointed_point(), (5, 6))
+        self.assertEqual(asked, [sa.POINT_MAX_AGE_S])
+        with patch.object(sa, "POINTER", MagicMock(side_effect=RuntimeError("câmera fechou"))):
+            self.assertIsNone(sa._pointed_point())
+        with patch.object(sa, "POINTER", None):
+            self.assertIsNone(sa._pointed_point())
 
     def test_clipboard_on_request(self) -> None:
         with FakeWindows(clipboard="SQLSTATE[42S22]: Column not found") as fake:
@@ -309,6 +358,14 @@ class ExplainScreenToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.cards[-1]["status"], "empty")
         self.assertTrue(self.cards[-1]["injection"])
 
+    async def test_says_it_used_the_spot_the_user_pointed_at(self) -> None:
+        with FakeWindows(under_cursor=TERMINAL, text_at=STACK, pointed=(-800, 900)), patch.object(
+            sa, "ask_model", return_value=json.dumps(ANSWER)
+        ):
+            reply = await sa.explain_screen(FakeRunContext(), task="explain_error", target="here")
+        self.assertIn("apontou com o dedo", reply)
+        self.assertEqual(self.cards[-1]["via"], "texto onde você apontou")
+
     async def test_refusal_reaches_the_hud_and_the_model(self) -> None:
         with FakeWindows(foreground=VAULT):
             reply = await sa.explain_screen(FakeRunContext(), task="explain")
@@ -399,6 +456,16 @@ class WiringTests(unittest.TestCase):
         self.assertIn("explain_screen", names)
         self.assertIn("copy_fix", PC_TOOL_NAMES)
         self.assertEqual(sa.CONFIG.api_key, "k-123")
+        sa.configure(None)
+
+    def test_gestures_give_the_pointer_to_the_screen_assistant(self) -> None:
+        from gestures import SERVICE
+        from settings import load_settings
+        from tools import build_tools
+
+        self.addCleanup(sa.set_pointer, None)
+        build_tools(load_settings({"GOOGLE_API_KEY": "k", "JARVIS_ENABLE_PC_CONTROL": "true", "JARVIS_ENABLE_GESTURES": "true"}))
+        self.assertEqual(sa.POINTER, SERVICE.pointed_screen_point)
         sa.configure(None)
 
     def test_hud_panel_title(self) -> None:

@@ -5,6 +5,9 @@ alpha por pixel, desenhada com o Pillow numa thread própria. Aparece no topo do
 o Gabriel está olhando e mostra o estado: armado, segurando, "→ monitor de cima", contagem
 para fechar. Não rouba o foco nem aparece na barra de tarefas, e fica fora dos prints de tela
 do próprio Jarvis (look_at_screen).
+
+Uma segunda janela, menor, desenha a mira no ponto para onde o indicador aponta, para você ver
+o "aqui" antes de falar. Ela também ignora cliques e não aparece nos prints.
 """
 
 from __future__ import annotations
@@ -108,6 +111,32 @@ def render(view: OverlayView, scale: float = 1.0) -> Any:
         filled = left + (right - left) * min(1.0, max(0.0, view.progress))
         if filled > left + 1:
             draw.rounded_rectangle((left, top, filled, top + bar_h), radius=bar_h // 2, fill=(*color, 255))
+    return image
+
+
+def render_reticle(scale: float = 1.0, tone: str = "info") -> Any:
+    """The pointing crosshair as an RGBA PIL image, centered on the pointed pixel."""
+    from PIL import Image, ImageDraw
+
+    color = TONES.get(tone, TONES["info"])
+    size = round(44 * scale) | 1  # ímpar: o centro cai num pixel
+    middle = size // 2
+    line = max(2, round(2 * scale))
+    ring = round(13 * scale)
+    gap = round(5 * scale)
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    # Contorno escuro por baixo: a mira aparece sobre fundo claro e escuro.
+    for width, fill in ((line + 2, (6, 14, 24, 170)), (line, (*color, 245))):
+        draw.ellipse((middle - ring, middle - ring, middle + ring, middle + ring), outline=fill, width=width)
+        for (x0, y0, x1, y1) in (
+            (middle, 1, middle, middle - gap),
+            (middle, middle + gap, middle, size - 2),
+            (1, middle, middle - gap, middle),
+            (middle + gap, middle, size - 2, middle),
+        ):
+            draw.line((x0, y0, x1, y1), fill=fill, width=width)
+    draw.ellipse((middle - line, middle - line, middle + line, middle + line), fill=(*color, 255))
     return image
 
 
@@ -241,6 +270,7 @@ AC_SRC_ALPHA = 0x01
 WDA_EXCLUDEFROMCAPTURE = 0x00000011
 MONITOR_DEFAULTTONEAREST = 2
 CLASS_NAME = "JarvisGestureOverlay"
+RETICLE_CLASS_NAME = "JarvisGestureReticle"
 _CLOSE = object()
 
 
@@ -357,6 +387,7 @@ class Overlay:
         self._queue: queue.Queue[Any] = queue.Queue()
         self._thread: threading.Thread | None = None
         self._last: tuple[OverlayView | None, tuple[int, int, int, int] | None] | None = None
+        self._last_aim: tuple[int, int] | None = None
 
     def start(self) -> None:
         if not IS_WINDOWS or (self._thread and self._thread.is_alive()):
@@ -370,10 +401,18 @@ class Overlay:
         if item == self._last:
             return
         self._last = item
-        self._queue.put(item)
+        self._queue.put(("view", item))
+
+    def aim(self, point: tuple[int, int] | None) -> None:
+        """Crosshair centered on ``point`` (physical pixels, any monitor); None hides it."""
+        if point == self._last_aim:
+            return
+        self._last_aim = point
+        self._queue.put(("aim", point))
 
     def hide(self) -> None:
         self.show(None, None)
+        self.aim(None)
 
     def close(self) -> None:
         self._queue.put(_CLOSE)
@@ -381,6 +420,7 @@ class Overlay:
             self._thread.join(timeout=2)
         self._thread = None
         self._last = None
+        self._last_aim = None
 
     # ── thread da janela ──
 
@@ -392,27 +432,47 @@ class Overlay:
 
     def _loop(self) -> None:
         window = LayeredWindow(CLASS_NAME, "Jarvis · gestos")
+        reticle = LayeredWindow(RETICLE_CLASS_NAME, "Jarvis · mira")
         try:
             while True:
                 window.pump()
+                reticle.pump()
                 try:
                     item = self._queue.get(timeout=0.03)
                 except queue.Empty:
                     continue
-                while item is not _CLOSE:  # só o estado mais novo interessa
+                latest: dict[str, Any] = {}
+                while item is not _CLOSE:  # só o estado mais novo de cada janela interessa
+                    latest[item[0]] = item[1]
                     try:
                         item = self._queue.get_nowait()
                     except queue.Empty:
                         break
                 if item is _CLOSE:
                     break
-                view, area = item
-                if view is None or area is None:
-                    window.hide()
-                    continue
-                scale = window.scale(area)
-                image = render(view, scale)
-                left, top, right, _ = area
-                window.paint(image, left + (right - left - image.size[0]) // 2, top + round(22 * scale))
+                if "view" in latest:
+                    self._paint_view(window, *latest["view"])
+                if "aim" in latest:
+                    self._paint_aim(reticle, latest["aim"])
         finally:
             window.destroy()
+            reticle.destroy()
+
+    @staticmethod
+    def _paint_view(window: LayeredWindow, view: OverlayView | None, area: tuple[int, int, int, int] | None) -> None:
+        if view is None or area is None:
+            window.hide()
+            return
+        scale = window.scale(area)
+        image = render(view, scale)
+        left, top, right, _ = area
+        window.paint(image, left + (right - left - image.size[0]) // 2, top + round(22 * scale))
+
+    @staticmethod
+    def _paint_aim(window: LayeredWindow, point: tuple[int, int] | None) -> None:
+        if point is None:
+            window.hide()
+            return
+        x, y = point
+        image = render_reticle(window.scale((x, y, x + 1, y + 1)))
+        window.paint(image, x - image.size[0] // 2, y - image.size[1] // 2)
