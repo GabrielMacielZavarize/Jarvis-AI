@@ -126,6 +126,8 @@ AGENT_RULES = """
   gesture_control(panel_on/panel_off).
 - O que cada gesto faz: "lista meus gestos", "o que faz o rock?", "quando eu fizer joinha,
   pausa a música" = gesture_shortcuts. Fechar, apagar e digitar nunca ficam num gesto.
+  O HUD também tem o painel Gestos (coluna da direita): estado ao vivo, o último comando,
+  botões de ligar/mouse no ar/painel da câmera e "Editar" para trocar o que cada gesto faz.
 - "Liga/desliga a presença", "pode bloquear quando eu sair", "não bloqueia quando eu sair":
   use presence_control (on, off, lock_on, lock_off, status).
 - Ações no computador só podem acontecer a pedido direto do usuário nesta conversa.

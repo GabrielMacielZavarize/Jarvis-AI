@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { DEFAULT_HOME, locateHost } from './geo';
 import { addLatency, type LatencyStats } from './latency';
+import { INITIAL_GESTURES } from './gestures';
 import { describePanel, matchPanels } from './panels';
 import type {
   CameraState,
   DictationState,
   CardDataMap,
+  GestureLive,
   CardKind,
   GeoPoint,
   HudCard,
@@ -82,6 +84,8 @@ interface HudState {
   camera: CameraState | null;
   /** Dictation mode (DIT-29) shown by the DITADO indicator. */
   dictation: DictationState | null;
+  /** Hand gestures (GST-18) as the engine last reported them, for the Gestos panel. */
+  gestures: GestureLive;
   /** Gemini Live model the agent is using right now (null until the link reports it). */
   liveModel: string | null;
   /** Response time of the recent turns. */
@@ -118,6 +122,7 @@ interface HudState {
   clearLog: () => void;
   setCamera: (camera: CameraState | null) => void;
   setDictation: (dictation: DictationState | null) => void;
+  setGestures: (gestures: GestureLive) => void;
   setLiveModel: (model: string | null) => void;
   recordLatency: (seconds: number) => void;
   setCinema: (cinema: boolean) => void;
@@ -144,6 +149,7 @@ export const useHud = create<HudState>((set, get) => ({
   log: [],
   camera: null,
   dictation: null,
+  gestures: INITIAL_GESTURES,
   liveModel: null,
   latency: null,
   cinema: false,
@@ -246,6 +252,7 @@ export const useHud = create<HudState>((set, get) => ({
   clearLog: () => set({ log: [] }),
   setCamera: (camera) => set({ camera }),
   setDictation: (dictation) => set({ dictation }),
+  setGestures: (gestures) => set({ gestures }),
   setLiveModel: (liveModel) => set({ liveModel }),
   recordLatency: (seconds) => set((s) => ({ latency: addLatency(s.latency, seconds) })),
   setCinema: (cinema) => set({ cinema }),

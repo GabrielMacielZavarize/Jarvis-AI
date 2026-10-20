@@ -13,6 +13,7 @@ import { attachTrack, lastUserSignalAt } from '../lib/audio';
 import { TOOL_LABELS } from '../lib/catalog';
 import { playDictationBeep } from '../lib/chime';
 import { dictationLog, reduceDictation } from '../lib/dictation';
+import { GESTURE_RPC_METHOD, INITIAL_GESTURES, reduceGesture, setGestureTransport } from '../lib/gestures';
 import { markToolResult } from '../lib/coreActivity';
 import { useHud } from '../lib/hudStore';
 import { MEMORY_RPC_METHOD, setMemoryTransport } from '../lib/memoryLink';
@@ -137,6 +138,11 @@ function handleHudEvent(event: HudEvent) {
     const line = dictationLog(event);
     if (line) hud.addLog(line.level, line.text);
     if (event.beep) playDictationBeep(event.beep);
+    return;
+  }
+  if (event.type === 'gesture') {
+    hud.setGestures(reduceGesture(hud.gestures, event, Date.now()));
+    if (event.event === 'panel') hud.addLog('info', `Painel de gestos ${event.visible ? 'aberto' : 'fechado'}`);
     return;
   }
   if (event.type === 'model') {
@@ -319,11 +325,18 @@ export function useLiveJarvis(): LiveJarvis {
     });
 
     // The Memória panel's "apagar" button asks the agent, which owns memoria.json.
-    setMemoryTransport(async (payload) => {
-      const agentIdentity = [...room.remoteParticipants.values()].find((p) => p.isAgent || p.identity.startsWith('agent-'))?.identity;
-      if (!agentIdentity) throw new Error('O Jarvis não está na sala.');
-      return room.localParticipant.performRpc({ destinationIdentity: agentIdentity, method: MEMORY_RPC_METHOD, payload, responseTimeout: 8000 });
-    });
+    const agentIdentity = () => {
+      const identity = [...room.remoteParticipants.values()].find((p) => p.isAgent || p.identity.startsWith('agent-'))?.identity;
+      if (!identity) throw new Error('O Jarvis não está na sala.');
+      return identity;
+    };
+    setMemoryTransport(async (payload) =>
+      room.localParticipant.performRpc({ destinationIdentity: agentIdentity(), method: MEMORY_RPC_METHOD, payload, responseTimeout: 8000 }),
+    );
+    // The Gestos panel's buttons (on/off, air mouse, corner panel) run in the agent, which owns the webcam.
+    setGestureTransport(async (payload, timeout) =>
+      room.localParticipant.performRpc({ destinationIdentity: agentIdentity(), method: GESTURE_RPC_METHOD, payload, responseTimeout: timeout }),
+    );
 
     return () => {
       room.off(RoomEvent.DataReceived, onData);
@@ -332,6 +345,9 @@ export function useLiveJarvis(): LiveJarvis {
       room.unregisterByteStreamHandler(CAMERA_TOPIC);
       room.unregisterByteStreamHandler(POINTER_TOPIC);
       setMemoryTransport(null);
+      setGestureTransport(null);
+      // Without the agent nobody reports the gestures: the panel goes back to "no reading".
+      useHud.getState().setGestures(INITIAL_GESTURES);
     };
   }, [room]);
 

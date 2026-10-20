@@ -8,6 +8,7 @@ import { CameraIndicator } from './components/CameraIndicator';
 import { CardStage } from './components/cards/CardStage';
 import { ControlDock } from './components/ControlDock';
 import { DictationIndicator } from './components/DictationIndicator';
+import { GesturesPanel } from './components/GesturesPanel';
 import { ConversationPanel } from './components/ConversationPanel';
 import { LanPanel } from './components/LanPanel';
 import { PairingScreen } from './components/PairingScreen';
@@ -207,6 +208,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
         )}
       </>
     ),
+    gestures: server?.gestures ? <GesturesPanel connected={live.connected && !demo.running} /> : null,
     log: <ActivityLog />,
   };
 

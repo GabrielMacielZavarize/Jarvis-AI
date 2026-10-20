@@ -428,7 +428,63 @@ export type HudEvent =
   /** Seconds between the end of the user's speech and Jarvis's first word. */
   | { type: 'latency'; seconds: number; model?: string | null; ts: number }
   | DictationEvent
+  | GestureEvent
   | { [K in CardKind]: { type: 'card'; kind: K; data: CardDataMap[K]; ts: number } }[CardKind];
+
+/** GST-18: what the hand-gesture engine is doing, from gestures.py (GestureEngine._emit). */
+export type GestureEvent =
+  | { type: 'gesture'; event: 'state'; state: 'off' | 'idle' | 'armed' | 'mouse'; ts: number }
+  | { type: 'gesture'; event: 'grab'; title?: string | null; browser?: boolean; map?: boolean; ts: number }
+  | { type: 'gesture'; event: 'aim'; direction?: string | null; target?: string | null; ts: number }
+  | { type: 'gesture'; event: 'cancel'; ts: number }
+  | { type: 'gesture'; event: 'panel'; visible: boolean; ts: number }
+  | { type: 'gesture'; event: 'action'; action: string; ok: boolean; message?: string | null; title?: string | null; ts: number };
+
+export type GestureState = 'unknown' | 'off' | 'idle' | 'armed' | 'grab' | 'close' | 'mouse';
+
+/** Live state of the gestures in the HUD's Gestos panel. */
+export interface GestureLive {
+  state: GestureState;
+  /** The corner panel with the webcam and the map of the screens. */
+  panel: boolean;
+  /** Window held by the fist. */
+  holding: string | null;
+  /** Where letting go would throw it ("monitor de cima"). */
+  aim: string | null;
+  last: { text: string; ok: boolean; at: number } | null;
+}
+
+/** A binding as gestos.json writes it: {"tipo": "acao", "acao": "play_pause"}. */
+export interface GestureBinding {
+  tipo: 'acao' | 'layout' | 'app' | 'site' | 'atalho' | 'nada';
+  acao?: string;
+  nome?: string;
+  url?: string;
+  teclas?: string;
+}
+
+export interface CustomGesture {
+  id: string;
+  name: string;
+  how: string;
+  binding: GestureBinding;
+  label: string;
+  default: string;
+  custom: boolean;
+  /** Other gestures bound to the same thing. */
+  same_as: string[];
+}
+
+/** GET /api/gestures. */
+export interface GestureCatalog {
+  gestures: CustomGesture[];
+  fixed: { name: string; what: string }[];
+  actions: { id: string; label: string }[];
+  layouts: string[];
+  enabled: boolean;
+  calibrated: boolean;
+  message?: string;
+}
 
 export type LinkKind = 'request' | 'source' | 'model' | 'link';
 
@@ -499,6 +555,8 @@ export interface ServerStatus {
   pc_control?: boolean;
   app_install?: boolean;
   camera?: boolean;
+  /** JARVIS_ENABLE_GESTURES: the Gestos panel shows (GST-18). */
+  gestures?: boolean;
   computer_use?: boolean;
   memory?: boolean;
   /** VOZ-30: Gemini Live voice the next session starts with (null on OpenAI). */
