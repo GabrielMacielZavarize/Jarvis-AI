@@ -15,6 +15,7 @@ from personas import (
     apply_persona,
     greeting,
     load_persona,
+    persona_for_wake,
     save_persona,
     saved_persona,
     swap_persona,
@@ -49,6 +50,21 @@ class PersonaFileTests(unittest.TestCase):
         from tools import HUD_THEME_NAMES
 
         self.assertEqual(set(PERSONAS), set(HUD_THEME_NAMES))
+
+    def test_each_wake_word_calls_its_persona(self) -> None:
+        both = ("jarvis", "friday")
+
+        self.assertEqual(persona_for_wake("friday", "jarvis", both), "friday")
+        self.assertEqual(persona_for_wake("friday", "stealth", both), "friday")
+        self.assertIsNone(persona_for_wake("friday", "friday", both))
+        self.assertEqual(persona_for_wake("jarvis", "friday", both), "jarvis")
+        # Mark III e Stealth são o próprio Jarvis: chamar "Jarvis" não troca.
+        self.assertIsNone(persona_for_wake("jarvis", "mark3", both))
+        self.assertIsNone(persona_for_wake("jarvis", "stealth", both))
+        # Só com "Jarvis" no detector, ele acorda qualquer persona, como antes.
+        self.assertIsNone(persona_for_wake("jarvis", "friday", ("jarvis",)))
+        self.assertIsNone(persona_for_wake(None, "friday", both))
+        self.assertIsNone(persona_for_wake("ultron", "friday", both))
 
 
 class PersonaPromptTests(unittest.TestCase):

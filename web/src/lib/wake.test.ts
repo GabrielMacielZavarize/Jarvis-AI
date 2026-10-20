@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { HudCard } from './types';
-import { hasPendingWork, micLabelFor, noticeCard, noticeLogLevel, noticeToast, parseWakeEvent, silenceLeft } from './wake';
+import {
+  hasPendingWork,
+  micLabelFor,
+  noticeCard,
+  noticeLogLevel,
+  noticeToast,
+  parseWakeEvent,
+  silenceLeft,
+  wakePersona,
+  wakeWordLabel,
+  wakeWordsLabel,
+} from './wake';
 
 const NOW = 1_000_000;
 const card = (partial: Pick<HudCard, 'kind' | 'data'>) => ({ id: 'c1', createdAt: NOW, ...partial }) as HudCard;
@@ -32,6 +43,18 @@ describe('parseWakeEvent', () => {
       enabled: false,
       presence: true,
       silence_s: 30,
+    });
+  });
+
+  it('reads the word heard and the persona it called', () => {
+    expect(parseWakeEvent('{"type":"wake","score":0.84,"word":"friday","persona":"friday"}')).toEqual({
+      type: 'wake',
+      score: 0.84,
+      word: 'friday',
+      persona: 'friday',
+    });
+    expect(parseWakeEvent('{"type":"status","detector":true,"listening":true,"words":["jarvis","friday"]}')).toMatchObject({
+      words: ['jarvis', 'friday'],
     });
   });
 
@@ -130,5 +153,22 @@ describe('noticeToast', () => {
     expect(noticeToast({ ...notice, priority: 'critical' })).toEqual({ level: 'critical', title: 'Bateria', message: '15% restantes', code: 'PRO-28' });
     expect(noticeToast({ ...notice, priority: 'high' }).level).toBe('warn');
     expect(noticeToast({ ...notice, priority: 'low' }).level).toBe('info');
+  });
+});
+
+describe('wake words', () => {
+  it('names what the detector heard and what it waits for', () => {
+    expect(wakeWordLabel('friday')).toBe('Friday');
+    expect(wakeWordLabel(undefined)).toBe('Jarvis');
+    expect(wakeWordsLabel(['jarvis', 'friday'])).toBe('“Jarvis” ou “Friday”');
+    expect(wakeWordsLabel([])).toBe('“Jarvis”');
+  });
+
+  it('switches the theme only to a known persona that is not on screen', () => {
+    expect(wakePersona('friday', 'jarvis')).toBe('friday');
+    expect(wakePersona('jarvis', 'friday')).toBe('jarvis');
+    expect(wakePersona('friday', 'friday')).toBeNull();
+    expect(wakePersona(undefined, 'mark3')).toBeNull();
+    expect(wakePersona('ultron', 'jarvis')).toBeNull();
   });
 });

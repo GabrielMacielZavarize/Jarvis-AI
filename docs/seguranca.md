@@ -148,7 +148,7 @@ Os endpoints que o HUD usa (`/api/wake/events`, `/hud` e `/result`) recusam pedi
 
 A ativação só conecta o mesmo link do botão Inicializar. As regras de email, instalação e controle do PC continuam iguais.
 
-O detector analisa o som no próprio PC e só manda ao servidor local a pontuação da detecção. Nada é gravado, e nenhum áudio vai para o Gemini ou o LiveKit antes de o link abrir.
+O detector analisa o som no próprio PC e só manda ao servidor local a palavra ouvida e a pontuação. Nada é gravado, e nenhum áudio vai para o Gemini ou o LiveKit antes de o link abrir. A palavra só pode trocar a persona por uma das conhecidas, e só quando o aviso foi aceito (sem link aberto).
 
 ## Personas
 

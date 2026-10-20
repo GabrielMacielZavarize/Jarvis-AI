@@ -37,6 +37,11 @@ HELP_FLAGS = {"-h", "--help"}
 TRUTHY_VALUES = {"1", "true", "yes", "on"}
 FALSY_VALUES = {"0", "false", "no", "off"}
 DEFAULT_WAKE_THRESHOLD = 0.5
+# Palavras de ativação que o detector conhece. "friday" precisa de um modelo treinado à parte
+# (.cache/models/friday.onnx, veja docs/voz.md) e acorda a F.R.I.D.A.Y.
+WAKE_WORDS = ("jarvis", "friday")
+# "Friday" é palavra comum em inglês (música, TV): começa mais exigente que o "Jarvis".
+DEFAULT_WAKE_WORD_THRESHOLDS = {"friday": 0.7}
 # 0: o link só fecha com "tchau, Jarvis" ou o botão, nunca por silêncio.
 DEFAULT_WAKE_SILENCE_SECONDS = 0
 # Voz do Gemini Live: grave e calma, a mais parecida com o Jarvis do filme (lista em voices.py).
@@ -96,6 +101,28 @@ def _parse_number(
     if not minimum <= value <= maximum:
         raise SettingsError(f"{env_name} precisa estar entre {minimum:g} e {maximum:g} (veio {value:g}).")
     return value
+
+
+def _parse_wake_words(raw_value: str | None) -> tuple[str, ...]:
+    """JARVIS_WAKE_WORDS: CSV of WAKE_WORDS; empty or missing means only "jarvis"."""
+    words = _parse_csv(raw_value)
+    unknown = [word for word in words if word not in WAKE_WORDS]
+    if unknown:
+        raise SettingsError(
+            f"Palavra de ativação desconhecida em JARVIS_WAKE_WORDS: {', '.join(unknown)}. "
+            f"Use {', '.join(WAKE_WORDS)}."
+        )
+    return words or ("jarvis",)
+
+
+def _parse_wake_thresholds(env_map: Mapping[str, str], words: tuple[str, ...], default: float) -> tuple[tuple[str, float], ...]:
+    """JARVIS_WAKE_THRESHOLD_<PALAVRA> per word; "jarvis" falls back to JARVIS_WAKE_THRESHOLD."""
+    thresholds = []
+    for word in words:
+        env_name = f"JARVIS_WAKE_THRESHOLD_{word.upper()}"
+        fallback = default if word == "jarvis" else DEFAULT_WAKE_WORD_THRESHOLDS.get(word, default)
+        thresholds.append((word, _parse_number(env_map.get(env_name), env_name, fallback, 0.05, 0.99)))
+    return tuple(thresholds)
 
 
 def _parse_wake_silence(raw_value: str | None) -> int:
@@ -239,6 +266,8 @@ class Settings:
     transcription_hints: bool = False
     wake_word_enabled: bool = False
     wake_threshold: float = DEFAULT_WAKE_THRESHOLD
+    wake_words: tuple[str, ...] = ("jarvis",)
+    wake_thresholds: tuple[tuple[str, float], ...] = (("jarvis", DEFAULT_WAKE_THRESHOLD),)
     wake_silence_seconds: int = DEFAULT_WAKE_SILENCE_SECONDS
     wake_mic: str | None = None
     proactive_enabled: bool = False
@@ -267,6 +296,10 @@ class Settings:
             )
 
         google_model = _clean_optional(env_map.get("GOOGLE_MODEL")) or DEFAULT_GOOGLE_MODEL
+        wake_threshold = _parse_number(
+            env_map.get("JARVIS_WAKE_THRESHOLD"), "JARVIS_WAKE_THRESHOLD", DEFAULT_WAKE_THRESHOLD, 0.05, 0.99
+        )
+        wake_words = _parse_wake_words(env_map.get("JARVIS_WAKE_WORDS"))
         return cls(
             backend=backend,
             google_api_key=_clean_optional(env_map.get("GOOGLE_API_KEY")),
@@ -372,9 +405,9 @@ class Settings:
                 default=False,
             ),
             wake_word_enabled=_parse_bool(env_map.get("JARVIS_WAKE_WORD"), "JARVIS_WAKE_WORD", default=False),
-            wake_threshold=_parse_number(
-                env_map.get("JARVIS_WAKE_THRESHOLD"), "JARVIS_WAKE_THRESHOLD", DEFAULT_WAKE_THRESHOLD, 0.05, 0.99
-            ),
+            wake_threshold=wake_threshold,
+            wake_words=wake_words,
+            wake_thresholds=_parse_wake_thresholds(env_map, wake_words, wake_threshold),
             wake_silence_seconds=_parse_wake_silence(env_map.get("JARVIS_WAKE_SILENCE_SECONDS")),
             wake_mic=_clean_optional(env_map.get("JARVIS_WAKE_MIC")),
             proactive_enabled=_parse_bool(env_map.get("JARVIS_PROACTIVE"), "JARVIS_PROACTIVE", default=False),
@@ -396,6 +429,9 @@ class Settings:
             livekit_api_key=_clean_optional(env_map.get("LIVEKIT_API_KEY")),
             livekit_api_secret=_clean_optional(env_map.get("LIVEKIT_API_SECRET")),
         )
+
+    def wake_threshold_for(self, word: str) -> float:
+        return dict(self.wake_thresholds).get(word, self.wake_threshold)
 
     @property
     def google_models(self) -> tuple[str, ...]:

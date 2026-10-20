@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import sys
+import tempfile
+import types
 import unittest
+from pathlib import Path
 
 import numpy as np
 from collections import deque
@@ -15,11 +18,13 @@ from wake_word import (
     REARM_DELAY_S,
     RETRY_DELAY_S,
     SILENT_AFTER_S,
+    Detection,
     DetectorState,
     InputDevice,
     ServerLink,
     WakeDetector,
     browser_label_to_name,
+    load_model,
     pick_input_device,
     run,
 )
@@ -38,12 +43,18 @@ DEVICES = [
 
 
 class FakeModel:
-    def __init__(self, scores: list[float]) -> None:
+    """Scores per frame: a number is "jarvis" alone, a dict carries every word of that frame."""
+
+    def __init__(self, scores: list[float | dict[str, float]], words: tuple[str, ...] = ("jarvis",)) -> None:
         self.scores = deque(scores)
+        self.words = words
         self.resets = 0
 
     def predict(self, _frame: object) -> dict[str, float]:
-        return {"hey_jarvis": self.scores.popleft() if self.scores else 0.0}
+        frame = self.scores.popleft() if self.scores else 0.0
+        scores = dict.fromkeys(self.words, 0.0)
+        scores.update(frame if isinstance(frame, dict) else {"jarvis": frame})
+        return scores
 
     def reset(self) -> None:
         self.resets += 1
@@ -86,26 +97,37 @@ class FakeLink:
         self.clock = clock
         self.script = script
         self.triggers: list[float] = []
+        self.words: list[str] = []
         self.silent_reports: list[bool] = []
+        self.reported_words: tuple[str, ...] = ()
 
-    def state(self, mic_silent: bool = False) -> DetectorState | None:
+    def state(self, mic_silent: bool = False, words: tuple[str, ...] = ()) -> DetectorState | None:
         self.silent_reports.append(mic_silent)
+        self.reported_words = tuple(words)
         for until, state in self.script:
             if self.clock.now < until:
                 return state
         return self.script[-1][1]
 
-    def trigger(self, score: float) -> dict[str, bool]:
+    def trigger(self, score: float, word: str | None = None) -> dict[str, bool]:
         self.triggers.append(score)
+        self.words.append(word)
         return {"accepted": True, "opened_browser": False}
 
 
 class Harness:
-    def __init__(self, script: list[tuple[float, DetectorState | None]], scores: list[float], *, until: float = 10.0):
+    def __init__(
+        self,
+        script: list[tuple[float, DetectorState | None]],
+        scores: list[float | dict[str, float]],
+        *,
+        until: float = 10.0,
+        words: tuple[str, ...] = ("jarvis",),
+    ):
         self.clock = Clock()
         self.link = FakeLink(self.clock, script)
-        self.model = FakeModel(scores)
-        self.detector = WakeDetector(self.model, threshold=0.5, clock=self.clock)
+        self.model = FakeModel(scores, words)
+        self.detector = WakeDetector(self.model, threshold={"jarvis": 0.5, "friday": 0.7}, clock=self.clock)
         self.streams: list[FakeStream] = []
         self.until = until
         self.open_error: Exception | None = None
@@ -182,7 +204,7 @@ class DetectorTests(unittest.TestCase):
 
         results = [detector.process(object()) for _ in range(4)]
 
-        self.assertEqual(results, [None, 0.7, None, None])
+        self.assertEqual(results, [None, Detection("jarvis", 0.7), None, None])
         self.assertEqual(model.resets, 1)
 
     def test_fires_again_after_the_refractory_period(self) -> None:
@@ -192,7 +214,68 @@ class DetectorTests(unittest.TestCase):
         detector.process(object())
         clock.now += 2.5
 
-        self.assertEqual(detector.process(object()), 0.9)
+        self.assertEqual(detector.process(object()), Detection("jarvis", 0.9))
+
+    def test_each_word_has_its_own_threshold_and_the_highest_score_wins(self) -> None:
+        clock = Clock()
+        model = FakeModel(
+            [{"friday": 0.65}, {"friday": 0.82}, {"jarvis": 0.6, "friday": 0.9}, {"jarvis": 0.95, "friday": 0.75}],
+            words=("jarvis", "friday"),
+        )
+        detector = WakeDetector(model, threshold={"jarvis": 0.5, "friday": 0.7}, clock=clock)
+
+        heard = []
+        for _ in range(4):
+            heard.append(detector.process(object()))
+            clock.now += 3
+
+        self.assertEqual(
+            heard,
+            [None, Detection("friday", 0.82), Detection("friday", 0.9), Detection("jarvis", 0.95)],
+        )
+        self.assertEqual(detector.words, ("jarvis", "friday"))
+
+    def test_loads_every_word_that_has_a_model(self) -> None:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        friday = Path(folder.name) / "friday.onnx"
+        friday.write_bytes(b"onnx")
+        loaded: list[list[str]] = []
+
+        class OwwModel:
+            def __init__(self, wakeword_models: list[str], inference_framework: str) -> None:
+                loaded.append(list(wakeword_models))
+
+            def predict(self, _frame: object) -> dict[str, float]:
+                return {"hey_jarvis": 0.1, "friday": 0.8}
+
+            def reset(self) -> None:
+                pass
+
+        fake = types.ModuleType("openwakeword")
+        fake.MODELS = {"hey_jarvis": {"model_path": __file__}}
+        fake.FEATURE_MODELS = {}
+        modules = {
+            "openwakeword": fake,
+            "openwakeword.model": types.SimpleNamespace(Model=OwwModel),
+            "openwakeword.utils": types.SimpleNamespace(download_models=MagicMock()),
+        }
+        with (
+            patch.dict(sys.modules, modules),
+            patch.dict(wake_word.WORD_MODELS, {"friday": friday}),
+            patch("os.path.exists", return_value=True),
+            patch("builtins.print") as printed,
+        ):
+            model = load_model(("jarvis", "friday"))
+            self.assertEqual(model.predict(object()), {"jarvis": 0.1, "friday": 0.8})
+            self.assertEqual(model.words, ("jarvis", "friday"))
+
+            friday.unlink()
+            only_jarvis = load_model(("jarvis", "friday"))
+
+        self.assertEqual(loaded, [["hey_jarvis", str(friday)], ["hey_jarvis"]])
+        self.assertEqual(only_jarvis.words, ("jarvis",))
+        self.assertIn("não encontrado", str(printed.call_args))
 
     def test_verifier_trainer_is_not_imported(self) -> None:
         with patch.dict(sys.modules):
@@ -225,15 +308,27 @@ class ServerLinkTests(unittest.TestCase):
 
         self.assertIsNone(ServerLink("http://127.0.0.1:8000", None, http=http).state())
 
-    def test_trigger_sends_only_the_score(self) -> None:
+    def test_trigger_sends_the_score_and_the_word_heard(self) -> None:
         http = MagicMock()
         http.post.return_value.json.return_value = {"accepted": True, "opened_browser": True}
+        link = ServerLink("http://127.0.0.1:8000", None, http=http)
 
-        result = ServerLink("http://127.0.0.1:8000", None, http=http).trigger(0.91234)
+        result = link.trigger(0.91234)
 
         self.assertTrue(result["opened_browser"])
         self.assertEqual(http.post.call_args.kwargs["json"], {"score": 0.912})
         self.assertEqual(http.post.call_args.kwargs["headers"], {"X-Jarvis-Wake": "1"})
+        link.trigger(0.8, "friday")
+        self.assertEqual(http.post.call_args.kwargs["json"], {"score": 0.8, "word": "friday"})
+
+    def test_polls_tell_the_server_which_words_it_hears(self) -> None:
+        http = MagicMock()
+        http.get.return_value.json.return_value = {"listen": True}
+
+        with patch("builtins.print"):
+            ServerLink("http://127.0.0.1:8000", None, http=http).state(words=("jarvis", "friday"))
+
+        self.assertEqual(http.get.call_args.kwargs["params"], {"silent": 0, "words": "jarvis,friday"})
 
     def test_same_secret_names_as_the_server(self) -> None:
         self.assertEqual(wake_word.SECRET_ENV, wake_hub.SECRET_ENV)
@@ -254,8 +349,20 @@ class RunLoopTests(unittest.TestCase):
         harness.run()
 
         self.assertEqual(harness.link.triggers, [0.93])
+        self.assertEqual(harness.link.words, ["jarvis"])
         self.assertEqual(len(harness.streams), 1)
         self.assertTrue(harness.streams[0].closed)
+
+    def test_friday_is_reported_with_its_name(self) -> None:
+        harness = Harness(
+            [(3.0, LISTEN), (6.0, PAUSE)], scores=[0.0, {"friday": 0.88}], until=6.0, words=("jarvis", "friday")
+        )
+
+        harness.run()
+
+        self.assertEqual(harness.link.triggers, [0.88])
+        self.assertEqual(harness.link.words, ["friday"])
+        self.assertEqual(harness.link.reported_words, ("jarvis", "friday"))
 
     def test_never_listens_while_the_link_is_open(self) -> None:
         harness = Harness([(10.0, PAUSE)], scores=[0.99], until=5.0)
@@ -337,6 +444,22 @@ class CommandLineTests(unittest.TestCase):
 
         self.assertEqual(code, 1)
         self.assertIn("pip install openwakeword", str(printed.call_args))
+
+    def test_loads_the_words_and_thresholds_of_the_env(self) -> None:
+        env = {"GOOGLE_API_KEY": "x", "JARVIS_WAKE_WORDS": "jarvis,friday", "JARVIS_WAKE_THRESHOLD_FRIDAY": "0.8"}
+        model = FakeModel([], words=("jarvis", "friday"))
+        with (
+            patch.dict("os.environ", env, clear=True),
+            patch("wake_word.load_model", return_value=model) as load,
+            patch("wake_word.run") as loop,
+            patch("builtins.print") as printed,
+        ):
+            self.assertEqual(wake_word.main([]), 0)
+
+        self.assertEqual(load.call_args.args[0], ("jarvis", "friday"))
+        detector = loop.call_args.args[1]
+        self.assertEqual((detector.threshold_for("jarvis"), detector.threshold_for("friday")), (0.5, 0.8))
+        self.assertIn("“Jarvis” ou “Friday”", str(printed.call_args))
 
 
 if __name__ == "__main__":

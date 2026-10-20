@@ -161,12 +161,30 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.wake_silence_seconds, 0)
         self.assertEqual(settings.wake_mic, "Microphone Array")
 
+    def test_one_wake_word_per_persona(self) -> None:
+        self.assertEqual(load_settings({"GOOGLE_API_KEY": "test-key"}).wake_words, ("jarvis",))
+
+        settings = load_settings(
+            {"GOOGLE_API_KEY": "test-key", "JARVIS_WAKE_WORDS": "Jarvis, Friday", "JARVIS_WAKE_THRESHOLD": "0.4"}
+        )
+        self.assertEqual(settings.wake_words, ("jarvis", "friday"))
+        # "Friday" é comum em músicas e na TV: começa mais exigente que o "Jarvis".
+        self.assertEqual(settings.wake_thresholds, (("jarvis", 0.4), ("friday", 0.7)))
+
+        tuned = load_settings(
+            {"GOOGLE_API_KEY": "test-key", "JARVIS_WAKE_WORDS": "jarvis,friday", "JARVIS_WAKE_THRESHOLD_FRIDAY": "0,85"}
+        )
+        self.assertEqual(tuned.wake_threshold_for("friday"), 0.85)
+        self.assertEqual(tuned.wake_threshold_for("jarvis"), 0.5)
+
     def test_wake_word_rejects_bad_numbers(self) -> None:
         for env in (
             {"JARVIS_WAKE_THRESHOLD": "alto"},
             {"JARVIS_WAKE_THRESHOLD": "1.5"},
             {"JARVIS_WAKE_SILENCE_SECONDS": "5"},
             {"JARVIS_WAKE_SILENCE_SECONDS": "-1"},
+            {"JARVIS_WAKE_WORDS": "jarvis,ultron"},
+            {"JARVIS_WAKE_WORDS": "friday", "JARVIS_WAKE_THRESHOLD_FRIDAY": "2"},
         ):
             with self.subTest(env=env), self.assertRaises(SettingsError):
                 load_settings({"GOOGLE_API_KEY": "test-key", **env})

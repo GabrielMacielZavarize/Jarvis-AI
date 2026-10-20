@@ -12,12 +12,17 @@ acorda o HUD com ``reason="calendar"`` e o agente busca a fila assim que o link 
 
 Um celular pareado (LAN-26) também recebe os eventos, mas a palavra ouvida pelo PC só conecta uma
 aba do próprio PC, e só o PC escolhe o microfone que o detector usa.
+
+Com mais de uma palavra no detector ("Jarvis" e "Friday"), o aviso diz qual foi ouvida. Se ela
+chama outra persona, o servidor grava o ``persona.json`` antes de avisar o HUD: o agente já
+começa a conversa com a persona e a voz certas.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import secrets
 import time
@@ -29,7 +34,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from lan_access import device_of
-from settings import Settings
+from personas import DEFAULT_PERSONA, persona_for_wake, save_persona, saved_persona
+from settings import WAKE_WORDS, Settings
+
+logger = logging.getLogger("jarvis-wake")
 
 # jarvis.py shares a random secret with the detector, so only it can say "Jarvis" was heard.
 SECRET_ENV = "JARVIS_WAKE_SECRET"
@@ -72,12 +80,16 @@ class WakeHub:
         # Scheduled routine (ROT-24) that asked for that wake.
         self.undelivered_routine: str | None = None
         self.undelivered_reason = "wake"
+        # Word heard and persona it called, for that same wake ({"word": "friday", "persona": "friday"}).
+        self.undelivered_extra: dict[str, str] = {}
         # Calendar reminders waiting for the agent: (expires_at, payload).
         self.reminders: list[tuple[float, dict[str, Any]]] = []
         self.notice_backlog: list[dict[str, Any]] = []
         self.detector_seen_at: float | None = None
         # The detector's open microphone has delivered only silence (muted in Windows?).
         self.mic_silent = False
+        # Wake words the detector hears ("jarvis", "friday"), as it reported in its last poll.
+        self.detector_words: tuple[str, ...] = ()
 
     # --- HUD -------------------------------------------------------------------------------------
 
@@ -85,7 +97,9 @@ class WakeHub:
         client = HudClient(id=client_id, connected_at=self._clock(), local=local)
         self.clients[client_id] = client
         if self.undelivered_score is not None and self._pending():
-            self._deliver(client, self.undelivered_score, self.undelivered_reason, self.undelivered_routine)
+            self._deliver(
+                client, self.undelivered_score, self.undelivered_reason, self.undelivered_routine, self.undelivered_extra
+            )
         for event in self.notice_backlog:
             client.queue.put_nowait(event)
         self.notice_backlog = []
@@ -120,27 +134,33 @@ class WakeHub:
     def listening(self) -> bool:
         return not self._pending() and not any(client.session_active for client in self.clients.values())
 
-    def detector_state(self, *, mic_silent: bool = False) -> dict[str, Any]:
+    def detector_state(self, *, mic_silent: bool = False, words: tuple[str, ...] = ()) -> dict[str, Any]:
         self.detector_seen_at = self._clock()
         self.mic_silent = mic_silent
+        self.detector_words = words
         return {"listen": self.listening(), "mic_label": self.mic_label}
 
     def detector_online(self) -> bool:
         return self.detector_seen_at is not None and self._clock() - self.detector_seen_at < DETECTOR_STALE_S
 
-    def trigger(self, score: float, reason: str = "wake") -> dict[str, Any]:
+    def trigger(
+        self, score: float, reason: str = "wake", *, word: str | None = None, persona: str | None = None
+    ) -> dict[str, Any]:
         """Hand the wake to one HUD tab, or ask for a browser when none is open.
 
-        ``reason`` says why when it was not a heard "Jarvis": "notice" (a proactive notice, PRO-28),
-        "calendar" (a meeting reminder, AGD-27) or "presence" (the user sat back down, PRS-25)."""
+        ``reason`` says why when it was not a heard wake word: "notice" (a proactive notice, PRO-28),
+        "calendar" (a meeting reminder, AGD-27) or "presence" (the user sat back down, PRS-25).
+        ``word`` is the name heard and ``persona`` the one it called, if the HUD must switch."""
         if not self.listening():
             return {"accepted": False, "opened_browser": False}
+        extra = {key: value for key, value in (("word", word), ("persona", persona)) if value}
         target = self._pick_client()
         if target is not None:
-            self._deliver(target, score, reason)
+            self._deliver(target, score, reason, extra=extra)
             return {"accepted": True, "opened_browser": False}
         self.undelivered_score = score
         self.undelivered_reason = reason
+        self.undelivered_extra = extra
         self.pending_until = self._clock() + PENDING_BROWSER_S
         return {"accepted": True, "opened_browser": True}
 
@@ -193,12 +213,15 @@ class WakeHub:
 
     def status(self) -> dict[str, Any]:
         listening = self.detector_online() and self.listening()
-        return {
+        status: dict[str, Any] = {
             "type": "status",
             "detector": self.detector_online(),
             "listening": listening,
             "mic_silent": listening and self.mic_silent,
         }
+        if self.detector_online() and self.detector_words:
+            status["words"] = list(self.detector_words)
+        return status
 
     # --- Internos --------------------------------------------------------------------------------
 
@@ -210,13 +233,22 @@ class WakeHub:
         self.undelivered_score = None
         self.undelivered_reason = "wake"
         self.undelivered_routine = None
+        self.undelivered_extra = {}
 
-    def _deliver(self, client: HudClient, score: float, reason: str = "wake", routine: str | None = None) -> None:
+    def _deliver(
+        self,
+        client: HudClient,
+        score: float,
+        reason: str = "wake",
+        routine: str | None = None,
+        extra: dict[str, str] | None = None,
+    ) -> None:
         self.undelivered_score = None
         self.undelivered_reason = "wake"
         self.undelivered_routine = None
+        self.undelivered_extra = {}
         self.pending_until = self._clock() + PENDING_WAKE_S
-        event: dict[str, Any] = {"type": "wake", "score": score}
+        event: dict[str, Any] = {"type": "wake", "score": score, **(extra or {})}
         if reason != "wake":
             event["reason"] = reason
         if routine:
@@ -245,6 +277,13 @@ class WakeResult(BaseModel):
 
 class TriggerRequest(BaseModel):
     score: float = Field(ge=0, le=1)
+    word: str | None = Field(default=None, max_length=20)
+
+
+def _known_words(raw: str) -> tuple[str, ...]:
+    """The detector's "jarvis,friday", keeping only words this server knows."""
+    words = [word.strip().lower() for word in raw.split(",")]
+    return tuple(dict.fromkeys(word for word in words if word in WAKE_WORDS))
 
 
 def _config_event(settings: Settings) -> dict[str, Any]:
@@ -354,18 +393,25 @@ def build_wake_router(
         return {"listening": hub.listening()}
 
     @router.get("/detector")
-    async def detector(request: Request, silent: int = 0) -> dict[str, Any]:
+    async def detector(request: Request, silent: int = 0, words: str = "") -> dict[str, Any]:
         require_detector(request)
         if not current_settings().wake_word_enabled:
             return {"listen": False, "mic_label": None}
-        return hub.detector_state(mic_silent=bool(silent))
+        return hub.detector_state(mic_silent=bool(silent), words=_known_words(words[:100]))
 
     @router.post("/trigger")
     async def trigger(body: TriggerRequest, request: Request) -> dict[str, Any]:
         require_detector(request)
         if not current_settings().wake_word_enabled:
             return {"accepted": False, "opened_browser": False}
-        result = hub.trigger(body.score)
+        word = (body.word or "").lower()
+        word = word if word in WAKE_WORDS else None
+        persona = persona_for_wake(word, saved_persona() or DEFAULT_PERSONA, hub.detector_words)
+        result = hub.trigger(body.score, word=word, persona=persona)
+        if result["accepted"] and persona:
+            # Antes de qualquer await: o persona.json muda antes de o HUD receber o aviso e abrir o link.
+            save_persona(persona)
+            logger.info("“%s” ouvido: persona do HUD agora é %s.", word, persona)
         if result["opened_browser"]:
             await asyncio.to_thread(open_browser, str(request.base_url))
         return result

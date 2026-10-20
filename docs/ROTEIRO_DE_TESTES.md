@@ -204,3 +204,13 @@ Detalhes em [memoria-e-rotinas.md](memoria-e-rotinas.md#busca-pelo-sentido).
 - [ ] `python memory.py --busca "do que eu gosto de ouvir?"` mostra as notas. Anote as das memórias certas e das sem relação; se ficarem perto do 0.6, ajuste `JARVIS_MEMORY_MIN_SIMILARITY`.
 - [ ] "Esquece o que eu falei do lo-fi": a memória e o vetor dela somem (o id não aparece mais no `memoria_vetores.json`).
 - [ ] Desligue a internet e pergunte "qual é a minha reunião?": a busca por palavras responde normal.
+
+## 17. Uma palavra por persona
+
+Detalhes em [voz.md](voz.md#uma-palavra-por-persona). Precisa do modelo treinado em `.cache/models/friday.onnx`.
+
+- [ ] Sem o arquivo e com `JARVIS_WAKE_WORDS=jarvis,friday`: o terminal e o `doctor.py` avisam que a "Friday" ficou de fora, e "Jarvis" acorda a persona que estiver na tela, como antes.
+- [ ] Com o arquivo: o painel Sistema mostra "Aguardando “Jarvis” ou “Friday”". `python wake_word.py --test` mostra uma coluna por palavra.
+- [ ] HUD no J.A.R.V.I.S., diga "Friday": o tema troca, o Registro mostra "Persona · F.R.I.D.A.Y., chamada pelo nome" e ela cumprimenta com "chefe" na voz Kore.
+- [ ] Com a F.R.I.D.A.Y. ativa, diga "Jarvis": volta para o J.A.R.V.I.S. Com o Mark III ativo, "Jarvis" mantém o Mark III.
+- [ ] Música e TV em inglês por 10 minutos com o `--test` aberto: anote quantas vezes a "Friday" ativaria e ajuste o `JARVIS_WAKE_THRESHOLD_FRIDAY`.

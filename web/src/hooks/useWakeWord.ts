@@ -1,9 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { playSleepChime, playWakeChime } from '../lib/chime';
 import { useHud } from '../lib/hudStore';
+import { getPrefs, setPrefs } from '../lib/prefs';
+import { themeInfo } from '../lib/themes';
 import type { JarvisMode } from '../lib/types';
 import { playCue } from '../lib/sounds';
-import { ACTIVE_MODES, hasPendingWork, noticeCard, noticeLogLevel, noticeToast, parseWakeEvent, silenceLeft } from '../lib/wake';
+import {
+  ACTIVE_MODES,
+  hasPendingWork,
+  noticeCard,
+  noticeLogLevel,
+  noticeToast,
+  parseWakeEvent,
+  silenceLeft,
+  wakePersona,
+  wakeWordLabel,
+  wakeWordsLabel,
+} from '../lib/wake';
 
 /** A wake heard while a freshly opened tab is still booting waits this long for the link. */
 const WAKE_TTL_MS = 40_000;
@@ -16,8 +29,10 @@ export interface WakeWord {
   enabled: boolean;
   /** The detector process is talking to the server. */
   detector: boolean;
-  /** The detector has the microphone open, waiting for "Jarvis". */
+  /** The detector has the microphone open, waiting for "Jarvis" (or "Friday"). */
   listening: boolean;
+  /** Names the detector hears ("jarvis", "friday"); empty until it reports them. */
+  words: string[];
   /** ...but that microphone delivers only silence (muted in Windows?). */
   micSilent: boolean;
   /** Seconds left before the link closes for silence, only in the last few seconds. */
@@ -61,6 +76,8 @@ const isVisible = () => typeof document === 'undefined' || document.visibilitySt
  * JARVIS_WAKE_SILENCE_SECONDS → close it, so the detector goes back to listening.
  * ROT-24: a scheduled routine that came due arrives as the same wake, with its name.
  * PRS-25: the presence detector opens the link the same way when the user sits back down.
+ * "Friday" heard with another persona on screen switches the theme before connecting: the server
+ * has already saved that persona, so the agent starts as F.R.I.D.A.Y.
  */
 export function useWakeWord(options: WakeOptions): WakeWord {
   const { enabled, proactive, presence = false, canConnect, ready, connected, busy, demo, mode, error, lineCount, micLabel } = options;
@@ -75,7 +92,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   /** Presence (PRS-25) is on: the webcam opens links and silence closes them. */
   const [presenceOn, setPresenceOn] = useState(false);
   const [reports, setReports] = useState(0);
-  const [detector, setDetector] = useState({ online: false, listening: false, micSilent: false });
+  const [detector, setDetector] = useState({ online: false, listening: false, micSilent: false, words: [] as string[] });
   const [silenceS, setSilenceS] = useState(0);
   const [wakeAt, setWakeAt] = useState<number | null>(null);
   const [closingIn, setClosingIn] = useState<number | null>(null);
@@ -88,12 +105,17 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   });
   const attempt = useRef(false);
   const lastActivity = useRef(Date.now());
+  const wordsRef = useRef<string[]>([]);
+  useEffect(() => {
+    wordsRef.current = detector.words;
+  }, [detector.words]);
 
   const report = useCallback((result: 'connected' | 'failed' | 'ignored') => post('/api/wake/result', { client: clientId, result }), [clientId]);
 
   const onWake = useCallback(
-    (score: number, routine?: string, reason?: 'calendar' | 'notice' | 'presence') => {
+    (score: number, routine?: string, reason?: 'calendar' | 'notice' | 'presence', word?: string, persona?: string) => {
       const byPresence = reason === 'presence';
+      const heard = `“${wakeWordLabel(word)}”`;
       const state = latest.current;
       const hud = useHud.getState();
       if (state.sessionActive || state.demo) {
@@ -107,10 +129,15 @@ export function useWakeWord(options: WakeOptions): WakeWord {
             ? `Rotina agendada “${routine}”, mas o LiveKit não está configurado`
             : byPresence
               ? 'Você voltou, mas o LiveKit não está configurado'
-              : 'Ouvi “Jarvis”, mas o LiveKit não está configurado',
+              : `Ouvi ${heard}, mas o LiveKit não está configurado`,
         );
         void report('failed');
         return;
+      }
+      const switchTo = wakePersona(persona, getPrefs().theme);
+      if (switchTo) {
+        setPrefs({ theme: switchTo });
+        hud.addLog('info', `Persona · ${themeInfo(switchTo).label}, chamada pelo nome`);
       }
       playWakeChime();
       if (routine) {
@@ -124,7 +151,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         hud.addLog('ok', 'Aviso do Jarvis · abrindo o link');
         setNoticeLink(true);
       } else if (byPresence) hud.addLog('ok', 'Presença · você voltou, abrindo o link');
-      else hud.addLog('ok', `Palavra de ativação · “Jarvis” (${Math.round(score * 100)}%)`);
+      else hud.addLog('ok', `Palavra de ativação · ${heard} (${Math.round(score * 100)}%)`);
       setWakeAt(Date.now());
     },
     [report],
@@ -146,7 +173,12 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         // The server knows this tab now: (re)send its state, also after a server restart.
         setReports((count) => count + 1);
       } else if (event.type === 'status') {
-        setDetector({ online: event.detector, listening: event.listening, micSilent: event.mic_silent ?? false });
+        setDetector({
+          online: event.detector,
+          listening: event.listening,
+          micSilent: event.mic_silent ?? false,
+          words: event.words ?? [],
+        });
       } else if (event.type === 'notice') {
         const hud = useHud.getState();
         hud.pushCard('note', noticeCard(event));
@@ -155,10 +187,10 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         if (event.route === 'hud') playCue('notice');
         hud.addLog(noticeLogLevel(event.priority), `${event.title} · ${event.message}`);
       } else {
-        onWake(event.score, event.routine, event.reason);
+        onWake(event.score, event.routine, event.reason, event.word, event.persona);
       }
     };
-    source.onerror = () => setDetector({ online: false, listening: false, micSilent: false });
+    source.onerror = () => setDetector({ online: false, listening: false, micSilent: false, words: [] });
     return () => {
       source.close();
       setSubscribed(false);
@@ -245,7 +277,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       } else {
         window.clearInterval(timer);
         playSleepChime();
-        const again = subscribed && wakeWord ? ' · diga “Jarvis” para chamar de novo' : '';
+        const again = subscribed && wakeWord ? ` · diga ${wakeWordsLabel(wordsRef.current)} para chamar de novo` : '';
         useHud.getState().addLog('info', `Link encerrado após ${silenceS} s de silêncio${again}`);
         void latest.current.stop();
       }
@@ -258,6 +290,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
     detector: detector.online,
     listening: detector.listening,
     micSilent: detector.micSilent,
+    words: detector.words,
     closingIn,
   };
 }
