@@ -10,5 +10,11 @@
     "args": ["-y", "@notionhq/notion-mcp-server"],
     "token_env": "NOTION_TOKEN",
     "permitir": []
+  },
+  "home_assistant": {
+    "url": "http://192.168.0.10:8123/api/mcp",
+    "token_env": "HOME_ASSISTANT_TOKEN",
+    "permitir": ["GetLiveContext", "HassTurnOn", "HassTurnOff", "HassLightSet", "HassSetVolume"],
+    "sem_confirmar": ["HassTurnOn", "HassTurnOff", "HassLightSet", "HassSetVolume"]
   }
 }
