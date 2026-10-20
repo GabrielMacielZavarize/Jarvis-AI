@@ -1,7 +1,10 @@
 """Voz do Jarvis (VOZ-30): qual voz do Gemini Live ele usa e a ferramenta "troca sua voz para X".
 
-A voz vem, em ordem: da escolha feita por voz (``voz.json``, fora do git), de ``JARVIS_VOICE``,
-de ``GOOGLE_VOICE`` e, por fim, de Charon, o timbre grave e calmo recomendado para o Jarvis.
+Cada protocolo do HUD (personas.py) tem a sua voz. No J.A.R.V.I.S. ela vem, em ordem: da escolha
+feita por voz (``voz.json``, fora do git), de ``JARVIS_VOICE``, de ``GOOGLE_VOICE`` e, por fim, de
+Charon, o timbre grave e calmo recomendado. Nos outros protocolos vem da escolha feita por voz
+com aquele protocolo ativo ou da voz do protocolo (Orus no Mark III, Kore na F.R.I.D.A.Y.,
+Enceladus no Stealth). O ``voz.json`` guarda uma voz por protocolo.
 """
 
 from __future__ import annotations
@@ -89,27 +92,55 @@ def match_voice(spoken: str) -> str | None:
     return _BY_KEY[close[0]] if close else None
 
 
-def saved_voice(path: Path | None = None) -> str | None:
-    """The voice chosen with "troca sua voz para X" in an earlier conversation."""
+def _read_choices(path: Path) -> dict[str, str]:
+    """{protocolo: voz}; the old {"voice": X} file was the J.A.R.V.I.S. choice."""
     try:
-        data = json.loads((path or VOICE_FILE).read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return None
-    return canonical_voice(data.get("voice")) if isinstance(data, dict) else None
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    choices = data.get("voices") if isinstance(data.get("voices"), dict) else {}
+    if "voice" in data and "jarvis" not in choices:
+        choices = {**choices, "jarvis": data["voice"]}
+    return {persona: voice for persona, voice in choices.items() if isinstance(voice, str)}
 
 
-def save_voice(voice: str | None, path: Path | None = None) -> None:
-    """Remember the voice for the next sessions; None goes back to the .env one."""
+def saved_voice(path: Path | None = None, persona: str = "jarvis") -> str | None:
+    """The voice chosen with "troca sua voz para X" in an earlier conversation, for this protocol."""
+    return canonical_voice(_read_choices(path or VOICE_FILE).get(persona))
+
+
+def save_voice(voice: str | None, path: Path | None = None, persona: str = "jarvis") -> None:
+    """Remember the voice of this protocol for the next sessions; None goes back to its default."""
     target = path or VOICE_FILE
+    choices = _read_choices(target)
     if voice is None:
+        choices.pop(persona, None)
+    else:
+        choices[persona] = voice
+    if not choices:
         target.unlink(missing_ok=True)
         return
-    target.write_text(json.dumps({"voice": voice}, ensure_ascii=False) + "\n", encoding="utf-8")
+    target.write_text(json.dumps({"voices": choices}, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def effective_voice(configured: str | None, path: Path | None = None) -> str:
-    """Voice the Gemini session starts with: the spoken choice wins over JARVIS_VOICE/GOOGLE_VOICE."""
-    return saved_voice(path) or canonical_voice(configured) or DEFAULT_VOICE
+def protocol_voice(persona: str) -> str | None:
+    from personas import PERSONAS
+
+    entry = PERSONAS.get(persona)
+    return entry.voice if entry else None
+
+
+def effective_voice(configured: str | None, path: Path | None = None, persona: str = "jarvis") -> str:
+    """Voice the Gemini session starts with: the spoken choice for this protocol wins; then
+    JARVIS_VOICE/GOOGLE_VOICE for J.A.R.V.I.S. or the protocol's own voice for the others."""
+    chosen = saved_voice(path, persona)
+    if chosen:
+        return chosen
+    if persona != "jarvis":
+        return protocol_voice(persona) or canonical_voice(configured) or DEFAULT_VOICE
+    return canonical_voice(configured) or DEFAULT_VOICE
 
 
 def describe_voices(current: str) -> str:
@@ -159,9 +190,13 @@ def _live_model(session: Any) -> Any | None:
 
 
 def build_voice_tools(settings: Settings) -> list[Any]:
+    from personas import active_persona
+
     configured_voice = settings.google_voice
     gemini = settings.backend == "gemini-realtime"
-    state = {"current": effective_voice(configured_voice)}
+
+    def current_voice() -> str:
+        return effective_voice(configured_voice, persona=active_persona())
 
     @function_tool()
     async def change_voice(
@@ -186,29 +221,30 @@ def build_voice_tools(settings: Settings) -> list[Any]:
                 "Trocar de voz por comando só funciona com o Gemini Live (JARVIS_BACKEND=gemini-realtime). "
                 "Com a OpenAI, a voz é a de OPENAI_VOICE no .env. Diga isso numa frase."
             )
+        persona = active_persona()
+        current = current_voice()
         if action == "list":
-            await show_card("note", {"title": "Vozes do Jarvis", "content": _voice_card_content(state["current"])})
+            await show_card("note", {"title": "Vozes do Jarvis", "content": _voice_card_content(current)})
             await tool_status("change_voice", "done")
-            return describe_voices(state["current"]) + " A lista completa está no painel."
+            return describe_voices(current) + " A lista completa está no painel."
 
         if action == "reset":
-            await asyncio.to_thread(save_voice, None)
-            target = canonical_voice(configured_voice) or DEFAULT_VOICE
+            await asyncio.to_thread(save_voice, None, None, persona)
+            target = effective_voice(configured_voice, persona=persona)
         else:
             target = match_voice(voice)
             if target is None:
                 await tool_status("change_voice", "error", voice)
                 return (
                     f"Não existe a voz '{voice}'. Pergunte qual delas o usuário quer: "
-                    + describe_voices(state["current"])
+                    + describe_voices(current)
                 )
-            await asyncio.to_thread(save_voice, target)
+            await asyncio.to_thread(save_voice, target, None, persona)
 
-        if target == state["current"]:
+        if target == current:
             await tool_status("change_voice", "done", target)
             return f"Você já está falando com a voz {target}; nada mudou."
 
-        state["current"] = target
         session = context.session
         llm = _live_model(session)
         await tool_status("change_voice", "done", target)

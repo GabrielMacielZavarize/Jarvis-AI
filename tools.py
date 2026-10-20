@@ -884,12 +884,16 @@ async def manage_hud_panels(
     return result
 
 
-# Temas do HUD (web/src/lib/themes.ts) e como o usuário costuma chamá-los.
+# Protocolos do HUD (web/src/lib/themes.ts, personas.py) e como o usuário costuma chamá-los
+# (inclusive como o reconhecimento de voz escreve "Friday" e "Mark").
 HUD_THEMES = {
     "jarvis": ("jarvis", "padrao", "normal", "original", "azul", "ciano", "classico"),
-    "mark3": ("mark3", "mark 3", "mark iii", "homem de ferro", "iron man", "armadura", "vermelho", "dourado", "ouro"),
-    "friday": ("friday", "sexta-feira", "sexta feira", "roxo", "violeta", "lilas", "rosa"),
-    "stealth": ("stealth", "furtivo", "discreto", "prata", "branco", "cinza", "neutro"),
+    "mark3": (
+        "mark3", "mark 3", "mark iii", "marc 3", "marca 3", "homem de ferro", "iron man", "armadura",
+        "tatico", "vermelho", "dourado", "ouro",
+    ),
+    "friday": ("friday", "fraide", "fraidei", "fraidey", "sexta-feira", "sexta feira", "roxo", "violeta", "lilas", "rosa"),
+    "stealth": ("stealth", "stelf", "furtivo", "discreto", "silencioso", "prata", "branco", "cinza", "neutro"),
 }
 HUD_THEME_NAMES = {"jarvis": "J.A.R.V.I.S.", "mark3": "Mark III", "friday": "F.R.I.D.A.Y.", "stealth": "Stealth"}
 
@@ -909,11 +913,17 @@ async def set_hud_appearance(
     theme: str | None = None,
     cinema: bool | None = None,
 ) -> str:
-    """Change how the holographic HUD looks: its colour theme and/or the cinema mode.
+    """Change the HUD protocol (theme) and/or the cinema mode.
+
+    Each theme is a whole protocol: the HUD look (core, rings, panels, sounds) AND the assistant's
+    persona and voice, which switch right after your confirmation. "Chama a Friday" = friday,
+    "modo Mark III"/"modo armadura" = mark3, "modo discreto" = stealth, "volta o Jarvis" = jarvis.
 
     Args:
-        theme: Colour theme by name or colour: "jarvis" (cyan, the default), "mark3" (gold and
-            red, the Iron Man armour), "friday" (violet) or "stealth" (silver). Omit to keep it.
+        theme: Protocol by name or colour: "jarvis" (cyan, the British butler, the default),
+            "mark3" (gold and red, Jarvis inside the Iron Man armour, terse mission reports),
+            "friday" (violet, F.R.I.D.A.Y.: female voice, direct and warm, calls the user "chefe")
+            or "stealth" (silver, whispered minimal answers). Omit to keep it.
         cinema: true hides every panel and leaves only the core and the live caption ("modo
             cinema", "modo foco", "esconde os painéis"); false brings the full HUD back.
     """
@@ -933,7 +943,11 @@ async def set_hud_appearance(
         return "NADA mudou: este HUD é de uma versão anterior. Peça para rodar python jarvis.py --rebuild."
     parts = []
     if wanted:
-        parts.append(f"Tema do HUD agora: {HUD_THEME_NAMES.get(str(response.get('theme')), response.get('theme'))}")
+        name = HUD_THEME_NAMES.get(str(response.get("theme")), response.get("theme"))
+        parts.append(
+            f"Protocolo do HUD agora: {name}. A persona e a voz de {name} assumem logo depois desta "
+            "resposta (ela se apresenta sozinha): confirme em UMA frase curta, ainda com o seu jeito atual"
+        )
     if cinema is not None:
         parts.append("modo cinema ligado (só o núcleo e a legenda)" if response.get("cinema") else "modo cinema desligado")
     return ". ".join(parts) + "."

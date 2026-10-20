@@ -1,34 +1,30 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState } from 'react';
-
-const STEPS = [
-  'Inicializando núcleo neural',
-  'Calibrando matriz holográfica',
-  'Carregando protocolos de voz',
-  'Sincronizando sensores ambientais',
-  'Verificando integridade dos sistemas',
-];
+import { usePrefs } from '../lib/prefs';
+import { themeInfo } from '../lib/themes';
 
 /** Decorative memory addresses printed before each step. */
 const ADDRESSES = ['0x7F3A', '0x1C04', '0xA9E2', '0x5B71', '0xD03F'];
 
-const STEP_MS = 380;
-
+/** Each protocol boots with its own lines and pace (lib/themes.ts). */
 export function BootSequence({ onDone }: { onDone: () => void }) {
+  const { theme } = usePrefs();
+  const protocol = themeInfo(theme);
+  const { steps, stepMs } = protocol.boot;
   const [step, setStep] = useState(0);
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    if (step >= STEPS.length) {
+    if (step >= steps.length) {
       const timeout = window.setTimeout(() => setVisible(false), 450);
       return () => window.clearTimeout(timeout);
     }
-    const timeout = window.setTimeout(() => setStep((value) => value + 1), STEP_MS);
+    const timeout = window.setTimeout(() => setStep((value) => value + 1), stepMs);
     return () => window.clearTimeout(timeout);
-  }, [step]);
+  }, [step, steps.length, stepMs]);
 
-  const progress = Math.min(1, step / STEPS.length);
-  const online = step >= STEPS.length;
+  const progress = Math.min(1, step / steps.length);
+  const online = step >= steps.length;
 
   return (
     <AnimatePresence onExitComplete={onDone}>
@@ -60,16 +56,16 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
             </svg>
             <motion.h1
               className="boot__title"
-              data-text="J.A.R.V.I.S."
+              data-text={protocol.brand}
               initial={{ opacity: 0, letterSpacing: '0.9em' }}
               animate={{ opacity: 1, letterSpacing: '0.38em' }}
               transition={{ duration: 1.1, ease: 'easeOut' }}
             >
-              J.A.R.V.I.S.
+              {protocol.brand}
             </motion.h1>
-            <div className="boot__subtitle">Just A Rather Very Intelligent System · v2.0</div>
+            <div className="boot__subtitle">{protocol.tagline} · v2.0</div>
             <ul className="boot__lines">
-              {STEPS.slice(0, step).map((text, index) => (
+              {steps.slice(0, step).map((text, index) => (
                 <motion.li key={text} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}>
                   <span className="boot__addr">{ADDRESSES[index]}</span>
                   {text}…<span className="boot__ok">OK</span>
@@ -82,7 +78,7 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
               </div>
               <span className="boot__pct">{String(Math.round(progress * 100)).padStart(3, '0')}%</span>
             </div>
-            <div className="boot__skip">{online ? 'Todos os sistemas online' : 'Clique para pular'}</div>
+            <div className="boot__skip">{online ? protocol.boot.online : 'Clique para pular'}</div>
           </div>
         </motion.div>
       )}

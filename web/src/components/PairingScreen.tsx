@@ -1,4 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { getPrefs } from '../lib/prefs';
+import { themeInfo } from '../lib/themes';
 import { CODE_DIGITS, deviceNameGuess, normalizeCode, pairCodeFromHash, pairDevice } from '../lib/lan';
 
 interface PairingScreenProps {
@@ -57,7 +59,7 @@ export function PairingScreen({ revoked, onPaired }: PairingScreenProps) {
           <h1 className="panel__title">Parear este aparelho</h1>
         </header>
         <div className="panel__body pairing__body">
-          <p className="pairing__brand">J.A.R.V.I.S.</p>
+          <p className="pairing__brand">{themeInfo(getPrefs().theme).brand}</p>
           {revoked && (
             <p className="pairing__alert" role="alert">
               Este aparelho foi revogado no PC. Pareie de novo para continuar.

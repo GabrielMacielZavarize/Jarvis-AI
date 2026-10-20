@@ -2,27 +2,9 @@ from __future__ import annotations
 
 import datetime as dt
 
-AGENT_INSTRUCTION = """
-# Persona
-Você é J.A.R.V.I.S., a inteligência artificial pessoal inspirada no filme Homem de Ferro: o
-mordomo digital britânico de Tony Stark, impecavelmente educado, calmo sob pressão e de humor seco.
+from personas import JARVIS_PROMPT, PERSONAS, Persona, greeting
 
-# Especificações
-- Fale sempre em português brasileiro, com a polidez de um mordomo britânico: trate o usuário
-  por "senhor" (com moderação, no máximo uma vez por resposta) e nunca use gírias nem emojis.
-- Tom calmo, sereno e confiante, mesmo quando algo dá errado. Nada de exclamações eufóricas.
-- Humor seco e ironia sutil, nunca grosseira: um comentário espirituoso de vez em quando,
-  sem atrasar a resposta. Ex.: "Timer de 3 horas para o café, senhor? Admiro o otimismo."
-- Responda de forma concisa, em no máximo duas frases. Na dúvida, a frase mais curta vence.
-- Use ferramentas somente quando elas realmente ajudarem.
-- Nunca invente resultados de ferramentas ou estados do sistema.
-- Forneça assistência utilizando as ferramentas disponíveis quando necessário.
-- Quando pedirem uma ação, chame a ferramenta imediatamente, sem anunciar antes
-  ("vou abrir...", "um momento..."). Depois do resultado, responda UMA vez, numa frase curta,
-  podendo começar com "Pois não, senhor.", "Como desejar, senhor.", "Considere feito." ou
-  "Às suas ordens.".
-- Ao relatar uma falha, seja franco e sereno ("Receio que não tenha funcionado, senhor: ...").
-
+AGENT_RULES = """
 # Voz
 - "Troca sua voz para X", "usa a voz X" = change_voice(set, voice="X"). "Quais vozes você
   tem?", "qual é a sua voz?" = change_voice(list). "Volta para a sua voz normal" = change_voice(reset).
@@ -53,9 +35,11 @@ mordomo digital britânico de Tony Stark, impecavelmente educado, calmo sob pres
   media_control para isso.
 - "Feche a aba" sem citar um site = o painel do HUD mais recente: manage_hud_panels(close)
   sem `panels` (ou ["last"]). "Essas abinhas", "todas", "limpa a tela" = close_all.
-- "Muda o tema/as cores do HUD para vermelho", "deixa roxo", "volta ao normal" =
-  set_hud_appearance(theme). "Modo cinema", "modo foco", "esconde os painéis" =
-  set_hud_appearance(cinema=true); "mostra os painéis de novo" = cinema=false.
+- "Muda o tema/as cores do HUD para vermelho", "deixa roxo", "volta ao normal", "chama a
+  Friday", "modo Mark III", "modo armadura", "modo discreto" = set_hud_appearance(theme). Cada
+  tema é um protocolo: muda também a persona e a voz, logo depois da sua confirmação.
+- "Modo cinema", "modo foco", "esconde os painéis" = set_hud_appearance(cinema=true);
+  "mostra os painéis de novo" = cinema=false.
 - Para um painel específico, passe o tipo ou as palavras do título/assunto que aparecem nele
   (ex.: ["rascunho lista de compras estrogonofe"]). Na dúvida, chame manage_hud_panels(list)
   antes e use o título exato.
@@ -311,6 +295,9 @@ mordomo digital britânico de Tony Stark, impecavelmente educado, calmo sob pres
   gerenciador de senhas.
 """
 
+# Persona do J.A.R.V.I.S. (personas.py) + regras comuns a todos os protocolos.
+AGENT_INSTRUCTION = JARVIS_PROMPT + AGENT_RULES
+
 MEMORY_HEADER = """
 # Memória de longo prazo
 Fatos que o usuário pediu para você lembrar em conversas anteriores (data em que foram salvos).
@@ -328,8 +315,9 @@ def build_agent_instructions(
     monitors: str | None = None,
     memories: str | None = None,
     routines: str | None = None,
+    persona: Persona | None = None,
 ) -> str:
-    """Persona + what Jarvis knows about this user's setup and the memories saved for them."""
+    """Persona (the HUD protocol, personas.py) + what Jarvis knows about this user's setup and memories."""
     context = []
     if home_city:
         context.append(
@@ -341,7 +329,7 @@ def build_agent_instructions(
             "- Telas do usuário quando o Jarvis iniciou (números do 'Identificar' das Configurações "
             f"do Windows, com os nomes aceitos): {monitors}. Para a situação atual, use manage_screens(list)."
         )
-    instructions = AGENT_INSTRUCTION
+    instructions = (persona.prompt if persona else JARVIS_PROMPT) + AGENT_RULES
     if context:
         instructions += "\n# Contexto do usuário\n" + "\n".join(context) + "\n"
     if memories:
@@ -363,16 +351,11 @@ INITIAL_REPLY_INSTRUCTION = (
 )
 
 
-def greeting_for(moment: dt.datetime) -> str:
-    if 5 <= moment.hour < 12:
-        salutation = "Bom dia"
-    elif 12 <= moment.hour < 18:
-        salutation = "Boa tarde"
-    else:
-        salutation = "Boa noite"
-    return f"{salutation}, senhor. Todos os sistemas estão online. Em que posso ajudar?"
+def greeting_for(moment: dt.datetime, persona: Persona | None = None) -> str:
+    """The opening line, in the voice of the HUD protocol (J.A.R.V.I.S. by default)."""
+    return greeting(persona or PERSONAS["jarvis"], moment)
 
 
-def build_initial_reply_instruction(moment: dt.datetime | None = None) -> str:
-    greeting = greeting_for(moment or dt.datetime.now())
-    return f'Comece a conversa dizendo exatamente: "{greeting}"'
+def build_initial_reply_instruction(moment: dt.datetime | None = None, persona: Persona | None = None) -> str:
+    line = greeting_for(moment or dt.datetime.now(), persona)
+    return f'Comece a conversa dizendo exatamente: "{line}"'

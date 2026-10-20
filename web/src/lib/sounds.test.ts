@@ -9,7 +9,9 @@ import {
   saveSoundSettings,
   SOUND_CUES,
   SOUND_STORAGE_KEY,
+  styledTone,
 } from './sounds';
+import { themeInfo } from './themes';
 import type { HudEvent } from './types';
 
 const tool = (name: string, status: 'running' | 'done' | 'error'): HudEvent => ({ type: 'tool', name, status, ts: 1 });
@@ -122,5 +124,18 @@ describe('SOUND_CUES', () => {
         expect(Math.min(spec.from, spec.to), cue).toBeGreaterThanOrEqual(100);
       }
     }
+  });
+});
+
+describe('styledTone', () => {
+  it('plays each cue in the protocol timbre', () => {
+    const spec = SOUND_CUES.linkOpen[1];
+    expect(styledTone(spec, themeInfo('jarvis').sound)).toEqual({ ...spec, wave: 'sine' });
+    const mark3 = styledTone(spec, themeInfo('mark3').sound);
+    expect(mark3.from).toBeLessThan(spec.from);
+    expect(mark3.wave).toBe('triangle');
+    // A tone that asks for its own oscillator keeps it (the error buzz stays square).
+    expect(styledTone(SOUND_CUES.error[0], themeInfo('mark3').sound).wave).toBe('square');
+    expect(styledTone(spec, themeInfo('stealth').sound).gain).toBeLessThan(spec.gain);
   });
 });

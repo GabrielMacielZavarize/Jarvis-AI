@@ -1,7 +1,7 @@
 import { useHud } from '../lib/hudStore';
 import { DEFAULT_LAYOUT, type HudPrefs, QUALITY_LABELS, type QualityPref, setPrefs, usePrefs } from '../lib/prefs';
 import { LEVEL_LABELS } from '../lib/quality';
-import { THEMES } from '../lib/themes';
+import { THEMES, themeInfo } from '../lib/themes';
 
 const TOGGLES: { key: 'captions' | 'ambient' | 'reactorHum'; label: string; hint: string }[] = [
   { key: 'captions', label: 'Legenda ao vivo', hint: 'A fala do Jarvis embaixo do núcleo' },
@@ -18,8 +18,8 @@ export function HudSettings() {
   return (
     <>
       <div className="stat stat--setting" style={{ gridColumn: '1 / -1' }}>
-        <dt>Tema</dt>
-        <dd className="themes" role="radiogroup" aria-label="Tema de cores">
+        <dt title="Cada protocolo muda o nome, a persona e a voz do assistente, o núcleo 3D, os painéis e os sons">Protocolo</dt>
+        <dd className="themes" role="radiogroup" aria-label="Protocolo do HUD">
           {THEMES.map((theme) => (
             <button
               key={theme.id}
@@ -34,6 +34,7 @@ export function HudSettings() {
               {theme.label}
             </button>
           ))}
+          <small className="theme-hint">{themeInfo(prefs.theme).hint}</small>
         </dd>
       </div>
       <div className="stat stat--setting" style={{ gridColumn: '1 / -1' }}>

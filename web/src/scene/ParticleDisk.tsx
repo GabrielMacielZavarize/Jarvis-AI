@@ -3,19 +3,19 @@ import { useEffect, useMemo, useRef } from 'react';
 import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, type ShaderMaterial } from 'three';
 import { scene } from './sceneState';
 
-
 const vertex = /* glsl */ `
   attribute float aRadius;
   attribute float aAngle;
   attribute float aSpeed;
   attribute float aSeed;
   uniform float uPhase;
+  uniform float uSpin;
   uniform float uTime;
   uniform float uEnergy;
   uniform float uPixelRatio;
   varying float vAlpha;
   void main() {
-    float angle = aAngle + uPhase * aSpeed / aRadius;
+    float angle = aAngle + uPhase * uSpin * aSpeed / aRadius;
     float r = aRadius + sin(uTime * 1.7 + aSeed * 40.0) * 0.03 + uEnergy * 0.35 * aSeed;
     vec3 pos = vec3(cos(angle) * r, sin(angle) * r, (aSeed - 0.5) * 0.18);
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
@@ -36,8 +36,16 @@ const fragment = /* glsl */ `
   }
 `;
 
-/** Tilted accretion disk of particles orbiting the core with differential speed. */
-export function ParticleDisk({ count = 2600 }: { count?: number }) {
+/** Tilted accretion disk of particles orbiting the core with differential speed (`spin` < 0 turns it the other way). */
+export function ParticleDisk({
+  count = 2600,
+  tilt = [1.22, 0.18, 0],
+  spin = 1,
+}: {
+  count?: number;
+  tilt?: [number, number, number];
+  spin?: number;
+}) {
   const material = useRef<ShaderMaterial>(null);
   const geometry = useMemo(() => {
     const geo = new BufferGeometry();
@@ -62,6 +70,7 @@ export function ParticleDisk({ count = 2600 }: { count?: number }) {
   const uniforms = useMemo(
     () => ({
       uPhase: { value: 0 },
+      uSpin: { value: 1 },
       uTime: { value: 0 },
       uEnergy: { value: 0 },
       uPixelRatio: { value: 1 },
@@ -74,6 +83,7 @@ export function ParticleDisk({ count = 2600 }: { count?: number }) {
     const m = material.current;
     if (!m) return;
     m.uniforms.uPhase.value = scene.phase;
+    m.uniforms.uSpin.value = spin;
     m.uniforms.uTime.value = state.clock.elapsedTime;
     m.uniforms.uEnergy.value = scene.energy;
     m.uniforms.uPixelRatio.value = state.gl.getPixelRatio();
@@ -81,7 +91,7 @@ export function ParticleDisk({ count = 2600 }: { count?: number }) {
   });
 
   return (
-    <points geometry={geometry} rotation={[1.22, 0.18, 0]} frustumCulled={false}>
+    <points geometry={geometry} rotation={tilt} frustumCulled={false}>
       <shaderMaterial
         ref={material}
         uniforms={uniforms}

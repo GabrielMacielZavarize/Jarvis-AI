@@ -17,6 +17,8 @@ import {
 import { useHud } from '../lib/hudStore';
 import { landDots } from '../lib/landDots';
 import type { GeoPoint, NetLink } from '../lib/types';
+import { getPrefs } from '../lib/prefs';
+import { SCENE_LOOKS } from '../lib/themes';
 import { scene } from './sceneState';
 
 /** Globe radius: just outside the plasma core, inside the wireframe shell. */
@@ -90,16 +92,24 @@ const arcFragment = /* glsl */ `
   }
 `;
 
-// Fixed colours so connections stay readable whatever the mode tint is.
+// Colours fixed per protocol (its resting look, never the mode tint) so connections stay readable.
 const KIND_COLORS: Record<NetLink['kind'], Color> = {
   request: new Color('#5ff4ff'),
   link: new Color('#5ff4ff'),
   source: new Color('#ffc15e'),
   model: new Color('#f2fdff'),
 };
+const THEME_LINKS = Object.fromEntries(
+  (Object.keys(SCENE_LOOKS) as (keyof typeof SCENE_LOOKS)[]).map((theme) => {
+    const look = SCENE_LOOKS[theme].standby!;
+    const request = new Color(look.primary);
+    return [theme, { request, link: request, source: new Color(look.accent), model: KIND_COLORS.model }];
+  }),
+) as Record<keyof typeof SCENE_LOOKS, Record<NetLink['kind'], Color>>;
 
 function linkColor(kind: NetLink['kind'], target: Color) {
-  return target.copy(KIND_COLORS[kind]);
+  const { theme } = getPrefs();
+  return target.copy(theme === 'jarvis' ? KIND_COLORS[kind] : THEME_LINKS[theme][kind]);
 }
 
 /** Great-circle arc from home to a host, drawn progressively then pulsing data packets. */

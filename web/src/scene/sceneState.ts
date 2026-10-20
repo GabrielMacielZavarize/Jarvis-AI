@@ -3,7 +3,7 @@ import { levels, sampleAudio } from '../lib/audio';
 import { coreActivity, flashLevel, lastToolResult } from '../lib/coreActivity';
 import { useHud } from '../lib/hudStore';
 import { getPrefs } from '../lib/prefs';
-import { sceneLook } from '../lib/themes';
+import { sceneLook, themeInfo } from '../lib/themes';
 import type { JarvisMode } from '../lib/types';
 
 interface ModeLook {
@@ -81,8 +81,10 @@ export function updateScene(time: number, delta: number) {
   }
 
   const look = MODE_LOOK[effective];
-  // The theme only recolours: speed and glow keep telling the mode apart.
-  const colours = sceneLook(getPrefs().theme, effective) ?? look;
+  // The theme recolours and sets its own pace; speed and glow keep telling the mode apart.
+  const { theme } = getPrefs();
+  const colours = sceneLook(theme, effective) ?? look;
+  const pace = themeInfo(theme).scene.speed;
   const k = 1 - Math.exp(-delta * 3.2);
   target.primary.set(colours.primary);
   target.secondary.set(colours.secondary);
@@ -92,7 +94,7 @@ export function updateScene(time: number, delta: number) {
   scene.accent.lerp(target.accent, k);
   // Ambient mode: the reactor idles at low power behind the big clock.
   const power = ambient ? 0.55 : 1;
-  scene.speed += (look.speed * power - scene.speed) * k;
+  scene.speed += (look.speed * power * pace - scene.speed) * k;
   scene.glow += (look.glow * power - scene.glow) * k;
 
   scene.agent = levels.agent;

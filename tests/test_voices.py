@@ -59,9 +59,12 @@ class VoiceSettingsTests(unittest.TestCase):
         from backends import build_backend_components
 
         settings = load_settings({"GOOGLE_API_KEY": "k", "JARVIS_VOICE": "Iapetus"})
-        with patch("backends.effective_voice", return_value="Orus") as chosen:
+        with (
+            patch("backends.effective_voice", return_value="Orus") as chosen,
+            patch("backends.load_persona", return_value=SimpleNamespace(id="jarvis")),
+        ):
             components = build_backend_components(settings)
-        chosen.assert_called_once_with("Iapetus")
+        chosen.assert_called_once_with("Iapetus", persona="jarvis")
         self.assertEqual(components.llm._opts.voice, "Orus")
 
 
@@ -109,6 +112,27 @@ class VoiceFileTests(unittest.TestCase):
         self.assertFalse(self.path.exists())
         self.assertEqual(effective_voice(None, self.path), "Charon")
         save_voice(None, self.path)  # nada para apagar: sem erro
+
+    def test_each_protocol_keeps_its_own_voice(self) -> None:
+        # The other protocols start on their own voice, never on JARVIS_VOICE.
+        self.assertEqual(effective_voice("Iapetus", self.path, persona="friday"), "Kore")
+        self.assertEqual(effective_voice("Iapetus", self.path, persona="mark3"), "Orus")
+        self.assertEqual(effective_voice("Iapetus", self.path, persona="stealth"), "Enceladus")
+        save_voice("Aoede", self.path, persona="friday")
+        save_voice("Orus", self.path)
+        self.assertEqual(effective_voice("Iapetus", self.path, persona="friday"), "Aoede")
+        self.assertEqual(effective_voice("Iapetus", self.path), "Orus")
+        save_voice(None, self.path, persona="friday")
+        self.assertEqual(effective_voice(None, self.path, persona="friday"), "Kore")
+        self.assertEqual(saved_voice(self.path), "Orus")
+
+    def test_old_single_voice_file_is_the_jarvis_choice(self) -> None:
+        self.path.write_text('{"voice": "Orus"}', encoding="utf-8")
+        self.assertEqual(saved_voice(self.path), "Orus")
+        self.assertIsNone(saved_voice(self.path, persona="friday"))
+        save_voice("Kore", self.path, persona="friday")
+        self.assertEqual(saved_voice(self.path), "Orus")
+        self.assertEqual(saved_voice(self.path, persona="friday"), "Kore")
 
     def test_broken_file_is_ignored(self) -> None:
         self.path.write_text("{não é json", encoding="utf-8")

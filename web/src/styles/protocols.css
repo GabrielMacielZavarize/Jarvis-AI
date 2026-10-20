@@ -1,0 +1,210 @@
+/*
+ * Protocols (lib/themes.ts): what each one changes beyond the colours of global.css. Shapes of the
+ * panels, chips and buttons, the fonts, the screen effects and how much everything glows.
+ * J.A.R.V.I.S. is the base look of hud.css and needs nothing here.
+ */
+
+/* ───────────────────────── Mark III: inside the armour ───────────────────────── */
+
+:root[data-theme='mark3'] {
+  --font-display: 'Teko', 'Rajdhani', sans-serif;
+  --cut: 20px;
+  /* Armour plates: every corner cut, not only two. */
+  --plate: polygon(
+    var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)
+  );
+}
+:root[data-theme='mark3'] .panel {
+  clip-path: var(--plate);
+  border-width: 1px 2px;
+}
+:root[data-theme='mark3'] .panel::before,
+:root[data-theme='mark3'] .panel::after {
+  width: 34px;
+  height: 34px;
+  border-color: var(--c-accent);
+}
+/* Teko is condensed and tall: larger sizes keep the same weight on screen. */
+:root[data-theme='mark3'] .panel__title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+:root[data-theme='mark3'] .brand__name {
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  line-height: 1;
+}
+:root[data-theme='mark3'] .btn,
+:root[data-theme='mark3'] .dock__state {
+  font-size: 17px;
+  letter-spacing: 0.2em;
+}
+:root[data-theme='mark3'] .btn {
+  --cut: 12px;
+  clip-path: var(--plate);
+}
+:root[data-theme='mark3'] .chip {
+  --cut: 7px;
+  clip-path: var(--plate);
+}
+/* Heavier scanlines and a targeting frame on the visor. */
+:root[data-theme='mark3'] .fx--scanlines {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.04) 0,
+    rgb(255 255 255 / 0.04) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+:root[data-theme='mark3'] .fx--frame {
+  inset: 14px;
+  border: 0;
+  clip-path: none;
+  background:
+    linear-gradient(var(--c-accent), var(--c-accent)) top left / 80px 2px,
+    linear-gradient(var(--c-accent), var(--c-accent)) top left / 2px 80px,
+    linear-gradient(var(--c-accent), var(--c-accent)) top right / 80px 2px,
+    linear-gradient(var(--c-accent), var(--c-accent)) top right / 2px 80px,
+    linear-gradient(var(--c-accent), var(--c-accent)) bottom left / 80px 2px,
+    linear-gradient(var(--c-accent), var(--c-accent)) bottom left / 2px 80px,
+    linear-gradient(var(--c-accent), var(--c-accent)) bottom right / 80px 2px,
+    linear-gradient(var(--c-accent), var(--c-accent)) bottom right / 2px 80px;
+  background-repeat: no-repeat;
+  opacity: 0.55;
+}
+/* Mark III's reactor has no triangle (that came with the Mark VI). */
+:root[data-theme='mark3'] .boot__tri {
+  display: none;
+}
+
+/* ───────────────────────── F.R.I.D.A.Y.: soft glass ───────────────────────── */
+
+:root[data-theme='friday'] {
+  --font-display: 'Exo 2', 'Rajdhani', sans-serif;
+  --cut: 0px;
+  --radius: 18px;
+}
+:root[data-theme='friday'] .panel {
+  clip-path: inset(0 round var(--radius));
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px) saturate(1.35);
+  -webkit-backdrop-filter: blur(12px) saturate(1.35);
+}
+:root[data-theme='friday'] .panel::before {
+  border-top-right-radius: var(--radius);
+}
+:root[data-theme='friday'] .panel::after {
+  border-bottom-left-radius: var(--radius);
+}
+:root[data-theme='friday'] .panel__head {
+  padding-left: 18px;
+}
+:root[data-theme='friday'] .panel__title {
+  font-size: 12.5px;
+  letter-spacing: 0.14em;
+  text-transform: none;
+}
+:root[data-theme='friday'] .brand__name {
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+:root[data-theme='friday'] .btn,
+:root[data-theme='friday'] .chip,
+:root[data-theme='friday'] .toast,
+:root[data-theme='friday'] .cam__feed,
+:root[data-theme='friday'] .cam__btn {
+  clip-path: inset(0 round 999px);
+  border-radius: 999px;
+}
+:root[data-theme='friday'] .toast,
+:root[data-theme='friday'] .cam__feed {
+  clip-path: inset(0 round 14px);
+  border-radius: 14px;
+}
+:root[data-theme='friday'] .btn {
+  letter-spacing: 0.16em;
+}
+:root[data-theme='friday'] .panel__code {
+  border-radius: 999px;
+}
+/* No CRT lines: a clean projection with a soft breathing frame. */
+:root[data-theme='friday'] .fx--scanlines {
+  display: none;
+}
+:root[data-theme='friday'] .fx--frame {
+  border-radius: 28px;
+  clip-path: none;
+  border-color: rgb(var(--c-primary-rgb) / 0.12);
+  animation: friday-breathe 6s ease-in-out infinite;
+}
+@keyframes friday-breathe {
+  50% {
+    border-color: rgb(var(--c-accent-rgb) / 0.2);
+    box-shadow: inset 0 0 40px rgb(var(--c-accent-rgb) / 0.05);
+  }
+}
+:root[data-theme='friday'] .boot__tri {
+  display: none;
+}
+
+/* ───────────────────────── Stealth: low signature ───────────────────────── */
+
+:root[data-theme='stealth'] {
+  --font-display: 'Share Tech Mono', ui-monospace, monospace;
+  --cut: 6px;
+}
+/* --glow is declared again on these scopes (global.css), so it is switched off on each of them. */
+:root[data-theme='stealth'] :is(.app, .btn--danger, .btn--muted) {
+  --glow: none;
+}
+:root[data-theme='stealth'] .fx--scanlines,
+:root[data-theme='stealth'] .fx--sweep {
+  display: none;
+}
+:root[data-theme='stealth'] .fx--ambient {
+  box-shadow: inset 0 0 12vmin rgb(var(--c-primary-rgb) / 0.04);
+}
+:root[data-theme='stealth'] .fx--frame {
+  border-color: rgb(var(--c-primary-rgb) / 0.05);
+}
+:root[data-theme='stealth'] .panel {
+  box-shadow: none;
+  background: var(--panel-bg);
+}
+:root[data-theme='stealth'] .panel::before,
+:root[data-theme='stealth'] .panel::after {
+  width: 12px;
+  height: 12px;
+  opacity: 0.4;
+}
+:root[data-theme='stealth'] .panel__head::after {
+  display: none;
+}
+/* Text without halos: legible, nothing glowing in a dark room. */
+:root[data-theme='stealth'] :is(.panel__title, .brand__name, .clock__time, .dock__state, .btn, .core-trigger__label) {
+  text-shadow: none;
+}
+:root[data-theme='stealth'] .brand__name {
+  letter-spacing: 0.24em;
+  font-weight: 400;
+}
+:root[data-theme='stealth'] .panel__title,
+:root[data-theme='stealth'] .btn {
+  font-weight: 400;
+  letter-spacing: 0.18em;
+}
+:root[data-theme='stealth'] .boot__tri {
+  display: none;
+}
+
+/* Under the swatches in Ajustes: what the active protocol changes. */
+.theme-hint {
+  grid-column: 1 / -1;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}

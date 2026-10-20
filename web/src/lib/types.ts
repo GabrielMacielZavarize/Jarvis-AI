@@ -489,6 +489,8 @@ export interface ChatLine {
 export interface ServerStatus {
   version: string;
   ready: boolean;
+  /** HUD protocol saved on the server (persona.json); null when nobody chose one yet. */
+  persona?: string | null;
   backend?: string;
   model?: string;
   livekit_configured: boolean;

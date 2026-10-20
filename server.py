@@ -36,6 +36,7 @@ from generate_playground_token import create_token
 from routines import RoutineScheduler
 from proactive import ProactiveEngine, build_proactive_router
 from presence import NEEDS_CAMERA, PresenceService, get_service, voice_action
+from personas import is_persona, save_persona, saved_persona
 from lan_access import DeviceRegistry, LanGuard, TlsFiles, build_lan_router, device_of, ensure_certificates, lan_addresses, lan_url
 from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
@@ -149,6 +150,10 @@ class AgentDispatchRequest(BaseModel):
 
 class RoomConfigRequest(BaseModel):
     agents: list[AgentDispatchRequest] | None = None
+
+
+class PersonaRequest(BaseModel):
+    persona: str = Field(min_length=1, max_length=20)
 
 
 class TokenRequest(BaseModel):
@@ -288,9 +293,10 @@ def _active_voice(settings: Settings) -> str | None:
     """Voice the next Gemini session starts with (VOZ-30), for the Sistema panel."""
     if settings.backend != "gemini-realtime":
         return None
+    from personas import load_persona
     from voices import effective_voice
 
-    return effective_voice(settings.google_voice)
+    return effective_voice(settings.google_voice, persona=load_persona().id)
 
 
 def create_app(
@@ -482,8 +488,25 @@ def create_app(
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "lan": bool(app.state.lan_urls),
+            # HUD protocol chosen on any device (None: nobody chose yet, the browser keeps its own).
+            "persona": saved_persona(),
             "errors": backend_errors + livekit_errors,
         }
+
+    @app.get("/api/persona")
+    def get_persona() -> dict[str, Any]:
+        return {"persona": saved_persona()}
+
+    @app.post("/api/persona")
+    def set_persona(body: PersonaRequest, request: Request) -> dict[str, Any]:
+        """The HUD protocol (theme) changed: the agent picks up the persona and voice (personas.py)."""
+        _require_local(request, "A troca de protocolo")
+        if not is_persona(body.persona):
+            raise HTTPException(status_code=400, detail=f"Protocolo desconhecido: {body.persona}")
+        if saved_persona() != body.persona:
+            save_persona(body.persona)
+            logger.info("Protocolo do HUD: %s.", body.persona)
+        return {"persona": body.persona}
 
     @app.post("/api/token")
     def issue_token(body: TokenRequest | None = None) -> dict[str, str]:

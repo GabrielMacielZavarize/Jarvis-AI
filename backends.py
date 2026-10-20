@@ -12,6 +12,7 @@ from livekit.agents.utils import images
 from livekit.plugins import google, noise_cancellation, openai, silero
 
 from model_pool import REASON_LABELS, ModelPool, classify_failure
+from personas import load_persona, set_active
 from prompts import build_agent_instructions, build_initial_reply_instruction
 from settings import Settings
 from tools import PENDING_EMAIL_KEY, build_tools
@@ -119,7 +120,9 @@ class JarvisAgent(Agent):
         # Link aberto porque o usuário voltou para a frente do PC (PRS-25): "Bem-vindo de volta".
         welcome = await welcome_instruction()
         self.session.generate_reply(
-            instructions=self.first_reply_instruction or welcome or build_initial_reply_instruction()
+            instructions=self.first_reply_instruction
+            or welcome
+            or build_initial_reply_instruction(persona=load_persona())
         )
 
 
@@ -129,7 +132,7 @@ def build_gemini_model(settings: Settings, model: str | None = None) -> Any:
         **_compact_kwargs(
             api_key=settings.google_api_key,
             model=model or settings.google_model,
-            voice=effective_voice(settings.google_voice),
+            voice=effective_voice(settings.google_voice, persona=load_persona().id),
             temperature=0.8,
             # Espera o resultado da ferramenta antes de falar: uma resposta por ação,
             # sem "vou fazer..." seguido de um "feito" atrasado.
@@ -242,12 +245,16 @@ def build_runtime(
         session_kwargs["tts"] = backend.tts
 
     session = AgentSession(**session_kwargs)
+    # The HUD protocol (persona.json): J.A.R.V.I.S., Mark III, F.R.I.D.A.Y. or Stealth.
+    persona = load_persona()
+    set_active(persona.id)
     agent = JarvisAgent(
         build_agent_instructions(
             home_city=settings.home_city,
             monitors=_monitor_layout() if settings.pc_control_enabled or settings.computer_use_enabled else None,
             memories=_memory_summary() if settings.memory_enabled else None,
             routines=_routines_summary() if settings.routines_enabled else None,
+            persona=persona,
         )
     )
     room_options = room_io.RoomOptions(

@@ -18,6 +18,7 @@ import { useCameraMonitor } from './hooks/useCameraMonitor';
 import { useDemo } from './hooks/useDemo';
 import { useIdle } from './hooks/useIdle';
 import { usePanelDrag } from './hooks/usePanelDrag';
+import { usePersonaSync } from './hooks/usePersonaSync';
 import { useReactorHum } from './hooks/useReactorHum';
 import { useSettledMode } from './hooks/useSettledMode';
 import { usePresence } from './hooks/usePresence';
@@ -51,6 +52,8 @@ function JarvisApp({ local }: { local: boolean }) {
   const [live, setLive] = useState<LiveJarvis>(OFFLINE_LIVE);
   const canConnect = status.state === 'ok' && status.status.livekit_configured;
   useCameraMonitor();
+  // The theme is also the agent's persona and voice: keep it in step with the server.
+  usePersonaSync(status.state === 'ok' ? status.status.persona : undefined);
 
   return (
     <>
