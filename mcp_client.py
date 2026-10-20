@@ -22,11 +22,13 @@ Uso:
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping
@@ -59,7 +61,10 @@ SERVER_NAME = re.compile(r"^[a-z][a-z0-9_]{0,19}$")
 ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]{1,63}$")
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
 KEYS = {"nome", "url", "comando", "args", "token_env", "permitir", "confirmar", "sem_confirmar"}
-KNOWN_LABELS = {"github": "GitHub", "notion": "Notion", "spotify": "Spotify", "slack": "Slack", "linear": "Linear"}
+KNOWN_LABELS = {
+    "github": "GitHub", "notion": "Notion", "spotify": "Spotify", "slack": "Slack", "linear": "Linear",
+    "home_assistant": "Home Assistant",
+}  # fmt: skip
 
 # Palavras no nome da ferramenta que dizem se ela escreve. Na dúvida, escreve (pede código).
 WRITE_WORDS = {
@@ -71,6 +76,14 @@ WRITE_WORDS = {
 READ_WORDS = {
     "get", "list", "read", "search", "fetch", "find", "query", "describe", "show", "view", "lookup",
     "retrieve", "count", "check", "status", "info", "current", "playing", "recent",
+}  # fmt: skip
+# Casa: no nome da ferramenta ou no que ela recebe (o nome da entidade), sempre pedem código,
+# mesmo em "sem_confirmar". Destrancar, abrir portão e desligar alarme não rodam sem querer.
+SENSITIVE_WORDS = {
+    "lock", "unlock", "door", "doors", "doorbell", "garage", "gate", "gates", "alarm", "alarms", "arm",
+    "disarm", "camera", "cameras", "siren", "porta", "portas", "portao", "portoes", "garagem", "garagens",
+    "fechadura", "fechaduras", "tranca", "trancas", "trancar", "destrancar", "trava", "travar", "destravar",
+    "alarme", "alarmes", "sirene", "cofre",
 }  # fmt: skip
 
 
@@ -106,6 +119,15 @@ def _names(value: Any, key: str, server: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(item.strip() for item in value))
 
 
+def _home_network(host: str) -> bool:
+    """A private IP (192.168.x.x, 10.x.x.x...), like Home Assistant at home; names don't count."""
+    try:
+        address = ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        return False
+    return address.is_private and not address.is_unspecified and not address.is_link_local
+
+
 def _server(name: str, item: Any) -> ServerConfig:
     if not SERVER_NAME.match(name):
         raise MCPConfigError(f"Nome de servidor inválido: '{name}' (use letras minúsculas, números e _).")
@@ -124,8 +146,10 @@ def _server(name: str, item: Any) -> ServerConfig:
         if not isinstance(url, str) or not url.startswith(("https://", "http://")):
             raise MCPConfigError(f"url de '{name}' precisa começar com https://.")
         host = url.split("://", 1)[1].split("/", 1)[0].rsplit(":", 1)[0]
-        if url.startswith("http://") and host not in LOCAL_HOSTS:
-            raise MCPConfigError(f"url de '{name}' precisa ser https:// (http:// só para 127.0.0.1).")
+        if url.startswith("http://") and host not in LOCAL_HOSTS and not _home_network(host):
+            raise MCPConfigError(
+                f"url de '{name}' precisa ser https:// (http:// só para 127.0.0.1 ou um IP da rede de casa)."
+            )
     if command is not None and not isinstance(command, str):
         raise MCPConfigError(f"comando de '{name}' precisa ser texto.")
     token_env = item.get("token_env")
@@ -179,8 +203,34 @@ def is_read_only(tool: str) -> bool:
     return any(word in READ_WORDS for word in words)
 
 
-def needs_confirmation(config: ServerConfig, tool: str) -> bool:
-    if tool in config.confirm:
+def _words(text: str) -> set[str]:
+    plain = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return {word for word in re.split(r"[^a-z0-9]+", re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", plain).lower()) if word}
+
+
+def _strings(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Mapping):
+        return [text for item in value.values() for text in _strings(item)]
+    if isinstance(value, (list, tuple)):
+        return [text for item in value for text in _strings(item)]
+    return []
+
+
+def is_sensitive(tool: str, arguments: Mapping[str, Any] | None = None) -> bool:
+    """Door, lock, garage, gate, alarm or camera in the tool's name or in what it gets ("porta da frente")."""
+    words = _words(tool)
+    for text in _strings(arguments or {}):
+        words |= _words(text)
+    return bool(words & SENSITIVE_WORDS)
+
+
+def needs_confirmation(config: ServerConfig, tool: str, arguments: Mapping[str, Any] | None = None) -> bool:
+    """Whether the call waits for the code; ``arguments`` only count for tools that write."""
+    if tool in config.confirm or is_sensitive(tool):
+        return True
+    if arguments and not is_read_only(tool) and is_sensitive(tool, arguments):
         return True
     if tool in config.no_confirm:
         return False
@@ -361,6 +411,15 @@ def wrap_tool(config: ServerConfig, original: Any) -> Any:
 
         return function_tool(prepare, raw_schema=schema)
 
+    if not is_read_only(tool):
+        # Em "sem_confirmar": acender a luz roda direto, destrancar a porta da frente pede código.
+        async def guarded(context: RunContext, raw_arguments: dict[str, Any]) -> str:
+            if needs_confirmation(config, tool, raw_arguments):
+                return await _prepare(context, config, tool, original, raw_arguments)
+            return await _run(config, tool, original, raw_arguments)
+
+        return function_tool(guarded, raw_schema=schema)
+
     async def run(raw_arguments: dict[str, Any]) -> str:
         return await _run(config, tool, original, raw_arguments)
 
@@ -510,7 +569,7 @@ def integrations_summary() -> str | None:
 
 @function_tool()
 async def mcp_status(context: RunContext) -> str:
-    """Which MCP integrations (GitHub, Notion, Spotify...) are connected and which tools each one offers.
+    """Which MCP integrations (GitHub, Notion, Home Assistant...) are connected and which tools each one offers.
 
     Call it when the user asks for something from one of these services and its tool is not
     available, or asks which integrations exist. Then say plainly that the integration is
@@ -574,7 +633,13 @@ def _setup_lines(state: ServerState) -> list[str]:
     config = state.config
     lines = [f"{config.label}: conectado ({config.transport})."]
     for tool in state.tools:
-        lines.append(f"  liberada: {tool}" + (" (pede código)" if needs_confirmation(config, tool) else ""))
+        if needs_confirmation(config, tool):
+            note = " (pede código)"
+        elif not is_read_only(tool):
+            note = " (pede código se mexer em porta, fechadura, portão, alarme ou câmera)"
+        else:
+            note = ""
+        lines.append(f"  liberada: {tool}{note}")
     missing = [tool for tool in config.allowed if tool not in state.offered]
     if missing:
         lines.append(f"  no 'permitir', mas o servidor não tem: {', '.join(missing)}")

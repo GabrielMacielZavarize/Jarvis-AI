@@ -169,10 +169,20 @@ Desligadas por padrão (`JARVIS_ENABLE_MCP=false`). Ligadas, cada servidor do `m
 - Só as ferramentas da lista `permitir` chegam ao modelo. Um servidor sem essa lista não libera nada, e no HTTP o próprio cliente do LiveKit também filtra.
 - Ferramenta que escreve só prepara a ação. Ela roda depois de "confirmar integração" e o código na sua última fala, e o resultado de uma integração nunca confirma nada.
 - O que o servidor devolve chega ao modelo marcado como dado de um serviço externo, nunca ordem, e cortado em 6000 caracteres.
-- Os tokens ficam no `.env`. O `mcp.json` guarda só o nome da variável, e um arquivo com outro campo (como o próprio token) é recusado. Servidor HTTP precisa ser `https://`, a não ser no `127.0.0.1`.
+- Os tokens ficam no `.env`. O `mcp.json` guarda só o nome da variável, e um arquivo com outro campo (como o próprio token) é recusado. Servidor HTTP precisa ser `https://`, a não ser no `127.0.0.1` e em IPs da rede de casa.
 - Um servidor local recebe só o próprio token e as variáveis básicas do sistema (`PATH` e parecidas), não o `.env` inteiro.
 
 Um servidor MCP roda com as permissões do token que você deu a ele. Dê o mínimo: para ler issues, um token só de leitura basta.
+
+## Casa inteligente
+
+O Home Assistant entra pelo MCP-32 (veja [casa.md](casa.md)), com as travas acima e mais estas:
+
+- Porta, fechadura, portão, garagem, alarme, sirene e câmera sempre pedem "confirmar integração" e o código. Vale para o nome da ferramenta e para o que ela recebe (o nome da entidade, a área, o tipo), mesmo com a ferramenta em `sem_confirmar`. Um script chamado `abrir_portao` também pede.
+- Só leitura não pede código: perguntar se a porta está trancada é livre.
+- O `http://` é aceito só para IPs da rede de casa, como o `192.168.0.10:8123` do Home Assistant. Nesse caso o token passa sem criptografia pela rede local. Um nome como `homeassistant.local` não vale, porque qualquer aparelho da rede pode responder por ele. Fora de casa, use `https://`.
+- O token é de longa duração e vale até você apagá-lo. Crie um usuário só para o Jarvis, sem ser administrador, e exponha no Assist só as entidades que ele pode mexer. Um token vazado ou um aparelho da rede que leia o tráfego HTTP enxerga e mexe no que esse usuário pode.
+- A regra das palavras erra para o lado seguro: "liga a luz da garagem" também pede código.
 
 ## Avisos proativos
 
