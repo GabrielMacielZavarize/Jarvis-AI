@@ -234,3 +234,16 @@ Detalhes em [integracoes.md](integracoes.md). Precisa de `JARVIS_ENABLE_MCP=true
 - [ ] Uma ferramenta fora do `permitir` não aparece no `mcp_status` nem é chamada.
 - [ ] Com `create_issue` liberada, "cria uma issue chamada teste": nada é criado antes de "confirmar integração" e o código.
 - [ ] Sem o token no `.env`, o link abre normal e o Jarvis diz que a integração está indisponível.
+
+## 21. Casa inteligente
+
+Detalhes em [casa.md](casa.md). Precisa de `JARVIS_ENABLE_MCP=true`, da integração Model Context Protocol Server no Home Assistant, da entrada `home_assistant` no `mcp.json` e do `HOME_ASSISTANT_TOKEN` no `.env`.
+
+- [ ] `python mcp_client.py` mostra o Home Assistant conectado. `HassTurnOn` aparece com "pede código se mexer em porta, fechadura, portão, alarme ou câmera". Se algum nome do `permitir` não existir, acerte pelo que ele lista.
+- [ ] "Apaga a luz do escritório": a placa mostra "MCP-32 · Home Assistant · HassTurnOff" e a luz apaga sem código.
+- [ ] "Liga o ar da sala" e "deixa a luz da sala em 40%" rodam sem código.
+- [ ] "A porta da frente está trancada?": o Jarvis responde pelo `GetLiveContext`, sem código.
+- [ ] "Destranca a porta da frente": nada acontece antes de "confirmar integração" e o código. Teste também "cancela".
+- [ ] "Abre o portão da garagem" e "desliga o alarme" pedem código, mesmo com `HassTurnOn` e `HassTurnOff` em `sem_confirmar`.
+- [ ] Com a url em `http://homeassistant.local:8123/api/mcp`, o `python mcp_client.py` recusa o `mcp.json` e pede o IP ou `https://`.
+- [ ] Sem o token no `.env`, o link abre normal e o Jarvis diz que a integração do Home Assistant está indisponível.
