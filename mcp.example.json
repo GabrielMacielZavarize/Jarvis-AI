@@ -1,0 +1,14 @@
+{
+  "_comentario": "Copie para mcp.json. Tokens no .env; aqui só o nome da variável. Nada é liberado sem estar em permitir.",
+  "github": {
+    "url": "https://api.githubcopilot.com/mcp/",
+    "token_env": "GITHUB_MCP_TOKEN",
+    "permitir": ["list_issues", "issue_read", "search_issues"]
+  },
+  "notion": {
+    "comando": "npx",
+    "args": ["-y", "@notionhq/notion-mcp-server"],
+    "token_env": "NOTION_TOKEN",
+    "permitir": []
+  }
+}

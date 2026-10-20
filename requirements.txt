@@ -1,4 +1,5 @@
-livekit-agents
+# [mcp]: integrações por servidores MCP (MCP-32), ligadas com JARVIS_ENABLE_MCP=true
+livekit-agents[mcp]
 livekit-plugins-openai
 livekit-plugins-silero
 livekit-plugins-google

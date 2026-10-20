@@ -223,3 +223,14 @@ Detalhes em [gestos.md](gestos.md#apontar-e-falar). Precisa dos gestos, do contr
 - [ ] A mira aparece onde a mão aponta e some cerca de 1 s depois de baixar a mão. Ela não aparece num print (`look_at_screen`).
 - [ ] O cursor não se mexe nem clica enquanto você aponta e fala.
 - [ ] Sem apontar, "explica isso aqui" usa o cursor. Calado, o indicador parado liga o mouse no ar.
+
+## 19. Integrações MCP
+
+Detalhes em [integracoes.md](integracoes.md). Precisa de `JARVIS_ENABLE_MCP=true`, do `mcp.json` e de um token do GitHub no `.env`.
+
+- [ ] `python mcp_client.py` mostra o GitHub conectado e as ferramentas liberadas. O `mcp.json` não entra no `git status`.
+- [ ] O painel Protocolos mostra o MCP-32 com o GitHub e as ferramentas.
+- [ ] "Quais issues abertas eu tenho no Jarvis-AI?": a placa mostra "MCP-32 · GitHub · list_issues" e o painel lista as issues.
+- [ ] Uma ferramenta fora do `permitir` não aparece no `mcp_status` nem é chamada.
+- [ ] Com `create_issue` liberada, "cria uma issue chamada teste": nada é criado antes de "confirmar integração" e o código.
+- [ ] Sem o token no `.env`, o link abre normal e o Jarvis diz que a integração está indisponível.

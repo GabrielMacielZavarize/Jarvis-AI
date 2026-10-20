@@ -119,6 +119,7 @@ LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 NO_STORE = {"Cache-Control": "no-store"}
 MJPEG_BOUNDARY = "frame"
 PROACTIVE_TOOL_NAMES = ["set_reminder", "list_reminders", "cancel_reminder", "configure_alerts"]
+MCP_TOOL_NAMES = ["mcp_status", "confirm_mcp_action", "cancel_mcp_action"]
 COMPUTER_USE_TOOL_NAMES = [
     "click_on_screen",
     "move_mouse",
@@ -286,6 +287,30 @@ def _calendar_status(settings: Settings) -> dict[str, Any] | None:
         "connected": is_connected(),
         "reminder_minutes": settings.calendar_reminder_minutes,
         "reminders": settings.calendar_reminder_minutes > 0,
+    }
+
+
+def _mcp_status(settings: Settings) -> dict[str, Any] | None:
+    """MCP-32 as configured in mcp.json (the agent is who connects; here nothing connects)."""
+    if not settings.mcp_enabled:
+        return None
+    from mcp_client import MCPConfigError, load_servers, server_problems
+
+    try:
+        servers = load_servers()
+    except MCPConfigError as exc:
+        return {"servers": [], "error": str(exc)}
+    return {
+        "servers": [
+            {
+                "name": server.name,
+                "label": server.label,
+                "tools": list(server.allowed),
+                "problems": server_problems(server, os.environ),
+            }
+            for server in servers
+        ],
+        "error": None,
     }
 
 
@@ -479,6 +504,7 @@ def create_app(
             + (PRESENCE_TOOL_NAMES if settings.presence_enabled else [])
             + (COMPUTER_USE_TOOL_NAMES if settings.computer_use_enabled else [])
             + (PROACTIVE_TOOL_NAMES if settings.proactive_enabled else [])
+            + (MCP_TOOL_NAMES if settings.mcp_enabled else [])
         )
         return {
             "version": APP_VERSION,
@@ -505,6 +531,7 @@ def create_app(
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "lan": bool(app.state.lan_urls),
+            "mcp": _mcp_status(settings),
             # HUD persona chosen on any device (None: nobody chose yet, the browser keeps its own).
             "persona": saved_persona(),
             "errors": backend_errors + livekit_errors,

@@ -74,6 +74,10 @@ O `GOOGLE_MODEL` aponta para um modelo que não é Live. No backend `gemini-real
 
 Esse modo é `pipeline-first` e funciona no melhor esforço. Confirme se o endpoint tem os paths de chat, STT e TTS.
 
+## Uma integração MCP aparece como indisponível
+
+`python mcp_client.py` mostra o motivo de cada servidor. Os mais comuns: o token não está no `.env` com o nome do `token_env`, o `permitir` está vazio, o `npx` não está instalado (precisa do Node.js) ou o servidor demorou mais que `JARVIS_MCP_TIMEOUT` para subir. Na primeira vez o `npx` baixa o pacote do servidor, o que pode passar dos 8 segundos; rode `python mcp_client.py` uma vez antes ou aumente o tempo. Detalhes em [integracoes.md](integracoes.md).
+
 ## Câmera em uso
 
 Os gestos ainda abrem a webcam por conta própria, fora do hub do servidor. Com presença e gestos ligados ao mesmo tempo, o Windows pode recusar a segunda abertura. Use um dos dois por vez se a sua webcam não aguentar.

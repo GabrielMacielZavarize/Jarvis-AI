@@ -28,6 +28,7 @@ import { type LiveJarvis, OFFLINE_LIVE, useLiveJarvis } from './hooks/useLiveJar
 import { type StatusResult, useServerStatus } from './hooks/useServerStatus';
 import { useWakeWord } from './hooks/useWakeWord';
 import { AMBIENT_AFTER_MS } from './lib/ambient';
+import { mcpHint } from './lib/catalog';
 import { homeFromTimezone } from './lib/geo';
 import { useHud } from './lib/hudStore';
 import { type PanelId, usePrefs } from './lib/prefs';
@@ -192,7 +193,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
       />
     ),
     lan: local && server?.lan ? <LanPanel /> : null,
-    cards: <CardStage enabledTools={server?.tools ?? null} />,
+    cards: <CardStage enabledTools={server?.tools ?? null} hints={{ mcp_status: mcpHint(server?.mcp) }} />,
     conversation: (
       <>
         <ConversationPanel

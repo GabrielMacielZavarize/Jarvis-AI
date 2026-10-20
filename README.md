@@ -15,6 +15,7 @@ In English: real-time voice assistant built on LiveKit Agents (Gemini Live or Op
 - Lê a tela e explica erros, código e páginas, com a correção pronta para copiar.
 - Guarda fatos entre conversas, roda rotinas ("bom dia, Jarvis", "modo foco") e avisa sozinho de lembretes, bateria, downloads e reuniões.
 - Lê e mexe no Google Agenda, manda email e instala apps pelo winget. O que grava ou envia só acontece depois de um código falado.
+- Usa as ferramentas de servidores MCP (GitHub, Notion, Spotify...) com as mesmas travas: só o que você liberar, e o que escreve pede código.
 - Olha pela webcam quando você pede, percebe quando você sai e volta e entende gestos das mãos para mexer nas janelas. Um painel no HUD mostra os gestos ao vivo e deixa trocar o que cada um faz.
 - Acorda quando você diz "Jarvis" (ou "Friday", que já abre a F.R.I.D.A.Y.) e também funciona pelo celular, na rede de casa.
 - Se o modelo gratuito do Google estoura a cota ou trava, a conversa continua em outro modelo sem cair.
@@ -74,6 +75,7 @@ Linux, macOS, OpenAI e as demais opções estão em [docs/instalacao.md](docs/in
 | Câmera e presença | [camera-e-presenca.md](docs/camera-e-presenca.md) |
 | Memória e rotinas | [memoria-e-rotinas.md](docs/memoria-e-rotinas.md) |
 | Google Agenda | [agenda.md](docs/agenda.md) |
+| Integrações MCP (GitHub, Notion...) | [integracoes.md](docs/integracoes.md) |
 | Avisos e lembretes | [avisos.md](docs/avisos.md) |
 | Celular na rede de casa | [celular.md](docs/celular.md) |
 | Segurança | [seguranca.md](docs/seguranca.md) |

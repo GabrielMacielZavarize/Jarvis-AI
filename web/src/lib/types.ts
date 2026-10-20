@@ -548,6 +548,12 @@ export interface ChatLine {
   spoken?: boolean;
 }
 
+/** MCP-32: servers of mcp.json as the server reads them (the agent is who connects). */
+export interface McpStatus {
+  servers: { name: string; label: string; tools: string[]; problems: string[] }[];
+  error: string | null;
+}
+
 export interface ServerStatus {
   version: string;
   ready: boolean;
@@ -580,5 +586,7 @@ export interface ServerStatus {
   presence?: boolean;
   /** LAN-26: the server also answers paired phones on the home network (--lan). */
   lan?: boolean;
+  /** MCP-32: null when JARVIS_ENABLE_MCP=false. */
+  mcp?: McpStatus | null;
   errors: string[];
 }

@@ -82,6 +82,16 @@ def _memory_summary() -> str | None:
         return None
 
 
+def _integrations_summary() -> str | None:
+    """MCP services configured in mcp.json (MCP-32), read after build_tools filled the states."""
+    try:
+        from mcp_client import integrations_summary
+
+        return integrations_summary()
+    except Exception:
+        return None
+
+
 def _routines_summary() -> str | None:
     """Saved routines (rotinas.json) with their schedules, so "bom dia, Jarvis" runs one."""
     try:
@@ -255,6 +265,7 @@ def build_runtime(
             memories=_memory_summary() if settings.memory_enabled else None,
             routines=_routines_summary() if settings.routines_enabled else None,
             persona=persona,
+            integrations=_integrations_summary() if settings.mcp_enabled else None,
         )
     )
     room_options = room_io.RoomOptions(

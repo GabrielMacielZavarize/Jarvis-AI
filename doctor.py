@@ -117,6 +117,15 @@ def main() -> int:
         else:
             print("Calibre a sensibilidade com: python wake_word.py --test")
 
+    if settings.mcp_enabled:
+        import asyncio
+
+        from mcp_client import check_servers
+
+        _print_section("Integrações MCP (MCP-32)")
+        for line in asyncio.run(check_servers(settings)):
+            print(line)
+
     _print_section("Backend")
     if problems:
         print("Falhas encontradas:")
