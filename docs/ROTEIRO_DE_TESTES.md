@@ -214,3 +214,12 @@ Detalhes em [voz.md](voz.md#uma-palavra-por-persona). Precisa do modelo treinado
 - [ ] HUD no J.A.R.V.I.S., diga "Friday": o tema troca, o Registro mostra "Persona · F.R.I.D.A.Y., chamada pelo nome" e ela cumprimenta com "chefe" na voz Kore.
 - [ ] Com a F.R.I.D.A.Y. ativa, diga "Jarvis": volta para o J.A.R.V.I.S. Com o Mark III ativo, "Jarvis" mantém o Mark III.
 - [ ] Música e TV em inglês por 10 minutos com o `--test` aberto: anote quantas vezes a "Friday" ativaria e ajuste o `JARVIS_WAKE_THRESHOLD_FRIDAY`.
+
+## 18. Apontar e falar
+
+Detalhes em [gestos.md](gestos.md#apontar-e-falar). Precisa dos gestos, do controle do PC e do link aberto.
+
+- [ ] Erro no monitor vertical, mouse parado no notebook: aponte para o erro e diga "explica isso aqui". O painel diz "texto onde você apontou" e explica o erro certo.
+- [ ] A mira aparece onde a mão aponta e some cerca de 1 s depois de baixar a mão. Ela não aparece num print (`look_at_screen`).
+- [ ] O cursor não se mexe nem clica enquanto você aponta e fala.
+- [ ] Sem apontar, "explica isso aqui" usa o cursor. Calado, o indicador parado liga o mouse no ar.

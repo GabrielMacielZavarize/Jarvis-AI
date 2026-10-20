@@ -104,10 +104,20 @@ async def jarvis_agent(ctx: agents.JobContext):
         start_reminder_relay(runtime.session, settings.hud_url)
 
     if settings.gestures_enabled:
-        from gestures import MIC, SERVICE, attach_hud, autostart_requested, serve_gesture_panel, start_for_session
+        from gestures import (
+            MIC,
+            SERVICE,
+            attach_hud,
+            autostart_requested,
+            serve_gesture_panel,
+            start_for_session,
+            watch_voice,
+        )
 
         # Tapar a câmera muta/desmuta o que o Jarvis ouve nesta sessão.
         MIC.bind(runtime.session, asyncio.get_running_loop())
+        # Apontar enquanto fala marca o "aqui" do assistente de tela, sem ligar o mouse no ar.
+        watch_voice(runtime.session)
         # O painel Gestos do HUD: estado ao vivo (eventos) e os botões (RPC), ligados por esta sessão.
         attach_hud(asyncio.get_running_loop())
         serve_gesture_panel(ctx.room)

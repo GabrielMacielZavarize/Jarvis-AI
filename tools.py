@@ -1416,9 +1416,12 @@ def build_tools(settings: Settings) -> list[Any]:
         screen_assist.configure(settings.google_api_key, settings.computer_use_model)
         tools.extend(screen_assist.build_screen_assist_tools())
     if settings.gestures_enabled:
-        from gestures import build_gesture_tools
+        from gestures import SERVICE, build_gesture_tools
 
         tools.extend(build_gesture_tools())
+        if settings.pc_control_enabled:
+            # "Explica isso aqui" com o dedo apontando: o assistente de tela usa o ponto apontado.
+            screen_assist.set_pointer(SERVICE.pointed_screen_point)
     if settings.email_tool_enabled:
         tools.extend(build_email_tools(settings))
     if settings.calendar_enabled:

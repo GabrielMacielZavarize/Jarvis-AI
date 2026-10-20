@@ -82,6 +82,9 @@ HINT_GRAB = "mova e abra a mão: outro monitor · abra parado: estender · 1, 2 
 HINT_MOUSE = "pinça ou fechar a mão: clique · segurar: arrastar · palma parada: sair"
 HINT_MAP = "mão sobre uma janela do mapa e punho: pegar · leve a outra tela e abra a mão"
 HINT_MAP_GRAB = "leve até outra tela no mapa e abra a mão para soltar"
+HINT_POINT = "diga o que quer saber desse ponto · ex.: explica isso aqui"
+# A mira some esse tempo depois de o indicador sair da tela (mão baixada ou outra pose).
+AIM_LINGER_S = 1.0
 PANEL_CAMERA_WIDTH = 220  # a câmera do painel é pequena: o motor entrega uma cópia reduzida
 
 
@@ -408,7 +411,10 @@ class GestureEngine:
             self.request("panel_on")
 
     def request(
-        self, action: Literal["arm", "disarm", "mouse_on", "mouse_off", "panel_on", "panel_off", "panel_toggle", "quit"]
+        self,
+        action: Literal[
+            "arm", "disarm", "mouse_on", "mouse_off", "panel_on", "panel_off", "panel_toggle", "talk_on", "talk_off", "quit"
+        ],
     ) -> None:
         """Thread-safe control (voice tool, preview keys); applied on the next frame."""
         self._requests.put(action)
@@ -523,6 +529,9 @@ class GestureEngine:
                 continue
             if action.startswith("panel_"):
                 self._set_panel({"panel_on": True, "panel_off": False}.get(action, not self.panel_visible), t)
+                continue
+            if action.startswith("talk_"):
+                self.machine.set_talking(t, action == "talk_on")
                 continue
             commands = {
                 "arm": lambda: self.machine.arm(t),
@@ -665,6 +674,21 @@ class GestureEngine:
             return
         self._submit("drop", self.actions.drop, target, drag.dest, title=target.title)
 
+    # ── apontar ──
+
+    def _bounds(self) -> tuple[int, int, int, int]:
+        bounds = getattr(self.actions, "virtual_bounds", None)
+        return bounds() if callable(bounds) else virtual_bounds(win_desktop.monitors())
+
+    def pointed_screen_point(self, max_age: float) -> tuple[int, int] | None:
+        """Where the user pointed with the index finger in the last ``max_age`` s, in physical pixels."""
+        point = self.machine.pointed_at(self.clock(), max_age)
+        return uv_to_real(*point, self._bounds()) if point is not None else None
+
+    def _aim_point(self, t: float) -> tuple[int, int] | None:
+        point = self.machine.aim(t, AIM_LINGER_S)
+        return uv_to_real(*point, self._bounds()) if point is not None else None
+
     # ── painel de gestos (câmera + mapa das telas) ──
 
     def _set_panel(self, on: bool, t: float) -> None:
@@ -798,6 +822,8 @@ class GestureEngine:
                 return OverlayView("SAINDO DO MOUSE…", "mantenha a palma parada", status.progress, "info")
             return OverlayView("MOUSE NO AR" + (" · ARRASTANDO" if status.dragging else ""), HINT_MOUSE, None, "info")
         if status.state == State.ARMED:
+            if self.machine.pointing:
+                return OverlayView("APONTANDO", HINT_POINT, None, "info")
             if status.charging == "mouse_on":
                 return OverlayView("MOUSE NO AR…", "continue apontando", status.progress, "info")
             if status.charging == "panel":
@@ -832,6 +858,10 @@ class GestureEngine:
         if view is not None and view.progress is not None:
             view = OverlayView(view.title, view.detail, round(view.progress * 50) / 50, view.tone)
         self.overlay.show(view, self._area(t) if view is not None else None)
+        try:
+            self.overlay.aim(self._aim_point(t))
+        except Exception:
+            logger.debug("Falha ao posicionar a mira.", exc_info=True)
 
     # ── preview ──
 
@@ -1083,6 +1113,19 @@ class GestureService:
             "error": None,
         }
 
+    def set_talking(self, talking: bool) -> None:
+        """The user is speaking to Jarvis (from the voice session): pointing means "aqui"."""
+        engine = self._engine
+        if self.running and engine is not None:
+            engine.request("talk_on" if talking else "talk_off")
+
+    def pointed_screen_point(self, max_age: float) -> tuple[int, int] | None:
+        """Physical pixel the user pointed at in the last ``max_age`` s; None with gestures off."""
+        engine = self._engine
+        if not self.running or engine is None:
+            return None
+        return engine.pointed_screen_point(max_age)
+
     def arm(self) -> str:
         if not self.running or self._engine is None:
             return self.start()
@@ -1184,6 +1227,15 @@ def serve_gesture_panel(room: Any, service: GestureService | None = None) -> Non
         return json.dumps(reply, ensure_ascii=False)
 
     room.local_participant.register_rpc_method(GESTURE_RPC_METHOD, _on_request)
+
+
+def watch_voice(session: Any, service: GestureService | None = None) -> None:
+    """Tell the gestures when the user is talking, so pointing while speaking marks "aqui"."""
+    service = service or SERVICE
+
+    @session.on("user_state_changed")
+    def _on_user_state(event: Any) -> None:
+        service.set_talking(event.new_state == "speaking")
 
 
 def autostart_requested() -> bool:

@@ -116,7 +116,8 @@ AGENT_RULES = """
   de errado aqui?" = explain_screen(whats_wrong, target="here"); "o que esse código faz?" =
   explain_screen(explain_code); "resume essa página" = explain_screen(summarize); "traduz isso" =
   explain_screen(translate) (com `language` se ele disser o idioma); "explica o que eu copiei" =
-  target="clipboard". "Aqui"/"isso aqui" = target="here" (perto do mouse). Fale só o resumo
+  target="clipboard". "Aqui"/"isso aqui" = target="here" (onde ele apontou com o dedo, com os
+  gestos ligados, ou perto do mouse). Fale só o resumo
   que a ferramenta devolver: a explicação completa e o código ficam no painel do HUD; nunca
   leia código em voz alta. "Copia a correção"/"copia o código" = copy_fix (só copia; o usuário
   cola com Ctrl+V). Para só ver/descrever a tela continue usando look_at_screen.
