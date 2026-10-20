@@ -38,7 +38,7 @@ JARVIS_END_OF_SPEECH_MS=0
 ```
 
 Confira no `doctor.py` as linhas "Link fecha sozinho: nunca" e a lista de modelos, todos "livre".
-Não há dependência nova de Python; o `--rebuild` é obrigatório para o HUD novo.
+Não há dependência nova de Python; o `--rebuild` é obrigatório para o HUD novo e instala sozinho as fontes novas do HUD (o `npm install` roda quando o `package-lock.json` mudou).
 
 Teste um grupo por vez. Se algo falhar, copie a linha do terminal com a tag do protocolo
 (`[GST-18]`, `[MOU-20]`, `[DIT-29]`...) e, nos gestos, grave um trace com `--trace`.
@@ -142,10 +142,10 @@ Teste um grupo por vez. Se algo falhar, copie a linha do terminal com a tag do p
 ## 13. Visual do HUD (README → "Visual do HUD")
 
 - [ ] Boot: o anel do reator se completa, aparece "Todos os sistemas online" e os painéis entram em cascata.
-- [ ] Ao processar, o HUD inteiro fica âmbar; numa falha, vermelho.
+- [ ] Ao processar, o HUD inteiro fica âmbar deslizando (sem piscar); numa falha, vermelho. Numa conversa de vários turnos, o núcleo e o HUD não piscam entre "processando" e "respondendo" nem nas pausas entre frases.
 - [ ] "Como está o tempo em Lisboa?": a placa sobre o núcleo mostra `WX-01 · Varredura meteorológica · Lisboa` e depois "✓ Concluído"; o painel tem o gráfico das próximas 24 h (passe o mouse).
 - [ ] A legenda da fala do Jarvis aparece palavra por palavra embaixo do núcleo e some alguns segundos depois (desliga em Ajustes).
-- [ ] Ajustes → Tema: os quatro temas mudam HUD e cena 3D. Por voz: "muda o tema para vermelho", "deixa roxo", "volta ao normal".
+- [ ] Ajustes → Protocolo: os quatro mudam nome, marca, núcleo 3D, painéis, fontes e sons (veja o item 14).
 - [ ] Modo cinema: tecla `F`, o botão ao lado do dock e "modo cinema" por voz; `Esc` ou "mostra os painéis de novo" voltam.
 - [ ] "Pesquise sobre fusão nuclear": o globo cresce, os anéis recuam e cada destino ganha cidade e site.
 - [ ] "Rode um diagnóstico": aparece "Ao vivo" e CPU/RAM se mexem (abra um app pesado para ver subir).
@@ -153,6 +153,24 @@ Teste um grupo por vez. Se algo falhar, copie a linha do terminal com a tag do p
 - [ ] Notificações à direita: um timer de 1 min acabando, um lembrete do item 9 e um download concluído.
 - [ ] Arraste o painel Registro pelo cabeçalho para a coluna da esquerda; F5 e ele continua lá; "Restaurar painéis" em Ajustes desfaz.
 - [ ] Modo ambiente: feche o link e não mexa em nada por 3 min: relógio grande, clima da `JARVIS_HOME_CITY` e a próxima reunião. Mexer o mouse ou dizer "Jarvis" volta ao HUD.
-- [ ] Ajustes → Qualidade: mostra o nível e os fps. Em "Automática" num PC mais fraco, ela desce sozinha.
+- [ ] Ajustes → Qualidade: mostra o nível e os fps. Em "Automática" num PC mais fraco, ela desce sozinha depois de ~8 s lenta, uma vez, e o Registro diz "Qualidade da cena: Média (32 fps)".
 - [ ] Ajustes → Som do reator: com o link aberto, o zumbido cresce quando o Jarvis fala.
 - [ ] No celular pareado (item 11): tema, legenda e modo cinema funcionam; os painéis não se arrastam no celular, de propósito.
+
+## 14. Protocolos (README → "Protocolos do HUD")
+
+- [ ] Ajustes → Protocolo → F.R.I.D.A.Y. com o link fechado: boot, marca e nome na barra mudam; abra o link: ela cumprimenta ("Boa noite, chefe. F.R.I.D.A.Y. na escuta...") com voz feminina (Kore) e a transcrição mostra "F.R.I.D.A.Y.".
+- [ ] Com o link aberto, "Jarvis, modo Mark III": ele confirma na voz atual, a conversa fica quieta um instante e o Mark III se apresenta em outra voz (Orus); a holografia se rematerializa com o reator arc e a mira. Pergunte o clima: resposta curta, de relatório.
+- [ ] Clique em Stealth no meio da conversa: sem partículas e sem brilho, sons baixinhos, voz sussurrada e respostas de uma frase.
+- [ ] "Troca sua voz para Aoede" com a F.R.I.D.A.Y.; volte ao J.A.R.V.I.S. (continua a voz dele) e de novo à F.R.I.D.A.Y. (Aoede).
+- [ ] Abra o HUD no celular pareado: ele mostra o mesmo protocolo do PC.
+- [ ] `persona.json` aparece ao lado do projeto e não entra no `git status`.
+
+## 15. Painel Gestos (README → "Painel Gestos no HUD")
+
+- [ ] Com `JARVIS_ENABLE_GESTURES=true`, o painel Gestos aparece na coluna da direita; sem link os botões ficam apagados e o editor funciona.
+- [ ] Abra o link e clique em Ligar: "Abrindo a câmera…" e depois "Armados". Mão aberta, punho, mova e abra: o painel mostra "✊ Chrome → monitor de cima" e depois o resultado.
+- [ ] Mouse no ar e Painel da câmera pelos botões ligam e desligam; o estado acompanha também quando você usa os gestos (✌ parado abre o painel).
+- [ ] Editar → rock → Abrir app → spotify → Salvar; faça 🤘: o Spotify abre sem reiniciar nada.
+- [ ] Editar → OK → Atalho → `alt+f4` → Salvar: é recusado com a explicação; nada muda no `gestos.json`.
+- [ ] Ligue o joinha a "tocar/pausar": o painel avisa que ele faz o mesmo que o OK. "Restaurar todos" volta tudo ao padrão.

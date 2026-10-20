@@ -15,7 +15,9 @@ Short English summary: real-time voice assistant built on LiveKit Agents (Gemini
 - **Globo 3D com conexões**: enquanto pensa ou busca algo, o núcleo vira um globo holográfico que desenha arcos da sua cidade até os serviços consultados.
 - **Seletor de microfone** e diagnóstico de captação no HUD (botão **Ajustes** do painel Sistema).
 - **Link que não cai sozinho e troca de modelo**: o link só fecha com "tchau, Jarvis" ou o botão (`JARVIS_WAKE_SILENCE_SECONDS=0`), a sessão do Gemini Live não morre mais em ~15 minutos (compressão de contexto) e, quando um modelo gratuito estoura a cota ou fica sobrecarregado, a conversa continua no próximo da lista sem derrubar o link. O painel Sistema mostra o modelo em uso e o tempo de resposta de cada turno (veja [Modelos, cota e tempo de resposta](#modelos-cota-e-tempo-de-resposta)).
-- **HUD personalizável** (veja [Visual do HUD](#visual-do-hud)): temas de cor (J.A.R.V.I.S., Mark III, F.R.I.D.A.Y., Stealth) também por voz, legenda ao vivo sob o núcleo, modo cinema, modo ambiente com relógio e clima quando ocioso, notificações holográficas, gráficos nos painéis (temperatura por hora, CPU/RAM ao vivo, linha do tempo da agenda), globo que cresce nas pesquisas, painéis arrastáveis, qualidade automática da cena e som do reator.
+- **Protocolos J.A.R.V.I.S., Mark III, F.R.I.D.A.Y. e Stealth** (veja [Protocolos do HUD](#protocolos-do-hud)): cada tema é uma identidade inteira, não só uma cor. Muda a persona e a voz do assistente (a F.R.I.D.A.Y. fala por si, com voz feminina, e chama você de "chefe"; o Mark III responde como o computador da armadura; o Stealth sussurra o mínimo), o núcleo 3D (casca, anéis, espectro, plasma, partículas e piso), o formato dos painéis, as fontes, o boot e os sons. Troca ao vivo por clique ou por voz ("Jarvis, chama a Friday").
+- **Painel Gestos no HUD** (veja [Painel Gestos no HUD](#painel-gestos-no-hud)): estado ao vivo dos gestos, o último comando, botões de ligar, mouse no ar e painel da câmera, e um editor para trocar o que cada gesto faz, com as mesmas travas da voz.
+- **HUD personalizável** (veja [Visual do HUD](#visual-do-hud)): protocolos também por voz, legenda ao vivo sob o núcleo, modo cinema, modo ambiente com relógio e clima quando ocioso, notificações holográficas, gráficos nos painéis (temperatura por hora, CPU/RAM ao vivo, linha do tempo da agenda), globo que cresce nas pesquisas, painéis arrastáveis, qualidade automática da cena e som do reator.
 - **Visual do HUD refinado**: boot com o anel do reator se completando, painéis que se materializam depois do boot, marca de reator arc na barra superior, placa sobre o núcleo com o protocolo em execução (código, nome, alvo e o resultado), transcrição com hora, registro em linha do tempo, radar no piso e feixe de luz do projetor. O HUD inteiro troca de cor com o modo (âmbar ao processar, vermelho na falha).
 - **Visão pela webcam** (opcional): o Jarvis olha pela câmera quando você pede e o HUD mostra o feed ao vivo num painel holográfico, com o aviso CÂMERA ATIVA sempre visível.
 - **Assistente de tela para dev** (TEL-31): "explica esse erro", "o que tem de errado aqui?", "o que esse código faz?", "resume essa página", "traduz isso" e "copia a correção", com painel de explicação e blocos de código com destaque e botão de copiar.
@@ -258,6 +260,16 @@ Roteiro de teste ao vivo (Windows, 3 monitores):
 4. Sem `--dry-run`: arraste uma janela que ocupa a metade esquerda do notebook para o de cima e confira que ela ocupa a metade esquerda dele; depois "apague o quadro" para desfazer. Teste uma janela maximizada e uma do vertical para o notebook (DPIs diferentes).
 5. ☝ indicador parado para o mouse no ar: o mapa mostra a seta amarela seguindo o cursor real e o punho clica sem pegar janelas do mapa; palma parada sai.
 6. ✌ dois dedos parados ~1 s fecham o painel; "Jarvis, mostra o painel de gestos" abre de novo. Com o painel aberto, o preview deve continuar perto de 30 fps.
+
+#### Painel Gestos no HUD
+
+Com `JARVIS_ENABLE_GESTURES=true`, o HUD ganha o painel **Gestos** (GST-18, na coluna da direita; arraste para onde quiser):
+
+- **Estado ao vivo**: desligados, desarmados, armados, segurando uma janela (e para que monitor ela vai), contando para fechar ou mouse no ar, com o painel da câmera aberto ou não. Embaixo, o último comando feito com a mão e se deu certo ("✓ Tocar/pausar a mídia · há 4 s"). Cada comando também aparece na placa sobre o núcleo e no Registro.
+- **Botões** Ligar/Desligar, Armar, Mouse no ar e Painel da câmera. Eles rodam no agente, que é quem tem a webcam, então precisam do link aberto; ao abrir o link o painel pergunta o estado atual.
+- **Editar**: a lista dos 8 gestos livres com o que cada um faz agora (os personalizados em destaque). "Trocar" abre o editor: ação, layout salvo, app, site, atalho ou nada; "Voltar ao padrão" e "Restaurar todos" desfazem. O painel avisa quando dois gestos fazem a mesma coisa e lista os gestos fixos do controle de janelas.
+
+O editor grava o mesmo `gestos.json` da voz, pela API `/api/gestures` (só o próprio PC ou um celular pareado, e nunca outro site aberto no navegador), com as mesmas travas: fechar, apagar e digitar nunca ficam num gesto (Alt+F4, Ctrl+W, Shift+Delete e teclas soltas são recusados com a explicação). O motor relê o arquivo pela data de modificação, então a troca vale já no próximo gesto, sem reiniciar.
 
 #### Precisão e calibração
 
@@ -595,7 +607,7 @@ Também dá para trocar falando:
 
 A troca por comando só existe com o Gemini Live. Na OpenAI, a voz é a de `OPENAI_VOICE`.
 
-**Persona.** O prompt (`prompts.py`) dá ao Jarvis o tom do filme: mordomo britânico educado, que chama você de "senhor", fica calmo quando algo dá errado, tem humor seco e responde em no máximo duas frases. As regras das ferramentas não mudaram.
+**Persona.** O prompt dá ao Jarvis o tom do filme: mordomo britânico educado, que chama você de "senhor", fica calmo quando algo dá errado, tem humor seco e responde em no máximo duas frases. Cada [protocolo do HUD](#protocolos-do-hud) tem a sua persona e a sua voz (`personas.py`); as regras das ferramentas são as mesmas para todos (`prompts.py`).
 
 **Sons de interface.** O HUD gera os sons por código (Web Audio, sem arquivos de terceiros): link abrindo e fechando, ferramenta começando e terminando, confirmação por código aceita, erro e timer acabando. No painel **Sistema**, botão **Ajustes**, em "Sons da interface", dá para ligar ou desligar, ajustar o volume e tocar um teste. A escolha fica salva no navegador. O bipe da palavra de ativação segue a mesma configuração, e quando o silêncio encerra o link toca um som só.
 
@@ -799,7 +811,7 @@ Sem LiveKit configurado, o botão **Simulação** roda uma conversa roteirizada 
 
 Tudo fica em **Ajustes** (painel Sistema) e é salvo no navegador.
 
-- **Temas.** J.A.R.V.I.S. (ciano e âmbar), Mark III (dourado e vermelho), F.R.I.D.A.Y. (violeta e rosa) e Stealth (prata e verde-água). Mudam o HUD e a cena 3D; processando continua num tom próprio do tema e a falha continua vermelha. Também por voz: "Jarvis, muda o tema para vermelho", "deixa roxo", "volta ao normal".
+- **Protocolos (temas).** J.A.R.V.I.S., Mark III, F.R.I.D.A.Y. e Stealth: cada um muda a persona, a voz, o núcleo 3D, os painéis e os sons (detalhes em [Protocolos do HUD](#protocolos-do-hud)). Processando continua num tom próprio de cada um e a falha continua vermelha. As cores deslizam (0,8 s) em vez de trocar de golpe, e um "processando" curto antes da voz ou as pausas entre frases não repintam o HUD. Também por voz: "Jarvis, chama a Friday", "modo Mark III", "modo discreto", "volta ao normal".
 - **Legenda ao vivo.** A fala do Jarvis aparece palavra por palavra embaixo do núcleo e some alguns segundos depois.
 - **Modo cinema.** Botão ao lado do dock, tecla `F` ou "modo cinema": some com os painéis, aproxima o núcleo e aumenta a legenda. Notificações continuam aparecendo.
 - **Modo ambiente.** Depois de 3 minutos sem link e sem mexer no mouse ou teclado, o HUD vira um relógio grande com o clima da `JARVIS_HOME_CITY` e a próxima reunião (com `JARVIS_ENABLE_CALENDAR=true`), e o núcleo fica em baixa energia. O relógio desloca alguns pixels por minuto para não marcar a tela. Qualquer movimento, "Jarvis" ou um aviso volta ao HUD.
@@ -807,8 +819,22 @@ Tudo fica em **Ajustes** (painel Sistema) e é salvo no navegador.
 - **Gráficos nos painéis.** Meteorologia mostra a temperatura das próximas 24 h (passe o mouse para ver cada hora e a chance de chuva); Diagnóstico atualiza CPU e RAM ao vivo enquanto está aberto; Agenda desenha o dia em blocos com um marcador de agora.
 - **Globo nas pesquisas.** Enquanto o Jarvis consulta a internet, o globo cresce, os anéis recuam e cada destino ganha um rótulo com a cidade e o serviço.
 - **Painéis arrastáveis.** Arraste um painel pelo cabeçalho para a outra coluna ou outra posição (no computador); "Restaurar painéis" volta ao layout de fábrica.
-- **Qualidade da cena.** Automática (padrão) mede os quadros por segundo e diminui partículas e efeitos quando o PC não acompanha, voltando quando sobra fôlego; Alta, Média e Economia fixam o nível. O painel mostra o nível em uso e os fps.
+- **Qualidade da cena.** Automática (padrão) mede os quadros por segundo e diminui partículas e efeitos quando o PC fica lento por uns 8 s seguidos, tentando voltar depois de ~40 s de folga; cada troca aparece no Registro. Alta, Média e Economia fixam o nível. O painel mostra o nível em uso e os fps.
 - **Som do reator.** Zumbido baixo que cresce com a voz do Jarvis enquanto o link está aberto. Vem desligado e segue o volume dos sons da interface.
+
+### Protocolos do HUD
+
+Em **Ajustes → Protocolo** (ou por voz) o HUD inteiro muda de identidade. O protocolo fica no servidor (`persona.json`, fora do git): o agente começa cada conversa nele, todos os aparelhos (PC e celular) mostram o mesmo e, trocado no meio da conversa, a persona e a voz mudam na hora, depois que a conversa fica quieta por um instante (a confirmação não é cortada), e o novo protocolo se apresenta.
+
+| | J.A.R.V.I.S. | Mark III | F.R.I.D.A.Y. | Stealth |
+| --- | --- | --- | --- | --- |
+| Quem responde | O mordomo britânico, "senhor", humor seco | O Jarvis dentro da armadura: respostas de relatório, "sistemas nominais" | A F.R.I.D.A.Y.: direta, calorosa, irreverente, "chefe" | O Jarvis em modo discreto: uma frase, sem piadas |
+| Voz padrão | Charon (ou `JARVIS_VOICE`) | Orus | Kore (feminina) | Enceladus (sussurrada) |
+| Núcleo 3D | Treliça de icosaedros, anéis clássicos, barras | Reator arc com 10 células e bobinas, mira tática com catraca, espectro em blocos, faíscas | Giroscópio de 3 anéis, plasma líquido, arcos suaves, espectro em contas de luz | Um anel fino, sem partículas, sem feixe, brilho baixo |
+| Painéis | Recorte em dois cantos, Orbitron | Placas de armadura (4 cantos), Teko, moldura de mira, scanlines fortes | Vidro arredondado, Exo 2, moldura que respira, sem scanlines | Traço fino, fonte mono, sem halos nem scanlines |
+| Sons | Senoidais | Mais graves e mecânicos | Mais agudos e leves | Baixinhos |
+
+A palavra de ativação continua "Jarvis" em todos (o detector local só conhece essa palavra); a F.R.I.D.A.Y. sabe disso. "Troca sua voz para X" vale para o protocolo ativo (o `voz.json` guarda uma voz por protocolo; o arquivo antigo continua valendo para o J.A.R.V.I.S.). Com a OpenAI, a persona muda e a voz continua a de `OPENAI_VOICE`.
 
 ### Atalhos do HUD
 
@@ -1002,6 +1028,7 @@ Cobertura: settings, seleção de backend, registro de ferramentas, clima e prev
 
 Assistente de tela (TEL-31): ordem de leitura (seleção, área de transferência, texto da janela ou do cursor e print só sem texto), HUD em foco, recusa de cofres de senha, ocultação de segredos, região do cursor nos monitores de x negativo, prompt e parse do modelo, queda para a sessão de voz e cópia sem digitar, com UI Automation, prints, área de transferência e modelo falsos; no HUD, o destaque de sintaxe e o painel.
 Modo ditado (DIT-29): a normalização (comandos falados → texto/teclas, pontuação automática, maiúsculas, "ponto"/"vírgula" como palavras) e a máquina de estados (parciais e final do Gemini, a fala que ligou o modo nunca digitada, silêncio do Jarvis, fim do ditado, desfazer, Shift+Enter em apps de conversa, recusas, ESC, mouse, silêncio e troca de campo), com teclado falso.
+Protocolos: `tests/test_personas.py` confere `persona.json`, o prompt do J.A.R.V.I.S. intacto, a persona e a saudação de cada protocolo, a troca que mantém memórias e contexto, a espera pela conversa quieta, a troca ao vivo (instruções, voz e apresentação) e `/api/persona`; no HUD, `themes.test.ts`, `visualMode.test.ts` (histerese do modo) e o timbre dos sons. Painel Gestos: `tests/test_gesture_management.py` (catálogo, gestos repetidos, API com as recusas, botões pelo RPC) e `gestures.test.ts` (estado ao vivo e editor).
 Voz e sons (VOZ-30): `tests/test_voices.py` confere `JARVIS_VOICE`, a lista de vozes contra a do plugin, `voz.json`, a ferramenta `change_voice` (troca na hora depois da resposta) e o tom do prompt; `web/src/lib/sounds.test.ts` e `coreActivity.test.ts` cobrem qual som cada evento toca, o volume salvo no navegador e os estados "pensando"/"executando" do núcleo.
 
 Agenda (AGD-27): datas em português com relógio fixo, busca do evento falado ("a reunião das 10"), criar/alterar/apagar só com "confirmar agenda" + código, erros de login e de rede, aviso antes das reuniões (janela, uma vez só, fila no servidor e despertar do HUD), com a API do Google falsa.
@@ -1027,7 +1054,8 @@ screen_assist.py      Assistente de tela (TEL-31): lê seleção/janela/cursor p
 dictation.py          Modo ditado (DIT-29): transcrições da fala → comandos falados → teclado do MOU-20
 confirmation.py       Frase "confirmar <código>" tolerante à transcrição de voz
 memory.py             Memória entre conversas (memoria.json), filtro de segredos e painel MEM-23
-voices.py             Voz do Jarvis (VOZ-30): vozes do Gemini Live, voz.json e a ferramenta change_voice
+voices.py             Voz do Jarvis (VOZ-30): vozes do Gemini Live, voz.json (uma voz por protocolo) e a ferramenta change_voice
+personas.py           Protocolos do HUD no agente: persona, voz, saudação, persona.json e a troca ao vivo
 routines.py           Rotinas (rotinas.json): passos, execução com falhas parciais, ferramentas e agendador
 calendar_tools.py     Google Agenda (AGD-27): login OAuth, datas em português, ferramentas e avisos de reunião
 win_desktop.py        Monitores, janelas e captura de tela via Win32
@@ -1056,8 +1084,10 @@ web/
   src/scene/          Cena 3D (núcleo, anéis, espectro, órbitas, partículas, grade)
   src/components/     Painéis do HUD e cartões holográficos
   src/hooks/          Sessão LiveKit, simulação, status do servidor
-  src/lib/            Estado do HUD, áudio, catálogo de protocolos, sons de interface (sounds.ts), temas,
+  src/lib/            Estado do HUD, áudio, catálogo de protocolos, sons de interface (sounds.ts), protocolos
+                      do HUD (themes.ts), modo visual com histerese (visualMode.ts), painel Gestos (gestures.ts),
                       preferências do HUD (prefs.ts), qualidade da cena, gráficos e som do reator
+  src/styles/         hud.css e cards.css (base) e protocols.css (o que cada protocolo muda)
 ```
 
 ## Troubleshooting
