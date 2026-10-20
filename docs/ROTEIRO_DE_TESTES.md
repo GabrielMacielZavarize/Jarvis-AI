@@ -303,3 +303,14 @@ Detalhes em [mouse-e-ditado.md](mouse-e-ditado.md#clica-aqui-apontando). Precisa
 - [ ] Aponte para a caixa de mensagem do WhatsApp e diga "escreve aqui: já vou". O texto cai na caixa apontada, mesmo com outra janela em foco antes, e nada é enviado.
 - [ ] Aponte para um campo de senha e diga "digita olá aqui": recusado.
 - [ ] Sem apontar, "clica no botão de play" e "digita olá" funcionam como antes.
+
+## 27. Painel de saúde
+
+Detalhes em [saude.md](saude.md).
+
+- [ ] Converse alguns turnos. O painel Saúde (SAU-40) mostra o tempo de resposta e o `saude.db` aparece na pasta do projeto, fora do `git status`.
+- [ ] Diga "Jarvis" e fique calado até o link fechar por silêncio, três vezes. Em Detalhes, a linha do Jarvis mostra 3 sem fala e a sugestão pede para subir `JARVIS_WAKE_THRESHOLD_JARVIS`.
+- [ ] Diga "Jarvis" baixinho, longe do microfone, algumas vezes sem ativar. As quase ativações sobem.
+- [ ] Peça o clima de uma cidade inventada até a ferramenta falhar. Ela aparece em Ferramentas com erro.
+- [ ] No celular pareado o painel aparece sem o botão Limpar. No PC, Limpar zera tudo.
+- [ ] Com `JARVIS_HEALTH=false` o painel mostra "desligado" e nada novo é gravado.

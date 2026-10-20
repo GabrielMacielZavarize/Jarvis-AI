@@ -58,6 +58,10 @@ MAX_UTTERANCE_FRAMES = 50
 SECRET_ENV = "JARVIS_WAKE_SECRET"
 SECRET_HEADER = "X-Jarvis-Wake"
 LOG_PREFIX = "[ATIVAÇÃO]"
+# Quase ativação (SAU-40): a pontuação chegou a 60% do limiar sem passar dele. Cada fala vira um
+# evento só, com o pico dos próximos instantes.
+NEAR_RATIO = 0.6
+NEAR_WINDOW_S = 1.5
 
 # Prefixos que o Chrome/Edge põem nos aliases do microfone padrão e de comunicação.
 BROWSER_ALIAS_PREFIX = re.compile(
@@ -235,6 +239,8 @@ class WakeDetector:
         self.refractory_s = refractory_s
         self._clock = clock
         self._last_at: float | None = None
+        # Scores of the last frame, for the near misses (NearMisses).
+        self.last_scores: dict[str, float] = {}
 
     @property
     def words(self) -> tuple[str, ...]:
@@ -247,7 +253,8 @@ class WakeDetector:
         return {word: float(score) for word, score in self.model.predict(frame).items()}
 
     def process(self, frame: Any) -> Detection | None:
-        heard = [(score, word) for word, score in self.scores(frame).items() if score >= self.threshold_for(word)]
+        self.last_scores = self.scores(frame)
+        heard = [(score, word) for word, score in self.last_scores.items() if score >= self.threshold_for(word)]
         if not heard:
             return None
         now = self._clock()
@@ -260,6 +267,41 @@ class WakeDetector:
 
     def reset(self) -> None:
         self.model.reset()
+
+
+class NearMisses:
+    """Utterances that almost woke a word: peak score between ``NEAR_RATIO`` of the threshold and it."""
+
+    def __init__(
+        self,
+        detector: WakeDetector,
+        *,
+        ratio: float = NEAR_RATIO,
+        window_s: float = NEAR_WINDOW_S,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.detector = detector
+        self.ratio = ratio
+        self.window_s = window_s
+        self._clock = clock
+        self._open: dict[str, tuple[float, float]] = {}
+
+    def feed(self, scores: Mapping[str, float]) -> list[tuple[str, float]]:
+        """Feed one frame's scores; returns the (word, peak) of the near misses that just ended."""
+        now = self._clock()
+        for word, score in scores.items():
+            limit = self.detector.threshold_for(word)
+            if limit * self.ratio <= score < limit:
+                start, best = self._open.get(word, (now, 0.0))
+                self._open[word] = (start, max(best, score))
+        done = [(word, best) for word, (start, best) in self._open.items() if now - start >= self.window_s]
+        for word, _ in done:
+            del self._open[word]
+        return done
+
+    def discard(self) -> None:
+        """The word did wake (or the mic closed): what was open is not a near miss."""
+        self._open.clear()
 
 
 class WordModel:
@@ -382,6 +424,17 @@ class ServerLink:
         label = body.get("mic_label")
         return DetectorState(listen=bool(body.get("listen")), mic_label=label if isinstance(label, str) else None)
 
+    def near(self, word: str, score: float) -> None:
+        """Tell the health panel (SAU-40) that ``word`` almost woke; lost if the server is down."""
+        try:
+            self.http.post(
+                f"{self.base_url}/api/health/event",
+                json={"kind": "wake_near", "key": word, "value": round(score, 3)},
+                timeout=self.timeout,
+            )
+        except requests.RequestException:
+            pass
+
     def trigger(self, score: float, word: str | None = None) -> dict[str, Any] | None:
         body: dict[str, Any] = {"score": round(score, 3)}
         if word:
@@ -412,8 +465,11 @@ def run(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
     keep_running: Callable[[], bool] = lambda: True,
+    near: NearMisses | None = None,
 ) -> None:
-    """Listen only while the server says so; on a wake word, free the mic and tell the server which."""
+    """Listen only while the server says so; on a wake word, free the mic and tell the server which.
+
+    With ``near`` the utterances that almost woke a word go to the health panel (SAU-40)."""
     stream: AudioSource | None = None
     stream_label: str | None = None
     listening = False
@@ -425,6 +481,8 @@ def run(
     def close_stream(reason: str) -> None:
         nonlocal stream, mic_silent
         mic_silent = False
+        if near is not None:
+            near.discard()
         if stream is not None:
             stream.close()
             stream = None
@@ -476,6 +534,8 @@ def run(
                 )
             detection = detector.process(frame)
             if detection is None:
+                for word, score in near.feed(detector.last_scores) if near is not None else ():
+                    link.near(word, score)
                 continue
 
             close_stream(f"“{word_label(detection.word)}” detectado (pontuação {detection.score:.2f}); abrindo o link.")
@@ -599,7 +659,7 @@ def main(argv: list[str] | None = None) -> int:
     limits = ", ".join(f"{word_label(word)} {detector.threshold_for(word):.2f}" for word in detector.words)
     log(f"Detector pronto (limiar {limits}). Diga {spoken_words(detector.words)} para abrir o link.")
     try:
-        run(link, detector, mic_override=mic_override)
+        run(link, detector, mic_override=mic_override, near=NearMisses(detector))
     except KeyboardInterrupt:
         pass
     return 0

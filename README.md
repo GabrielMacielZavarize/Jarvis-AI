@@ -22,6 +22,7 @@ In English: real-time voice assistant built on LiveKit Agents (Gemini Live or Op
 - Olha pela webcam quando você pede, percebe quando você sai e volta e entende gestos das mãos para mexer nas janelas. Um painel no HUD mostra os gestos ao vivo e deixa trocar o que cada um faz.
 - Acorda quando você diz "Jarvis" (ou "Friday", que já abre a F.R.I.D.A.Y.) e também funciona pelo celular, na rede de casa.
 - Se o modelo gratuito do Google estoura a cota ou trava, a conversa continua em outro modelo sem cair.
+- Guarda um histórico de tempo de resposta, ativações e falhas, e sugere o que ajustar no `.env`.
 
 Quase tudo que mexe no PC vem desligado e liga por variável no `.env`. A lista completa está em [docs/protocolos.md](docs/protocolos.md).
 
@@ -83,6 +84,7 @@ Linux, macOS, OpenAI e as demais opções estão em [docs/instalacao.md](docs/in
 | Casa inteligente (Home Assistant) | [casa.md](docs/casa.md) |
 | Avisos e lembretes | [avisos.md](docs/avisos.md) |
 | Celular na rede de casa | [celular.md](docs/celular.md) |
+| Painel de saúde | [saude.md](docs/saude.md) |
 | Segurança | [seguranca.md](docs/seguranca.md) |
 | Arquitetura e arquivos | [arquitetura.md](docs/arquitetura.md) |
 | Testes automáticos | [testes.md](docs/testes.md) |

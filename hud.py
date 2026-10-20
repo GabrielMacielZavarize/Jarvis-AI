@@ -16,6 +16,8 @@ from typing import Any
 
 from livekit.agents import get_job_context
 
+from health import report as report_health
+
 logger = logging.getLogger("jarvis-hud")
 
 HUD_TOPIC = "jarvis.hud"
@@ -61,6 +63,8 @@ async def show_card(kind: str, data: dict[str, Any]) -> bool:
 
 
 async def tool_status(name: str, status: str, detail: str | None = None) -> bool:
+    if status == "error":
+        report_health("tool_error", name, detail=detail)
     return await publish_hud_event("tool", name=name, status=status, detail=detail)
 
 
@@ -214,4 +218,5 @@ def watch_response_time(session: Any, model: Callable[[], str]) -> None:
         if seconds > MAX_REPLY_SECONDS:
             return
         logger.info("Resposta em %.1f s (%s).", seconds, model() or "modelo")
+        report_health("latency", model() or "modelo", seconds)
         _publish_soon("latency", seconds=round(seconds, 2), model=model())

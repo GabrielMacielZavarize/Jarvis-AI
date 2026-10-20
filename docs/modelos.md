@@ -43,3 +43,7 @@ O painel Sistema mostra quanto o Jarvis levou do fim da sua fala até a primeira
 O Gemini espera um silêncio para decidir que você terminou de falar. Se as respostas demoram a começar, teste `JARVIS_END_OF_SPEECH_MS=500`. Se ele passar a cortar você no meio da frase, suba para 900. Aceita de 200 a 3000, ou 0 para o padrão do Google.
 
 Continua lento? Veja [O Jarvis demora para responder](problemas.md#o-jarvis-demora-para-responder).
+
+## Histórico
+
+O painel Saúde do HUD guarda o tempo de resposta de cada turno, as pausas de cada modelo e as trocas no meio da conversa. Quando o tempo piora de um dia para o outro ou um modelo pausa por cota toda hora, ele sugere o ajuste. Veja [saude.md](saude.md).

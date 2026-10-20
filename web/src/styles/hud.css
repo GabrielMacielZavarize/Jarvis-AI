@@ -1919,3 +1919,46 @@
   margin: 0;
   color: var(--text-dim);
 }
+
+/* ───────────────────────── Saúde (SAU-40) ───────────────────────── */
+
+.health__hints {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.health__hint {
+  padding: 7px 10px;
+  border-left: 2px solid var(--c-primary);
+  background: rgb(var(--c-primary-rgb) / 0.06);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+.health__hint--warn {
+  border-left-color: var(--c-accent);
+  background: rgb(var(--c-accent-rgb) / 0.08);
+}
+.health__stats .stat dd {
+  white-space: normal;
+  font-size: 13.5px;
+}
+.health__alert {
+  color: var(--c-accent);
+}
+.health__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+.health__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.health__clear {
+  margin-left: auto;
+}

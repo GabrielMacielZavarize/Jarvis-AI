@@ -35,6 +35,7 @@ import gesture_mapping
 from gesture_engine import CALIBRATION_FILE as GESTURE_CALIBRATION_FILE
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
+from health import HealthStore, build_health_router
 from routines import RoutineScheduler
 from context_triggers import ContextWatcher
 from proactive import ProactiveEngine, build_proactive_router
@@ -357,6 +358,7 @@ def create_app(
     presence_service: PresenceService | None = None,
     devices: DeviceRegistry | None = None,
     context_watcher: ContextWatcher | None = None,
+    health_store: HealthStore | None = None,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
@@ -366,7 +368,8 @@ def create_app(
     turns off the meeting reminders loop (tests); ``proactive`` builds the PRO-28 notice engine
     (tests); by default it runs when JARVIS_PROACTIVE=true; ``presence_service`` replaces the
     webcam presence detector (PRS-25, tests); ``devices`` replaces ``aparelhos.json`` (tests);
-    ``context_watcher`` replaces the watcher of the routines fired by context (tests)."""
+    ``context_watcher`` replaces the watcher of the routines fired by context (tests);
+    ``health_store`` replaces ``saude.db`` (SAU-40, tests)."""
 
     def default_engine(wake_hub: WakeHub) -> ProactiveEngine | None:
         try:
@@ -748,6 +751,22 @@ def create_app(
         return {"welcome": {"away_s": round(welcome.away_s), "notes": welcome.notes}}
 
     app.state.wake_hub = WakeHub()
+    # SAU-40: saude.db só é aberto no primeiro evento.
+    health_box: list[HealthStore] = [health_store] if health_store is not None else []
+
+    def health() -> HealthStore:
+        if not health_box:
+            health_box.append(HealthStore())
+        return health_box[0]
+
+    def record_wake(word: str | None, score: float) -> None:
+        try:
+            if current_settings().health_enabled:
+                health().add("wake", word or "jarvis", score)
+        except SettingsError:
+            pass
+
+    app.include_router(build_health_router(health, current_settings, _require_local))
     app.state.base_url = None
     app.state.proactive = None
     app.include_router(build_proactive_router(lambda: app.state.proactive))
@@ -759,6 +778,7 @@ def create_app(
             current_settings,
             secret=os.environ.get(WAKE_SECRET_ENV),
             open_browser=open_browser,
+            on_wake=record_wake,
         )
     )
 

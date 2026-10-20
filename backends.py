@@ -11,6 +11,7 @@ from livekit.agents.llm import RealtimeModelError
 from livekit.agents.utils import images
 from livekit.plugins import google, noise_cancellation, openai, silero
 
+from health import report as report_health
 from model_pool import REASON_LABELS, ModelPool, classify_failure
 from personas import load_persona, set_active
 from prompts import build_agent_instructions, build_initial_reply_instruction
@@ -308,6 +309,7 @@ def watch_model_failover(runtime: JarvisRuntime, pool: ModelPool) -> None:
             target: str | None = failed
         else:
             pool.mark_failed(failed, error.error if reason != "context" else "falha repetida")
+            report_health("model_pause", failed, detail=reason)
             target = pool.next_after(failed)
         if target is None or state["switches"] >= MAX_MODEL_SWITCHES:
             logger.error("Gemini Live caiu (%s) e não há outro modelo livre para continuar.", REASON_LABELS[reason])
@@ -335,6 +337,7 @@ def watch_model_failover(runtime: JarvisRuntime, pool: ModelPool) -> None:
             session.update_agent(agent)
             logger.warning("Gemini Live: %s em %s; a conversa segue em %s.", REASON_LABELS[reason], previous, target)
             await publish_hud_event("model", model=target, previous=previous, reason=REASON_LABELS[reason])
+            report_health("model_switch", target, detail=previous)
         except Exception:
             logger.exception("Não consegui passar a conversa para %s.", target)
         finally:
