@@ -37,6 +37,7 @@ from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
 from routines import RoutineScheduler
 from proactive import ProactiveEngine, build_proactive_router
+from screen_watch import attach_screen_watch, build_watch_router
 from presence import NEEDS_CAMERA, PresenceService, get_service, voice_action
 from personas import is_persona, save_persona, saved_persona
 from lan_access import DeviceRegistry, LanGuard, TlsFiles, build_lan_router, device_of, ensure_certificates, lan_addresses, lan_url
@@ -119,6 +120,7 @@ LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 NO_STORE = {"Cache-Control": "no-store"}
 MJPEG_BOUNDARY = "frame"
 PROACTIVE_TOOL_NAMES = ["set_reminder", "list_reminders", "cancel_reminder", "configure_alerts"]
+WATCH_TOOL_NAMES = ["watch_screen"]
 MCP_TOOL_NAMES = ["mcp_status", "confirm_mcp_action", "cancel_mcp_action"]
 COMPUTER_USE_TOOL_NAMES = [
     "click_on_screen",
@@ -401,6 +403,8 @@ def create_app(
         app.state.proactive = engine
         if engine is not None:
             engine.start()
+        # OLH-35: o vigia de janela é mais um monitor do motor de avisos.
+        app.state.screen_watch = attach_screen_watch(engine, settings)
         yield
         scheduler_task.cancel()
         if reminders is not None:
@@ -504,6 +508,7 @@ def create_app(
             + (PRESENCE_TOOL_NAMES if settings.presence_enabled else [])
             + (COMPUTER_USE_TOOL_NAMES if settings.computer_use_enabled else [])
             + (PROACTIVE_TOOL_NAMES if settings.proactive_enabled else [])
+            + (WATCH_TOOL_NAMES if settings.proactive_enabled and settings.pc_control_enabled else [])
             + (MCP_TOOL_NAMES if settings.mcp_enabled else [])
         )
         return {
@@ -720,6 +725,8 @@ def create_app(
     app.state.base_url = None
     app.state.proactive = None
     app.include_router(build_proactive_router(lambda: app.state.proactive))
+    app.state.screen_watch = None
+    app.include_router(build_watch_router(lambda: app.state.screen_watch))
     app.include_router(
         build_wake_router(
             app.state.wake_hub,

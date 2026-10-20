@@ -248,6 +248,21 @@ Detalhes em [casa.md](casa.md). Precisa de `JARVIS_ENABLE_MCP=true`, da integra�
 - [ ] Com a url em `http://homeassistant.local:8123/api/mcp`, o `python mcp_client.py` recusa o `mcp.json` e pede o IP ou `https://`.
 - [ ] Sem o token no `.env`, o link abre normal e o Jarvis diz que a integração do Home Assistant está indisponível.
 
+## 22. Fica de olho no terminal
+
+Detalhes em [assistente-de-tela.md](assistente-de-tela.md#fica-de-olho-numa-janela). Precisa de `JARVIS_ENABLE_PC_CONTROL=true`, `JARVIS_PROACTIVE=true` e da `GOOGLE_API_KEY`.
+
+- [ ] O painel Protocolos mostra o OLH-35. "Fica de olho no terminal" com o Windows Terminal aberto atrás do HUD: ele confirma e diz qual terminal.
+- [ ] Rode `python -c "1/0"` no terminal. Até uns 10 s depois o Jarvis diz que apareceu um erro e pergunta se quer a explicação. "Sim": o painel Assistente de tela explica o `ZeroDivisionError`, com o terminal ainda atrás do HUD.
+- [ ] Rode o mesmo comando de novo: nenhum aviso novo. Rode `python -c "import json; json.loads('{')"`: vem aviso do `JSONDecodeError`.
+- [ ] Um teste falhando (`pytest` ou `phpunit`) e um `npm run build` quebrado também avisam. Abrir um arquivo com `catch (Exception $e)` no PhpStorm vigiado não avisa nada.
+- [ ] "Fica de olho no PhpStorm" e depois "que janela você está vigiando?": ele diz o PhpStorm, os minutos e os erros avisados.
+- [ ] Encerre o link e provoque outro erro: aparece só o aviso no HUD, com o código OLH-35 e "sem voz".
+- [ ] "Para de me avisar dos erros" silencia o assunto: com o link aberto o próximo erro fica só no HUD. "Pode voltar a avisar dos erros" desfaz.
+- [ ] Imprima uma chave falsa no erro (`python -c "raise RuntimeError('AIzaSyA1234567890abcdefghijklmnopqrstu')"`): nem o aviso nem o painel mostram a chave.
+- [ ] Feche o terminal vigiado: aparece no HUD que o vigia parou porque a janela fechou. Deixe outro vigia 30 minutos parado: ele para sozinho.
+- [ ] "Fica de olho no KeePass" é recusado. "Para de vigiar" desliga, e o Gerenciador de Tarefas mostra o `jarvis.py` sem gasto de CPU perceptível enquanto vigia.
+
 ## 25. Clica aqui apontando
 
 Detalhes em [mouse-e-ditado.md](mouse-e-ditado.md#clica-aqui-apontando). Precisa de `JARVIS_ENABLE_COMPUTER_USE=true`, dos gestos armados e do link aberto.

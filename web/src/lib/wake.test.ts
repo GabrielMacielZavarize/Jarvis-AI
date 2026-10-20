@@ -154,6 +154,11 @@ describe('noticeToast', () => {
     expect(noticeToast({ ...notice, priority: 'high' }).level).toBe('warn');
     expect(noticeToast({ ...notice, priority: 'low' }).level).toBe('info');
   });
+
+  it('marks the errors of the watched window with their own protocol (OLH-35)', () => {
+    const error = { ...notice, topic: 'watch', priority: 'normal' as const, title: 'Exceção' };
+    expect(noticeToast(error)).toEqual({ level: 'info', title: 'Exceção', message: '15% restantes', code: 'OLH-35' });
+  });
 });
 
 describe('wake words', () => {

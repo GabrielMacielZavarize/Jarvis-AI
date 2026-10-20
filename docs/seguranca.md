@@ -114,6 +114,8 @@ O `look_at_screen` só roda quando você pede. O print aparece no HUD e é envia
 
 O assistente de tela (TEL-31) também só roda quando você pede e envia ao Gemini o texto lido (ou o print, quando não há texto). Antes de sair do computador, chaves de API, tokens, chaves privadas e linhas de `.env` como `DB_PASSWORD=...` viram `[segredo oculto]`. Gerenciadores de senha, o UAC, janelas de credenciais e a tela de bloqueio nunca são lidos.
 
+O vigia de janela (OLH-35) só liga quando você pede e só lê texto, nunca tira print. A leitura fica no computador: o que vai para o modelo é a linha do erro, já sem segredos, dentro do aviso, e a explicação completa só sai quando você diz "sim". Ele recusa e para nas mesmas janelas que nunca são lidas e desliga sozinho quando a janela fecha ou depois de 30 minutos parado. O `/api/proactive/watch` só atende este computador.
+
 Nada fica salvo em disco. A última explicação vive só na memória da sessão, por 30 minutos, para o "copia a correção", que só escreve na área de transferência. O texto da tela é tratado como dado: se ele tentar dar ordens ao Jarvis, o painel avisa e nada é executado.
 
 ## Memória
