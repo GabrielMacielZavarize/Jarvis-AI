@@ -18,8 +18,8 @@ export function HudSettings() {
   return (
     <>
       <div className="stat stat--setting" style={{ gridColumn: '1 / -1' }}>
-        <dt title="Cada protocolo muda o nome, a persona e a voz do assistente, o núcleo 3D, os painéis e os sons">Protocolo</dt>
-        <dd className="themes" role="radiogroup" aria-label="Protocolo do HUD">
+        <dt title="Cada persona muda o nome, o jeito de falar e a voz do assistente, o núcleo 3D, os painéis e os sons">Persona</dt>
+        <dd className="themes" role="radiogroup" aria-label="Persona do HUD">
           {THEMES.map((theme) => (
             <button
               key={theme.id}

@@ -128,7 +128,7 @@ describe('SOUND_CUES', () => {
 });
 
 describe('styledTone', () => {
-  it('plays each cue in the protocol timbre', () => {
+  it('plays each cue in the persona timbre', () => {
     const spec = SOUND_CUES.linkOpen[1];
     expect(styledTone(spec, themeInfo('jarvis').sound)).toEqual({ ...spec, wave: 'sine' });
     const mark3 = styledTone(spec, themeInfo('mark3').sound);

@@ -1,11 +1,11 @@
-"""Protocolos do HUD no agente: quem responde, com que jeito e com que voz.
+"""Personas do HUD no agente: quem responde, com que jeito e com que voz.
 
 O tema do HUD (J.A.R.V.I.S., Mark III, F.R.I.D.A.Y. ou Stealth) não é só a cor: cada um é uma
-persona. O protocolo escolhido fica em ``persona.json`` (fora do git): o servidor do HUD grava
+persona. A escolhida fica em ``persona.json`` (fora do git): o servidor do HUD grava
 quando o tema muda (clique em Ajustes ou "Jarvis, muda para a Friday") e o agente lê no começo
 de cada conversa e enquanto ela dura, trocando o jeito de falar e a voz na hora.
 
-A palavra de ativação continua "Jarvis" em todos (o detector local só conhece essa palavra).
+A palavra de ativação continua "Jarvis" em todas (o detector local só conhece essa palavra).
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ QUIET_LIMIT_SECONDS = 25.0
 class Persona:
     id: str
     name: str  # como aparece e como ela se apresenta
-    voice: str  # voz padrão do Gemini Live neste protocolo
+    voice: str  # voz padrão do Gemini Live nesta persona
     address: str  # como trata o usuário
     prompt: str  # "# Persona" + "# Especificações": o resto das instruções é comum a todos
     greeting: str  # {salutation} vira "Bom dia" / "Boa tarde" / "Boa noite"
@@ -162,7 +162,7 @@ PERSONAS: dict[str, Persona] = {
     ),
 }
 
-# O protocolo desta conversa (o change_voice salva a voz para ele).
+# A persona desta conversa (o change_voice salva a voz para ela).
 _ACTIVE = {"id": DEFAULT_PERSONA}
 
 
@@ -171,7 +171,7 @@ def is_persona(value: Any) -> bool:
 
 
 def saved_persona(path: Path | None = None) -> str | None:
-    """The protocol in persona.json, or None when nobody chose one yet."""
+    """The persona in persona.json, or None when nobody chose one yet."""
     try:
         data = json.loads((path or PERSONA_FILE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -186,7 +186,7 @@ def load_persona(path: Path | None = None) -> Persona:
 
 def save_persona(persona: str, path: Path | None = None) -> str:
     if not is_persona(persona):
-        raise ValueError(f"Protocolo desconhecido: {persona}")
+        raise ValueError(f"Persona desconhecida: {persona}")
     target = path or PERSONA_FILE
     temporary = target.with_suffix(".json.tmp")
     temporary.write_text(json.dumps({"persona": persona}, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -218,7 +218,7 @@ def swap_persona(instructions: str, old: Persona, new: Persona) -> str:
     """The same instructions with another persona block (memories and context stay as they are)."""
     if old.prompt in instructions:
         return instructions.replace(old.prompt, new.prompt, 1)
-    for persona in PERSONAS.values():  # built for another protocol than the one we thought
+    for persona in PERSONAS.values():  # built for another persona than the one we thought
         if persona.prompt in instructions:
             return instructions.replace(persona.prompt, new.prompt, 1)
     return new.prompt + instructions
@@ -239,7 +239,7 @@ async def wait_quiet(session: Any, settle: float = QUIET_SECONDS, limit: float =
 
 
 async def apply_persona(session: Any, agent: Any, old: Persona, new: Persona, *, introduce: bool = True) -> None:
-    """Switch the live conversation to another protocol: instructions, voice and a one-line intro."""
+    """Switch the live conversation to another persona: instructions, voice and a one-line intro."""
     from voices import _live_model, effective_voice
 
     await wait_quiet(session)
@@ -255,7 +255,7 @@ async def apply_persona(session: Any, agent: Any, old: Persona, new: Persona, *,
         voice = effective_voice(load_settings().google_voice, persona=new.id)
         try:
             llm.update_options(voice=voice)  # reabre a sessão do Gemini já com as novas instruções
-            logger.info("Protocolo %s com a voz %s.", new.name, voice)
+            logger.info("Persona %s com a voz %s.", new.name, voice)
         except Exception:
             logger.warning("Não deu para trocar a voz para %s na hora.", voice, exc_info=True)
     if introduce:
@@ -263,11 +263,11 @@ async def apply_persona(session: Any, agent: Any, old: Persona, new: Persona, *,
         try:
             session.generate_reply(instructions=f'Diga exatamente, e nada mais: "{new.intro}"')
         except Exception:
-            logger.debug("Sem a apresentação do novo protocolo.", exc_info=True)
+            logger.debug("Sem a apresentação da nova persona.", exc_info=True)
 
 
 def watch_persona(session: Any, current_agent: Any, path: Path | None = None, poll: float = POLL_SECONDS) -> asyncio.Task[None]:
-    """Follow persona.json during the session: a protocol picked on the HUD takes over right away.
+    """Follow persona.json during the session: a persona picked on the HUD takes over right away.
 
     ``current_agent`` is a callable returning the agent now in charge (it changes on a model fallback).
     """
@@ -292,7 +292,7 @@ def watch_persona(session: Any, current_agent: Any, path: Path | None = None, po
             chosen = load_persona(target)
             if chosen.id == current.id:
                 continue
-            logger.info("Protocolo trocado no HUD: %s → %s.", current.name, chosen.name)
+            logger.info("Persona trocada no HUD: %s → %s.", current.name, chosen.name)
             await apply_persona(session, current_agent(), current, chosen)
             current = chosen
 

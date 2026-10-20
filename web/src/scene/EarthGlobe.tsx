@@ -92,7 +92,7 @@ const arcFragment = /* glsl */ `
   }
 `;
 
-// Colours fixed per protocol (its resting look, never the mode tint) so connections stay readable.
+// Colours fixed per persona (its resting look, never the mode tint) so connections stay readable.
 const KIND_COLORS: Record<NetLink['kind'], Color> = {
   request: new Color('#5ff4ff'),
   link: new Color('#5ff4ff'),

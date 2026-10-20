@@ -19,10 +19,10 @@ const SEGMENTS = Array.from({ length: 10 }, (_, index) => index * 36);
 const COILS = Array.from({ length: 16 }, (_, index) => index * 22.5);
 
 /**
- * The protocol's emblem: J.A.R.V.I.S. the arc reactor with the Mark VI triangle, Mark III the round
+ * The persona's emblem: J.A.R.V.I.S. the arc reactor with the Mark VI triangle, Mark III the round
  * reactor of the first armour (more cells, no triangle), F.R.I.D.A.Y. a gyroscope, Stealth a bare ring.
  */
-export function ProtocolMark({ theme, className = 'brand__mark' }: { theme: ThemeId; className?: string }) {
+export function PersonaMark({ theme, className = 'brand__mark' }: { theme: ThemeId; className?: string }) {
   if (theme === 'friday') {
     return (
       <svg className={className} viewBox="0 0 48 48" aria-hidden>
@@ -75,15 +75,15 @@ export function TopBar({ mode, status, connected, micEnabled, demo, sessionStart
   const [hours, minutes, seconds] = time.toLocaleTimeString('pt-BR').split(':');
   const linkLed = mode === 'error' ? 'led--off' : connected ? (mode === 'connecting' ? 'led--busy' : 'led--on') : '';
   const { theme } = usePrefs();
-  const protocol = themeInfo(theme);
+  const persona = themeInfo(theme);
 
   return (
     <header className="topbar">
       <div className="brand">
-        <ProtocolMark theme={theme} />
+        <PersonaMark theme={theme} />
         <div>
-          <h1 className="brand__name">{protocol.brand}</h1>
-          <div className="brand__tag">{protocol.tagline}</div>
+          <h1 className="brand__name">{persona.brand}</h1>
+          <div className="brand__tag">{persona.tagline}</div>
         </div>
       </div>
 

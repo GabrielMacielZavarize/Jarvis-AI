@@ -884,7 +884,7 @@ async def manage_hud_panels(
     return result
 
 
-# Protocolos do HUD (web/src/lib/themes.ts, personas.py) e como o usuário costuma chamá-los
+# Personas do HUD (web/src/lib/themes.ts, personas.py) e como o usuário costuma chamá-las
 # (inclusive como o reconhecimento de voz escreve "Friday" e "Mark").
 HUD_THEMES = {
     "jarvis": ("jarvis", "padrao", "normal", "original", "azul", "ciano", "classico"),
@@ -913,14 +913,14 @@ async def set_hud_appearance(
     theme: str | None = None,
     cinema: bool | None = None,
 ) -> str:
-    """Change the HUD protocol (theme) and/or the cinema mode.
+    """Change the HUD persona (theme) and/or the cinema mode.
 
-    Each theme is a whole protocol: the HUD look (core, rings, panels, sounds) AND the assistant's
+    Each theme is a whole persona: the HUD look (core, rings, panels, sounds) AND the assistant's
     persona and voice, which switch right after your confirmation. "Chama a Friday" = friday,
     "modo Mark III"/"modo armadura" = mark3, "modo discreto" = stealth, "volta o Jarvis" = jarvis.
 
     Args:
-        theme: Protocol by name or colour: "jarvis" (cyan, the British butler, the default),
+        theme: Persona by name or colour: "jarvis" (cyan, the British butler, the default),
             "mark3" (gold and red, Jarvis inside the Iron Man armour, terse mission reports),
             "friday" (violet, F.R.I.D.A.Y.: female voice, direct and warm, calls the user "chefe")
             or "stealth" (silver, whispered minimal answers). Omit to keep it.
@@ -945,7 +945,7 @@ async def set_hud_appearance(
     if wanted:
         name = HUD_THEME_NAMES.get(str(response.get("theme")), response.get("theme"))
         parts.append(
-            f"Protocolo do HUD agora: {name}. A persona e a voz de {name} assumem logo depois desta "
+            f"Persona do HUD agora: {name}. O jeito e a voz de {name} assumem logo depois desta "
             "resposta (ela se apresenta sozinha): confirme em UMA frase curta, ainda com o seu jeito atual"
         )
     if cinema is not None:

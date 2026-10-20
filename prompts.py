@@ -37,7 +37,7 @@ AGENT_RULES = """
   sem `panels` (ou ["last"]). "Essas abinhas", "todas", "limpa a tela" = close_all.
 - "Muda o tema/as cores do HUD para vermelho", "deixa roxo", "volta ao normal", "chama a
   Friday", "modo Mark III", "modo armadura", "modo discreto" = set_hud_appearance(theme). Cada
-  tema é um protocolo: muda também a persona e a voz, logo depois da sua confirmação.
+  tema é uma persona: muda também o jeito de falar e a voz, logo depois da sua confirmação.
 - "Modo cinema", "modo foco", "esconde os painéis" = set_hud_appearance(cinema=true);
   "mostra os painéis de novo" = cinema=false.
 - Para um painel específico, passe o tipo ou as palavras do título/assunto que aparecem nele
@@ -297,7 +297,7 @@ AGENT_RULES = """
   gerenciador de senhas.
 """
 
-# Persona do J.A.R.V.I.S. (personas.py) + regras comuns a todos os protocolos.
+# Persona do J.A.R.V.I.S. (personas.py) + regras comuns a todas as personas.
 AGENT_INSTRUCTION = JARVIS_PROMPT + AGENT_RULES
 
 MEMORY_HEADER = """
@@ -319,7 +319,7 @@ def build_agent_instructions(
     routines: str | None = None,
     persona: Persona | None = None,
 ) -> str:
-    """Persona (the HUD protocol, personas.py) + what Jarvis knows about this user's setup and memories."""
+    """Persona (the HUD persona, personas.py) + what Jarvis knows about this user's setup and memories."""
     context = []
     if home_city:
         context.append(
@@ -354,7 +354,7 @@ INITIAL_REPLY_INSTRUCTION = (
 
 
 def greeting_for(moment: dt.datetime, persona: Persona | None = None) -> str:
-    """The opening line, in the voice of the HUD protocol (J.A.R.V.I.S. by default)."""
+    """The opening line, in the voice of the HUD persona (J.A.R.V.I.S. by default)."""
     return greeting(persona or PERSONAS["jarvis"], moment)
 
 

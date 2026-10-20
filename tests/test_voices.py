@@ -113,8 +113,8 @@ class VoiceFileTests(unittest.TestCase):
         self.assertEqual(effective_voice(None, self.path), "Charon")
         save_voice(None, self.path)  # nada para apagar: sem erro
 
-    def test_each_protocol_keeps_its_own_voice(self) -> None:
-        # The other protocols start on their own voice, never on JARVIS_VOICE.
+    def test_each_persona_keeps_its_own_voice(self) -> None:
+        # The other personas start on their own voice, never on JARVIS_VOICE.
         self.assertEqual(effective_voice("Iapetus", self.path, persona="friday"), "Kore")
         self.assertEqual(effective_voice("Iapetus", self.path, persona="mark3"), "Orus")
         self.assertEqual(effective_voice("Iapetus", self.path, persona="stealth"), "Enceladus")

@@ -6,11 +6,11 @@ import { themeInfo } from '../lib/themes';
 /** Decorative memory addresses printed before each step. */
 const ADDRESSES = ['0x7F3A', '0x1C04', '0xA9E2', '0x5B71', '0xD03F'];
 
-/** Each protocol boots with its own lines and pace (lib/themes.ts). */
+/** Each persona boots with its own lines and pace (lib/themes.ts). */
 export function BootSequence({ onDone }: { onDone: () => void }) {
   const { theme } = usePrefs();
-  const protocol = themeInfo(theme);
-  const { steps, stepMs } = protocol.boot;
+  const persona = themeInfo(theme);
+  const { steps, stepMs } = persona.boot;
   const [step, setStep] = useState(0);
   const [visible, setVisible] = useState(true);
 
@@ -56,14 +56,14 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
             </svg>
             <motion.h1
               className="boot__title"
-              data-text={protocol.brand}
+              data-text={persona.brand}
               initial={{ opacity: 0, letterSpacing: '0.9em' }}
               animate={{ opacity: 1, letterSpacing: '0.38em' }}
               transition={{ duration: 1.1, ease: 'easeOut' }}
             >
-              {protocol.brand}
+              {persona.brand}
             </motion.h1>
-            <div className="boot__subtitle">{protocol.tagline} · v2.0</div>
+            <div className="boot__subtitle">{persona.tagline} · v2.0</div>
             <ul className="boot__lines">
               {steps.slice(0, step).map((text, index) => (
                 <motion.li key={text} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}>
@@ -78,7 +78,7 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
               </div>
               <span className="boot__pct">{String(Math.round(progress * 100)).padStart(3, '0')}%</span>
             </div>
-            <div className="boot__skip">{online ? protocol.boot.online : 'Clique para pular'}</div>
+            <div className="boot__skip">{online ? persona.boot.online : 'Clique para pular'}</div>
           </div>
         </motion.div>
       )}

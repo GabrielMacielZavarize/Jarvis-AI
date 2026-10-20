@@ -83,7 +83,7 @@ function CameraRig() {
 function Hologram({ visible, particles, theme, style }: { visible: boolean; particles: number; theme: ThemeId; style: SceneStyle }) {
   const group = useRef<Group>(null);
   const progress = useRef(0);
-  // A new protocol re-materialises the hologram (the same spin-in as the boot) while its parts swap.
+  // A new persona re-materialises the hologram (the same spin-in as the boot) while its parts swap.
   const shown = useRef(theme);
   if (shown.current !== theme) {
     shown.current = theme;

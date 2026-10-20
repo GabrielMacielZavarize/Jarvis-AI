@@ -3,7 +3,7 @@ import { getPrefs, setPrefs, usePrefs } from '../lib/prefs';
 import { isTheme } from '../lib/themes';
 
 /**
- * Keeps the HUD protocol and the server's persona.json in step, so the agent answers with the
+ * Keeps the HUD persona and the server's persona.json in step, so the agent answers with the
  * persona and voice of the theme on screen (personas.py) and every device shows the same one.
  * On load the server's choice wins; when nobody chose yet, this browser's theme goes up. Each
  * change made here (Ajustes or "Jarvis, chama a Friday") is sent to the server.

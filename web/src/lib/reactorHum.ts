@@ -41,7 +41,7 @@ export function startHum(volume: number): Hum | null {
   filter.connect(master).connect(ctx.destination);
 
   // Fundamental, octave and a slightly detuned fifth that beats slowly against it, in the
-  // protocol's register (the Mark III reactor rumbles lower, F.R.I.D.A.Y. hums higher).
+  // persona's register (the Mark III reactor rumbles lower, F.R.I.D.A.Y. hums higher).
   const { pitch } = themeInfo(getPrefs().theme).sound;
   const voices = [
     { freq: 55, type: 'sine' as OscillatorType, gain: 1 },

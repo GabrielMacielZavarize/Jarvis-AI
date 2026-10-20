@@ -1,10 +1,10 @@
 """Voz do Jarvis (VOZ-30): qual voz do Gemini Live ele usa e a ferramenta "troca sua voz para X".
 
-Cada protocolo do HUD (personas.py) tem a sua voz. No J.A.R.V.I.S. ela vem, em ordem: da escolha
+Cada persona do HUD (personas.py) tem a sua voz. No J.A.R.V.I.S. ela vem, em ordem: da escolha
 feita por voz (``voz.json``, fora do git), de ``JARVIS_VOICE``, de ``GOOGLE_VOICE`` e, por fim, de
-Charon, o timbre grave e calmo recomendado. Nos outros protocolos vem da escolha feita por voz
-com aquele protocolo ativo ou da voz do protocolo (Orus no Mark III, Kore na F.R.I.D.A.Y.,
-Enceladus no Stealth). O ``voz.json`` guarda uma voz por protocolo.
+Charon, o timbre grave e calmo recomendado. Nas outras personas vem da escolha feita por voz
+com aquela persona ativa ou da voz da persona (Orus no Mark III, Kore na F.R.I.D.A.Y.,
+Enceladus no Stealth). O ``voz.json`` guarda uma voz por persona.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def match_voice(spoken: str) -> str | None:
 
 
 def _read_choices(path: Path) -> dict[str, str]:
-    """{protocolo: voz}; the old {"voice": X} file was the J.A.R.V.I.S. choice."""
+    """{persona: voz}; the old {"voice": X} file was the J.A.R.V.I.S. choice."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -107,12 +107,12 @@ def _read_choices(path: Path) -> dict[str, str]:
 
 
 def saved_voice(path: Path | None = None, persona: str = "jarvis") -> str | None:
-    """The voice chosen with "troca sua voz para X" in an earlier conversation, for this protocol."""
+    """The voice chosen with "troca sua voz para X" in an earlier conversation, for this persona."""
     return canonical_voice(_read_choices(path or VOICE_FILE).get(persona))
 
 
 def save_voice(voice: str | None, path: Path | None = None, persona: str = "jarvis") -> None:
-    """Remember the voice of this protocol for the next sessions; None goes back to its default."""
+    """Remember the voice of this persona for the next sessions; None goes back to its default."""
     target = path or VOICE_FILE
     choices = _read_choices(target)
     if voice is None:
@@ -125,7 +125,7 @@ def save_voice(voice: str | None, path: Path | None = None, persona: str = "jarv
     target.write_text(json.dumps({"voices": choices}, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def protocol_voice(persona: str) -> str | None:
+def persona_voice(persona: str) -> str | None:
     from personas import PERSONAS
 
     entry = PERSONAS.get(persona)
@@ -133,13 +133,13 @@ def protocol_voice(persona: str) -> str | None:
 
 
 def effective_voice(configured: str | None, path: Path | None = None, persona: str = "jarvis") -> str:
-    """Voice the Gemini session starts with: the spoken choice for this protocol wins; then
-    JARVIS_VOICE/GOOGLE_VOICE for J.A.R.V.I.S. or the protocol's own voice for the others."""
+    """Voice the Gemini session starts with: the spoken choice for this persona wins; then
+    JARVIS_VOICE/GOOGLE_VOICE for J.A.R.V.I.S. or the persona's own voice for the others."""
     chosen = saved_voice(path, persona)
     if chosen:
         return chosen
     if persona != "jarvis":
-        return protocol_voice(persona) or canonical_voice(configured) or DEFAULT_VOICE
+        return persona_voice(persona) or canonical_voice(configured) or DEFAULT_VOICE
     return canonical_voice(configured) or DEFAULT_VOICE
 
 

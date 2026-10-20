@@ -245,7 +245,7 @@ def build_runtime(
         session_kwargs["tts"] = backend.tts
 
     session = AgentSession(**session_kwargs)
-    # The HUD protocol (persona.json): J.A.R.V.I.S., Mark III, F.R.I.D.A.Y. or Stealth.
+    # The HUD persona (persona.json): J.A.R.V.I.S., Mark III, F.R.I.D.A.Y. or Stealth.
     persona = load_persona()
     set_active(persona.id)
     agent = JarvisAgent(

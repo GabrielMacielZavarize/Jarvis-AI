@@ -54,7 +54,7 @@ const ORBITS: OrbitProps[] = [
 ];
 const WHITE = new Color('#ffffff');
 
-/** `count` gyroscope orbits (each protocol has its own number; Stealth has none). */
+/** `count` gyroscope orbits (each persona has its own number; Stealth has none). */
 export function Orbits({ count = ORBITS.length }: { count?: number }) {
   return (
     <group>

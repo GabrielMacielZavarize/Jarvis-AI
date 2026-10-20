@@ -72,7 +72,7 @@ async def jarvis_agent(ctx: agents.JobContext):
 
         # The pool may have started on a fallback (paused primary or rotation): the HUD shows which.
         await publish_hud_event("model", model=runtime.model)
-    # Protocolo trocado no HUD durante a conversa: persona e voz mudam na hora (personas.py).
+    # Persona trocada no HUD durante a conversa: persona e voz mudam na hora (personas.py).
     from personas import watch_persona
 
     persona_task = watch_persona(runtime.session, lambda: runtime.session.current_agent)

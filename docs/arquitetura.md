@@ -78,7 +78,7 @@ E o HUD, em `web/src`:
 | `components/` | Painéis do HUD, cartões, notificações, legenda, modo ambiente e ajustes |
 | `hooks/` | Sessão do LiveKit, simulação, status do servidor, palavra de ativação, arrastar painéis e ociosidade |
 | `lib/` | Estado do HUD, áudio, catálogo de protocolos, sons da interface (`sounds.ts`), personas (`themes.ts`), modo visual sem piscar (`visualMode.ts`), painel Gestos (`gestures.ts`), preferências (`prefs.ts`), qualidade da cena, gráficos e som do reator |
-| `styles/` | `hud.css` e `cards.css` com o visual base e `protocols.css` com o que cada persona muda |
+| `styles/` | `hud.css` e `cards.css` com o visual base e `personas.css` com o que cada persona muda |
 
 ## Arquivos locais
 

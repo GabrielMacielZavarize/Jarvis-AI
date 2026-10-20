@@ -57,7 +57,7 @@ type Layer = LayerProps & { key: string };
 
 const DEG = Math.PI / 180;
 
-/** Each protocol's rings, from the inside out (the spectrum sits at 2.12-2.56). */
+/** Each persona's rings, from the inside out (the spectrum sits at 2.12-2.56). */
 const RING_SETS: Record<RingStyle, () => Layer[]> = {
   classic: () => [
     { key: 'innerDots', geometry: dashes(1.52, 0.02, 120, 0.25), spin: -0.12, opacity: 0.5, react: 0.8 },

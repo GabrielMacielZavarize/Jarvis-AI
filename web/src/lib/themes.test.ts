@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { inPersona, isTheme, sceneLook, THEMES, themeInfo } from './themes';
 
-describe('protocols', () => {
+describe('personas', () => {
   it('each one is a whole identity, not only a palette', () => {
     const shells = new Set(THEMES.map((theme) => theme.scene.shell));
     const rings = new Set(THEMES.map((theme) => theme.scene.rings));

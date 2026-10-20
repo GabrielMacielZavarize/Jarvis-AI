@@ -213,7 +213,7 @@ export function audioContext(): AudioContext | null {
   return context;
 }
 
-/** A cue's tone in the protocol's timbre: transposed, its default oscillator and loudness. */
+/** A cue's tone in the persona's timbre: transposed, its default oscillator and loudness. */
 export function styledTone(spec: Tone, style: SoundStyle): Tone {
   return {
     ...spec,

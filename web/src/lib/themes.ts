@@ -1,8 +1,8 @@
 /**
- * Protocols of the HUD (the themes in Ajustes). Each one is a whole identity, not only a palette:
+ * Personas of the HUD (the themes in Ajustes). Each one is a whole identity, not only a palette:
  * who answers (name, how they address the user; the agent switches persona and voice, personas.py),
  * the boot, the 3D core (shell, rings, spectrum, plasma, particles, floor), the panels' shape and
- * fonts (`:root[data-theme]` in global.css) and the interface sounds. Every protocol keeps the
+ * fonts (`:root[data-theme]` in global.css and styles/personas.css) and the interface sounds. Every persona keeps the
  * meaning of the modes: processing and failure look different in all of them.
  */
 import type { JarvisMode } from './types';

@@ -17,7 +17,7 @@ export function ConversationPanel({ lines, thinking, canSend, onSend }: Conversa
   const [sending, setSending] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  // Who answers depends on the protocol (F.R.I.D.A.Y. speaks for herself).
+  // Who answers depends on the persona (F.R.I.D.A.Y. speaks for herself).
   const speaker = themeInfo(usePrefs().theme).speaker;
 
   useEffect(() => {

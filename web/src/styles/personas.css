@@ -1,5 +1,5 @@
 /*
- * Protocols (lib/themes.ts): what each one changes beyond the colours of global.css. Shapes of the
+ * Personas (lib/themes.ts): what each one changes beyond the colours of global.css. Shapes of the
  * panels, chips and buttons, the fonts, the screen effects and how much everything glows.
  * J.A.R.V.I.S. is the base look of hud.css and needs nothing here.
  */
@@ -201,7 +201,7 @@
   display: none;
 }
 
-/* Under the swatches in Ajustes: what the active protocol changes. */
+/* Under the swatches in Ajustes: what the active persona changes. */
 .theme-hint {
   grid-column: 1 / -1;
   font-size: 12.5px;

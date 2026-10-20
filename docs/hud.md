@@ -78,7 +78,7 @@ A persona escolhida fica no servidor, em `persona.json` (fora do git). O agente 
 | Painéis | Recorte em dois cantos e fonte Orbitron | Placas de armadura com os quatro cantos cortados, fonte Teko, moldura de mira e scanlines mais fortes | Vidro arredondado, fonte Exo 2, moldura que respira e sem scanlines | Traço fino, fonte mono, sem halos e sem scanlines |
 | Sons | Senoidais | Mais graves e mecânicos | Mais agudos e leves | Baixinhos |
 
-A palavra de ativação continua "Jarvis" em todas, porque o detector local só conhece essa palavra, e a F.R.I.D.A.Y. sabe disso. "Troca sua voz para X" vale para a persona ativa (veja [voz.md](voz.md#voz-e-persona)). Com a OpenAI, a persona muda e a voz continua a da `OPENAI_VOICE`. As personas estão em `personas.py` (agente) e em `web/src/lib/themes.ts` e `web/src/styles/protocols.css` (HUD).
+A palavra de ativação continua "Jarvis" em todas, porque o detector local só conhece essa palavra, e a F.R.I.D.A.Y. sabe disso. "Troca sua voz para X" vale para a persona ativa (veja [voz.md](voz.md#voz-e-persona)). Com a OpenAI, a persona muda e a voz continua a da `OPENAI_VOICE`. As personas estão em `personas.py` (agente) e em `web/src/lib/themes.ts` e `web/src/styles/personas.css` (HUD).
 
 ## Núcleo 3D
 

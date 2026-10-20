@@ -316,7 +316,7 @@ class HudAppearanceToolTests(unittest.IsolatedAsyncioTestCase):
             result = await set_hud_appearance(FakeRunContext(), theme="vermelho", cinema=True)
 
         request.assert_awaited_once_with("appearance", {"theme": "mark3", "cinema": True})
-        self.assertTrue(result.startswith("Protocolo do HUD agora: Mark III. A persona e a voz de Mark III assumem"))
+        self.assertTrue(result.startswith("Persona do HUD agora: Mark III. O jeito e a voz de Mark III assumem"))
         self.assertTrue(result.endswith("modo cinema ligado (só o núcleo e a legenda)."))
 
     async def test_friday_by_the_way_speech_recognition_writes_it(self) -> None:

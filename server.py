@@ -505,7 +505,7 @@ def create_app(
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "lan": bool(app.state.lan_urls),
-            # HUD protocol chosen on any device (None: nobody chose yet, the browser keeps its own).
+            # HUD persona chosen on any device (None: nobody chose yet, the browser keeps its own).
             "persona": saved_persona(),
             "errors": backend_errors + livekit_errors,
         }
@@ -516,13 +516,13 @@ def create_app(
 
     @app.post("/api/persona")
     def set_persona(body: PersonaRequest, request: Request) -> dict[str, Any]:
-        """The HUD protocol (theme) changed: the agent picks up the persona and voice (personas.py)."""
-        _require_local(request, "A troca de protocolo")
+        """The HUD persona (theme) changed: the agent picks up the persona and voice (personas.py)."""
+        _require_local(request, "A troca de persona")
         if not is_persona(body.persona):
-            raise HTTPException(status_code=400, detail=f"Protocolo desconhecido: {body.persona}")
+            raise HTTPException(status_code=400, detail=f"Persona desconhecida: {body.persona}")
         if saved_persona() != body.persona:
             save_persona(body.persona)
-            logger.info("Protocolo do HUD: %s.", body.persona)
+            logger.info("Persona do HUD: %s.", body.persona)
         return {"persona": body.persona}
 
     # ── Gestos (GST-18): o painel do HUD vê e muda o que cada gesto livre faz (gestos.json) ──

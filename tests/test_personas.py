@@ -56,19 +56,19 @@ class PersonaPromptTests(unittest.TestCase):
         self.assertTrue(AGENT_INSTRUCTION.startswith(PERSONAS["jarvis"].prompt))
         self.assertEqual(build_agent_instructions(), AGENT_INSTRUCTION)
 
-    def test_each_protocol_has_its_own_persona_and_the_same_rules(self) -> None:
+    def test_each_persona_has_its_own_style_and_the_same_rules(self) -> None:
         friday = build_agent_instructions(home_city="Criciúma", persona=PERSONAS["friday"])
         self.assertIn("Você é F.R.I.D.A.Y.", friday)
         self.assertIn('"chefe"', friday)
         self.assertNotIn("mordomo digital britânico de Tony Stark", friday)
-        # Tools and safety rules are shared by every protocol.
+        # Tools and safety rules are shared by every persona.
         self.assertIn("chame end_session", friday)
         self.assertIn("O usuário mora em Criciúma", friday)
         self.assertIn("SEU jeito", friday)
         self.assertIn('"em missão"', build_agent_instructions(persona=PERSONAS["mark3"]))
         self.assertIn("modo discreto", build_agent_instructions(persona=PERSONAS["stealth"]))
 
-    def test_greetings_follow_the_protocol(self) -> None:
+    def test_greetings_follow_the_persona(self) -> None:
         morning = dt.datetime(2026, 1, 1, 8)
         self.assertEqual(greeting_for(morning), "Bom dia, senhor. Todos os sistemas estão online. Em que posso ajudar?")
         self.assertEqual(greeting(PERSONAS["friday"], morning), "Bom dia, chefe. F.R.I.D.A.Y. na escuta. O que vamos fazer hoje?")
@@ -82,7 +82,7 @@ class PersonaPromptTests(unittest.TestCase):
         self.assertNotIn("Você é J.A.R.V.I.S., a inteligência", friday)
         self.assertIn("Meu nome é Gabriel", friday)
         self.assertEqual(swap_persona(friday, PERSONAS["friday"], PERSONAS["jarvis"]), jarvis)
-        # Built for another protocol than the one assumed: still swapped, never doubled.
+        # Built for another persona than the one assumed: still swapped, never doubled.
         mark3 = swap_persona(friday, PERSONAS["jarvis"], PERSONAS["mark3"])
         self.assertEqual(mark3.count("# Persona"), 1)
         self.assertIn("armadura Mark III", mark3)
@@ -200,7 +200,7 @@ class PersonaServerTests(unittest.TestCase):
         self.assertEqual(saved_persona(self.path), "friday")
         self.assertEqual(self.client.get("/api/status").json()["persona"], "friday")
 
-    def test_unknown_protocol_and_other_sites_are_refused(self) -> None:
+    def test_unknown_persona_and_other_sites_are_refused(self) -> None:
         self.assertEqual(self.client.post("/api/persona", json={"persona": "ultron"}).status_code, 400)
         cross = self.client.post("/api/persona", json={"persona": "mark3"}, headers={"Sec-Fetch-Site": "cross-site"})
         self.assertEqual(cross.status_code, 403)
