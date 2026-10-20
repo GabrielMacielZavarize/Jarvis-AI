@@ -234,3 +234,14 @@ Detalhes em [integracoes.md](integracoes.md). Precisa de `JARVIS_ENABLE_MCP=true
 - [ ] Uma ferramenta fora do `permitir` não aparece no `mcp_status` nem é chamada.
 - [ ] Com `create_issue` liberada, "cria uma issue chamada teste": nada é criado antes de "confirmar integração" e o código.
 - [ ] Sem o token no `.env`, o link abre normal e o Jarvis diz que a integração está indisponível.
+
+## 27. Painel de saúde
+
+Detalhes em [saude.md](saude.md).
+
+- [ ] Converse alguns turnos. O painel Saúde (SAU-40) mostra o tempo de resposta e o `saude.db` aparece na pasta do projeto, fora do `git status`.
+- [ ] Diga "Jarvis" e fique calado até o link fechar por silêncio, três vezes. Em Detalhes, a linha do Jarvis mostra 3 sem fala e a sugestão pede para subir `JARVIS_WAKE_THRESHOLD_JARVIS`.
+- [ ] Diga "Jarvis" baixinho, longe do microfone, algumas vezes sem ativar. As quase ativações sobem.
+- [ ] Peça o clima de uma cidade inventada até a ferramenta falhar. Ela aparece em Ferramentas com erro.
+- [ ] No celular pareado o painel aparece sem o botão Limpar. No PC, Limpar zera tudo.
+- [ ] Com `JARVIS_HEALTH=false` o painel mostra "desligado" e nada novo é gravado.

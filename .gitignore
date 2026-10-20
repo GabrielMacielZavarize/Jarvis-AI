@@ -60,3 +60,7 @@ modelos.tmp
 
 # Servidores MCP (MCP-32). Os tokens ficam no .env; o mcp.example.json é o modelo
 mcp.json
+
+# Painel de saúde (SAU-40): histórico local de tempo de resposta, ativações e falhas
+saude.db
+saude.db-journal

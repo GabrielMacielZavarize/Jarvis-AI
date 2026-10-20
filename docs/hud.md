@@ -40,6 +40,10 @@ Avisos proativos, timers que acabaram, reunião chegando, rotina agendada e troc
 
 O painel do clima mostra a temperatura das próximas 24 horas (passe o mouse para ver cada hora e a chance de chuva). O diagnóstico atualiza CPU e RAM ao vivo enquanto está aberto. A agenda desenha o dia em blocos, com um marcador de agora.
 
+### Painel de saúde
+
+O painel Saúde (SAU-40) guarda o histórico do tempo de resposta, das ativações por palavra, das falhas de ferramentas e das pausas de modelo, com sugestões do que ajustar no `.env`. Detalhes em [saude.md](saude.md).
+
 ### Painéis arrastáveis
 
 No computador, arraste um painel pelo cabeçalho para a outra coluna ou outra posição. "Restaurar painéis" volta ao layout de fábrica. No celular os painéis não se arrastam, de propósito.

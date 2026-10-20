@@ -38,6 +38,8 @@ Cada ferramenta do Jarvis tem um código de protocolo, que aparece no HUD (na pl
 
 | MCP-32 | `mcp_status`, `confirm_mcp_action`, `cancel_mcp_action` e as ferramentas liberadas no `mcp.json` (`github_list_issues`...) | Usa ferramentas de servidores MCP (GitHub, Notion, Spotify...). Só as do `permitir` chegam ao modelo, e as que escrevem pedem código | "Quais issues abertas eu tenho no Jarvis-AI?", "Procura a página da reunião no Notion.", "Quais integrações você tem?" |
 
+| SAU-40 | Nenhuma (painel do HUD) | Histórico local de tempo de resposta, ativações, falhas e modelos, com sugestões de ajuste do `.env` | Abra o painel Saúde no HUD |
+
 A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm ferramenta de voz. Estão em [voz.md](voz.md#palavra-de-ativação) e [celular.md](celular.md).
 
 ## O que liga cada protocolo
@@ -58,6 +60,7 @@ A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm 
 | WAK-22 | `JARVIS_WAKE_WORD=true` |
 | LAN-26 | `python jarvis.py --lan` ou `JARVIS_LAN=true` |
 | MCP | `JARVIS_ENABLE_MCP=true` e os servidores no `mcp.json` (veja [integracoes.md](integracoes.md)) |
+| SAU-40 | Vem ligado. `JARVIS_HEALTH=false` desliga (veja [saude.md](saude.md)) |
 
 ## Painéis, abas e atalhos de site
 

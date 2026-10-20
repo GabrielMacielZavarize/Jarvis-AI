@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { playSleepChime, playWakeChime } from '../lib/chime';
 import { useHud } from '../lib/hudStore';
+import { reportSilentWake, wasSilentWake } from '../lib/health';
 import { getPrefs, setPrefs } from '../lib/prefs';
 import { themeInfo } from '../lib/themes';
 import type { JarvisMode } from '../lib/types';
@@ -106,6 +107,8 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const attempt = useRef(false);
   const lastActivity = useRef(Date.now());
   const wordsRef = useRef<string[]>([]);
+  // SAU-40: word that opened this link, to count it when the link closes without the user speaking.
+  const heardWake = useRef<{ word: string; at: number } | null>(null);
   useEffect(() => {
     wordsRef.current = detector.words;
   }, [detector.words]);
@@ -152,6 +155,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         setNoticeLink(true);
       } else if (byPresence) hud.addLog('ok', 'Presença · você voltou, abrindo o link');
       else hud.addLog('ok', `Palavra de ativação · ${heard} (${Math.round(score * 100)}%)`);
+      heardWake.current = routine || reason ? null : { word: word || 'jarvis', at: Date.now() };
       setWakeAt(Date.now());
     },
     [report],
@@ -235,7 +239,10 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   }, [wakeAt, ready, busy, connected, report]);
 
   useEffect(() => {
-    if (!connected && !busy && wakeAt === null) setNoticeLink(false);
+    if (!connected && !busy && wakeAt === null) {
+      setNoticeLink(false);
+      heardWake.current = null;
+    }
   }, [connected, busy, wakeAt]);
 
   useEffect(() => {
@@ -277,6 +284,9 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       } else {
         window.clearInterval(timer);
         playSleepChime();
+        const opened = heardWake.current;
+        heardWake.current = null;
+        if (opened && wasSilentWake(opened.at, useHud.getState().userHeardAt)) void reportSilentWake(opened.word);
         const again = subscribed && wakeWord ? ` · diga ${wakeWordsLabel(wordsRef.current)} para chamar de novo` : '';
         useHud.getState().addLog('info', `Link encerrado após ${silenceS} s de silêncio${again}`);
         void latest.current.stop();
