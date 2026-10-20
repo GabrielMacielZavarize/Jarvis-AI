@@ -316,7 +316,14 @@ class HudAppearanceToolTests(unittest.IsolatedAsyncioTestCase):
             result = await set_hud_appearance(FakeRunContext(), theme="vermelho", cinema=True)
 
         request.assert_awaited_once_with("appearance", {"theme": "mark3", "cinema": True})
-        self.assertEqual(result, "Tema do HUD agora: Mark III. modo cinema ligado (só o núcleo e a legenda).")
+        self.assertTrue(result.startswith("Persona do HUD agora: Mark III. O jeito e a voz de Mark III assumem"))
+        self.assertTrue(result.endswith("modo cinema ligado (só o núcleo e a legenda)."))
+
+    async def test_friday_by_the_way_speech_recognition_writes_it(self) -> None:
+        with patch("tools.hud_request", AsyncMock(return_value={"theme": "friday", "cinema": False})) as request:
+            await set_hud_appearance(FakeRunContext(), theme="chama a Fraidei")
+
+        request.assert_awaited_once_with("appearance", {"theme": "friday", "cinema": None})
 
     async def test_unknown_theme_changes_nothing(self) -> None:
         with patch("tools.hud_request", AsyncMock()) as request:

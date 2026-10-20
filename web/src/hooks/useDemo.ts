@@ -4,6 +4,8 @@ import { TOOL_LABELS } from '../lib/catalog';
 import { markToolResult } from '../lib/coreActivity';
 import { DEMO_SCRIPT, speakingMs } from '../lib/demo';
 import { useHud } from '../lib/hudStore';
+import { getPrefs } from '../lib/prefs';
+import { inPersona } from '../lib/themes';
 import { playCue } from '../lib/sounds';
 import type { ChatLine, JarvisMode } from '../lib/types';
 
@@ -88,7 +90,7 @@ export function useDemo(): DemoState {
           case 'agent': {
             const ms = speakingMs(beat.text);
             setMode('speaking');
-            addLine('agent', beat.text);
+            addLine('agent', inPersona(beat.text, getPrefs().theme));
             voice.agentUntil = performance.now() + ms;
             await wait(ms);
             break;

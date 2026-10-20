@@ -1,6 +1,6 @@
 import { useFrame } from '@react-three/fiber';
 import { useRef } from 'react';
-import { AdditiveBlending, type Group, type MeshBasicMaterial } from 'three';
+import { AdditiveBlending, Color, type Group, type MeshBasicMaterial } from 'three';
 import { scene } from './sceneState';
 
 interface OrbitProps {
@@ -15,6 +15,7 @@ function Orbit({ radius, tilt, spin, tone = 'primary' }: OrbitProps) {
   const spinner = useRef<Group>(null);
   const ringMat = useRef<MeshBasicMaterial>(null);
   const nodeMat = useRef<MeshBasicMaterial>(null);
+  const tailMat = useRef<MeshBasicMaterial>(null);
 
   useFrame(() => {
     if (spinner.current) spinner.current.rotation.z = scene.phase * spin;
@@ -23,6 +24,7 @@ function Orbit({ radius, tilt, spin, tone = 'primary' }: OrbitProps) {
       ringMat.current.opacity = 0.32 + scene.energy * 0.4;
     }
     if (nodeMat.current) nodeMat.current.color.copy(scene[tone]).multiplyScalar(2.4 * scene.glow + scene.energy * 2);
+    if (tailMat.current) tailMat.current.color.copy(scene.primary).lerp(WHITE, 0.5).multiplyScalar(1.4);
   });
 
   return (
@@ -38,19 +40,27 @@ function Orbit({ radius, tilt, spin, tone = 'primary' }: OrbitProps) {
         </mesh>
         <mesh position={[-radius, 0, 0]} scale={0.6}>
           <sphereGeometry args={[0.045, 16, 16]} />
-          <meshBasicMaterial color="#9ff6ff" toneMapped={false} />
+          <meshBasicMaterial ref={tailMat} toneMapped={false} />
         </mesh>
       </group>
     </group>
   );
 }
 
-export function Orbits() {
+const ORBITS: OrbitProps[] = [
+  { radius: 2.32, tilt: [1.18, 0.32, 0], spin: 0.55 },
+  { radius: 2.02, tilt: [-1.05, -0.48, 0.4], spin: -0.7, tone: 'accent' },
+  { radius: 2.5, tilt: [0.2, 1.3, 0.2], spin: 0.35 },
+];
+const WHITE = new Color('#ffffff');
+
+/** `count` gyroscope orbits (each persona has its own number; Stealth has none). */
+export function Orbits({ count = ORBITS.length }: { count?: number }) {
   return (
     <group>
-      <Orbit radius={2.32} tilt={[1.18, 0.32, 0]} spin={0.55} />
-      <Orbit radius={2.02} tilt={[-1.05, -0.48, 0.4]} spin={-0.7} tone="accent" />
-      <Orbit radius={2.5} tilt={[0.2, 1.3, 0.2]} spin={0.35} />
+      {ORBITS.slice(0, count).map((orbit) => (
+        <Orbit key={orbit.radius} {...orbit} />
+      ))}
     </group>
   );
 }

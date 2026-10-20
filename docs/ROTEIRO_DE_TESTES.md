@@ -1,10 +1,6 @@
 # Roteiro de testes em casa (Windows)
 
-Checklist único dos recursos novos, de todos os branches já juntados na `main`. Os testes
-automáticos (`python -m pytest` e, em `web/`, `npm test`) cobrem a lógica com simulações; o que
-está aqui só dá para conferir na máquina real: webcam, microfone, os 3 monitores, o Google, o
-Gemini de verdade e o celular. O passo a passo detalhado de cada item está na seção do README
-indicada.
+Checklist único de tudo que já está na `main`. Os testes automáticos ([testes.md](testes.md)) cobrem a lógica com simulações. O que está aqui só dá para conferir na máquina real: webcam, microfone, os 3 monitores, o Google, o Gemini de verdade e o celular. O passo a passo completo de cada item está na página indicada.
 
 ## 0. Preparar
 
@@ -37,122 +33,163 @@ JARVIS_MODEL_ROTATION=fallback
 JARVIS_END_OF_SPEECH_MS=0
 ```
 
-Confira no `doctor.py` as linhas "Link fecha sozinho: nunca" e a lista de modelos, todos "livre".
-Não há dependência nova de Python; o `--rebuild` é obrigatório para o HUD novo.
+Confira no `doctor.py` a linha "Link fecha sozinho: nunca" e a lista de modelos, todos "livre". Não há dependência nova de Python, mas o `--rebuild` é obrigatório para o HUD novo. Ele também roda o `npm install` quando o `package-lock.json` mudou, para trazer as fontes novas das personas.
 
-Teste um grupo por vez. Se algo falhar, copie a linha do terminal com a tag do protocolo
-(`[GST-18]`, `[MOU-20]`, `[DIT-29]`...) e, nos gestos, grave um trace com `--trace`.
+Teste um grupo por vez. Se algo falhar, copie a linha do terminal com a tag do protocolo (`[GST-18]`, `[MOU-20]`, `[DIT-29]`...) e, nos gestos, grave um trace com `--trace`.
 
-## 1. Gestos: precisão e calibração (README → "Precisão e calibração")
+## 1. Gestos: precisão e calibração
 
-- [ ] `python gestures.py --calibrate`: as 6 poses terminam com acerto ≥ 90%.
+Detalhes em [gestos.md](gestos.md#precisão-e-calibração).
+
+- [ ] `python gestures.py --calibrate`: as 6 poses terminam com acerto de 90% ou mais.
 - [ ] `python gestures.py --preview --dry-run`: com a mão parada a confiança fica verde e a pose estável não pisca; punho frouxo continua `fist`.
 - [ ] Segurando uma janela, tirar a mão do quadro pela lateral mostra "Cancelado" e não move nada.
-- [ ] Gestos funcionam com a mão a ~30 cm e a ~1 m da câmera.
+- [ ] Os gestos funcionam com a mão a uns 30 cm e a 1 m da câmera.
 - [ ] Mouse no ar (`m` no preview): cursor parado não treme; movimento rápido chega ao outro monitor.
 
-## 2. Gestos novos e personalizáveis (README → "Gestos personalizáveis")
+## 2. Gestos personalizáveis
 
-- [ ] 👌 parado pausa/retoma a mídia.
-- [ ] Pinça subindo/descendo muda o volume de 5 em 5%.
-- [ ] 🤘 aplica o layout "modo trabalho" (salve antes: "salva esse layout como modo trabalho").
-- [ ] Janela pega + 1, 2 ou 3 dedos parados → vai para a tela 1, 2 ou 3 do "Identificar".
-- [ ] Tapar a webcam ~1 s muta/desmuta o Jarvis; apagar a luz sem a mão na frente não faz nada.
-- [ ] Duas palmas se afastando estendem a janela; se aproximando, restauram.
+Detalhes em [gestos.md](gestos.md#gestos-personalizáveis).
+
+- [ ] OK parado pausa e retoma a mídia.
+- [ ] Pinça subindo e descendo muda o volume de 5 em 5%.
+- [ ] Rock parado aplica o layout "modo trabalho" (salve antes: "salva esse layout como modo trabalho").
+- [ ] Janela pega e 1, 2 ou 3 dedos parados: ela vai para a tela 1, 2 ou 3 do Identificar.
+- [ ] Tapar a webcam por 1 s muta e desmuta o Jarvis; apagar a luz sem a mão na frente não faz nada.
+- [ ] Duas palmas se afastando maximizam a janela; se aproximando, restauram.
 - [ ] Por voz: "quando eu fizer joinha, pausa a música", "o que faz o rock?", "lista meus gestos"; "o rock fecha a janela" é recusado.
 
-## 3. Painel de gestos com câmera e mapa das telas (README → "Painel de gestos")
+## 3. Painel de gestos com câmera e mapa das telas
 
-- [ ] "Mostra o painel de gestos" (ou ✌ parado ~1 s): o painel aparece no canto inferior direito do notebook, com a câmera e o mapa dos 3 monitores.
+Detalhes em [gestos.md](gestos.md#painel-de-gestos).
+
+- [ ] "Mostra o painel de gestos" (ou dois dedos parados por 1 s): o painel aparece no canto inferior direito do notebook, com a câmera e o mapa dos 3 monitores.
 - [ ] Arraste uma janela do notebook para o monitor de cima pelo mapa (punho em cima dela, mover, abrir a mão).
 - [ ] Repita para o monitor vertical (à esquerda, x negativo).
 - [ ] O painel não aparece nos prints do Jarvis ("o que tem na tela?").
 
-## 4. Palavra de ativação e voz (README → WAK-22 e VOZ-30)
+## 4. Palavra de ativação e voz
 
-- [ ] `python wake_word.py --test`: "Jarvis" passa do limiar; frases comuns não.
+Detalhes em [voz.md](voz.md).
+
+- [ ] `python wake_word.py --test`: "Jarvis" passa do limiar e frases comuns não.
 - [ ] Diga "Jarvis": bipe, o link abre e ele responde no tom do mordomo britânico.
 - [ ] "Quais vozes você tem?" e "troca sua voz para Orus"; "volta pra sua voz normal".
-- [ ] Sons do HUD (link, ferramenta, confirmação, erro, timer) e o volume no painel Sistema.
+- [ ] Sons do HUD (link, ferramenta, confirmação, erro, timer) e o volume em Ajustes.
 
-## 5. Mouse, teclado e ditado (README → MOU-20 e DIT-29)
+## 5. Mouse, teclado e ditado
 
-- [ ] "Abre o bloco de notas e digita olá"; ESC ou mexer no mouse cancela.
-- [ ] No Bloco de Notas: "modo ditado", dite com "vírgula", "ponto de interrogação", "nova linha", "apaga a última palavra", "desfaz", depois "fim do ditado".
+Detalhes em [mouse-e-ditado.md](mouse-e-ditado.md).
+
+- [ ] "Abre o bloco de notas e digita olá"; Esc ou mexer no mouse cancela.
+- [ ] No Bloco de Notas: "modo ditado", dite com "vírgula", "ponto de interrogação", "nova linha", "apaga a última palavra", "desfaz" e depois "fim do ditado".
 - [ ] No WhatsApp Web, "nova linha" não envia a mensagem.
 - [ ] "Escreve aqui: chego em 10 minutos" fora do modo ditado.
 
-## 6. Presença pela câmera (README → "Presença (PRS-25)")
+## 6. Presença pela câmera
 
-> Aviso: os gestos ainda abrem a webcam por conta própria. Com presença e gestos ligados ao
-> mesmo tempo, o Windows pode recusar a segunda abertura ("câmera em uso"). Teste a presença
-> com os gestos desligados, e depois os dois juntos para ver se a sua webcam aguenta.
->
-> Com `JARVIS_WAKE_SILENCE_SECONDS=0`, o link que a presença abre também só fecha com
-> "tchau, Jarvis" ou o botão.
+Detalhes em [camera-e-presenca.md](camera-e-presenca.md#presença).
+
+Os gestos ainda abrem a webcam por conta própria. Com presença e gestos ligados ao mesmo tempo, o Windows pode recusar a segunda abertura ("câmera em uso"). Teste a presença com os gestos desligados e depois os dois juntos, para ver se a sua webcam aguenta. Com `JARVIS_WAKE_SILENCE_SECONDS=0`, o link que a presença abre também só fecha com "tchau, Jarvis" ou o botão.
 
 - [ ] (Opcional) com o Jarvis fechado: `python presence.py --enroll` e `python presence.py --test`.
 - [ ] Saia da frente do PC por mais de 5 min: a mídia pausa (e o PC bloqueia, se `JARVIS_PRESENCE_LOCK=true`).
 - [ ] Volte: "Bem-vindo de volta, senhor" com o resumo do tempo fora.
-- [ ] Painel Sistema mostra "Presente" / "Ausente há X min".
+- [ ] O painel Sistema mostra "Presente" e "Ausente há X min".
 
-## 7. Rotinas (README → "Rotinas (ROT-24)")
+## 7. Rotinas
+
+Detalhes em [memoria-e-rotinas.md](memoria-e-rotinas.md#rotinas).
 
 - [ ] "Bom dia, Jarvis": clima, manchetes, lembretes, layout de trabalho e playlist, com cada passo no painel Rotina.
-- [ ] "Modo foco": pomodoro e volume baixo. "Boa noite" pede confirmação antes de bloquear o PC.
+- [ ] "Modo foco": pomodoro e volume baixo. "Boa noite" pergunta antes de bloquear o PC.
 - [ ] "Cria uma rotina estudo que abre o Notion e põe lo-fi" e depois "roda a rotina estudo".
 - [ ] "Todo dia útil às 8h roda o bom dia" (teste com um horário daqui a 2 min).
 
-## 8. Google Agenda (README → "Google Agenda (AGD-27)")
+## 8. Google Agenda
 
-- [ ] Crie as credenciais OAuth (passo a passo no README) e rode `python calendar_tools.py --login` e `--hoje`.
+Detalhes em [agenda.md](agenda.md).
+
+- [ ] Crie as credenciais OAuth (passo a passo em [agenda.md](agenda.md#login-no-google-uma-vez-só)) e rode `python calendar_tools.py --login` e `--hoje`.
 - [ ] "O que eu tenho hoje?", "e amanhã?", "qual minha próxima reunião?".
-- [ ] "Marca dentista sexta às 15h": só grava com "confirmar agenda" + código.
+- [ ] "Marca dentista sexta às 15h": só grava com "confirmar agenda" e o código.
 - [ ] Evento daqui a 12 min: uns 10 min antes o Jarvis abre o link sozinho e avisa.
 
-## 9. Avisos proativos e lembretes (README → "Avisos proativos e lembretes (PRO-28)")
+## 9. Avisos e lembretes
 
-- [ ] "Me lembra daqui a 2 minutos de beber água": com o link fechado ele abre e avisa.
+Detalhes em [avisos.md](avisos.md).
+
+- [ ] "Me lembra daqui a 2 minutos de beber água": com o link fechado, ele abre e avisa.
 - [ ] Tire o carregador; termine um download na pasta Downloads.
 - [ ] "Para de me avisar sobre bateria" e "horário de silêncio das 22h às 6h".
 
-## 10. Explicar a tela (README → "Assistente de tela (TEL-31)")
+## 10. Assistente de tela
 
-- [ ] No PowerShell, um erro de Python + "explica esse erro": causa e correção no painel.
+Detalhes em [assistente-de-tela.md](assistente-de-tela.md).
+
+- [ ] No PowerShell, um erro de Python e "explica esse erro": causa e correção no painel.
 - [ ] "O que tem de errado aqui?" com o mouse sobre o erro, inclusive no monitor vertical.
 - [ ] "Copia a correção" e Ctrl+V: vem o bloco certo, e o Jarvis nunca digita sozinho.
 - [ ] Com o `.env` aberto, o painel avisa que ocultou segredos.
 
-## 11. Celular na rede de casa (README → "Celular na rede de casa (LAN-26)")
+## 11. Celular na rede de casa
+
+Detalhes em [celular.md](celular.md).
 
 - [ ] `python jarvis.py --lan`: o HUD do PC mostra o QR de pareamento.
-- [ ] No celular, aceite o certificado (passo a passo do Android/iPhone no README), pareie e fale com o Jarvis.
+- [ ] No celular, instale o certificado ([celular.md](celular.md#tirando-o-aviso-de-certificado)), pareie e fale com o Jarvis.
 - [ ] Peça algo no PC pelo celular ("abre o YouTube no monitor de cima").
 - [ ] Revogue o aparelho no HUD: o celular perde o acesso na hora, inclusive ao feed da câmera.
 
-## 12. Link, modelos e tempo de resposta (README → "Modelos, cota e tempo de resposta")
+## 12. Link, modelos e tempo de resposta
 
-- [ ] Abra o link e fique 20 min sem falar: ele continua aberto e responde na hora quando você volta (a sessão passa dos 15 min graças à compressão de contexto).
+Detalhes em [modelos.md](modelos.md).
+
+- [ ] Abra o link e fique 20 min sem falar: ele continua aberto e responde na hora quando você volta (a sessão passa dos 15 min por causa da compressão de contexto).
 - [ ] Converse alguns turnos: o painel Sistema mostra "Tempo de resposta" (verde até 1,5 s) com a média, e o terminal do agente registra "Resposta em X s (modelo)".
-- [ ] Troca de modelo: ponha `GOOGLE_MODEL=gemini-teste-live` (não existe), abra o link: ele conversa pelo próximo modelo, a notificação "Modelo de reserva" aparece e o painel mostra "Modelo · reserva". `python doctor.py` lista o modelo falso "em pausa". Depois volte o `GOOGLE_MODEL` de antes.
+- [ ] Troca de modelo: ponha `GOOGLE_MODEL=gemini-teste-live` (não existe) e abra o link. Ele conversa pelo próximo modelo, a notificação "Modelo de reserva" aparece e o painel mostra "Modelo · reserva". `python doctor.py` lista o modelo falso "em pausa". Depois volte o `GOOGLE_MODEL` de antes.
 - [ ] Depois de uma troca de modelo, "troca sua voz para Orus" continua valendo na hora.
-- [ ] `JARVIS_MODEL_ROTATION=rotate`: abra e feche o link 3 vezes; o painel Sistema mostra um modelo diferente a cada link.
+- [ ] `JARVIS_MODEL_ROTATION=rotate`: abra e feche o link 3 vezes. O painel Sistema mostra um modelo diferente a cada link.
 - [ ] (Opcional) `JARVIS_END_OF_SPEECH_MS=500` e compare o tempo de resposta; se ele cortar a sua frase, suba para 900.
 
-## 13. Visual do HUD (README → "Visual do HUD")
+## 13. Visual do HUD
+
+Detalhes em [hud.md](hud.md).
 
 - [ ] Boot: o anel do reator se completa, aparece "Todos os sistemas online" e os painéis entram em cascata.
-- [ ] Ao processar, o HUD inteiro fica âmbar; numa falha, vermelho.
-- [ ] "Como está o tempo em Lisboa?": a placa sobre o núcleo mostra `WX-01 · Varredura meteorológica · Lisboa` e depois "✓ Concluído"; o painel tem o gráfico das próximas 24 h (passe o mouse).
+- [ ] Ao processar, o HUD inteiro vai ficando âmbar aos poucos, sem piscar; numa falha, vermelho. Numa conversa de vários turnos, o núcleo e o HUD não piscam entre "processando" e "respondendo" nem nas pausas entre frases.
+- [ ] "Como está o tempo em Lisboa?": a placa sobre o núcleo mostra `WX-01 · Varredura meteorológica · Lisboa` e depois "Concluído"; o painel tem o gráfico das próximas 24 h (passe o mouse).
 - [ ] A legenda da fala do Jarvis aparece palavra por palavra embaixo do núcleo e some alguns segundos depois (desliga em Ajustes).
-- [ ] Ajustes → Tema: os quatro temas mudam HUD e cena 3D. Por voz: "muda o tema para vermelho", "deixa roxo", "volta ao normal".
+- [ ] Ajustes, Persona: as quatro mudam o nome, a marca, o núcleo 3D, os painéis, as fontes e os sons (veja o item 14).
 - [ ] Modo cinema: tecla `F`, o botão ao lado do dock e "modo cinema" por voz; `Esc` ou "mostra os painéis de novo" voltam.
 - [ ] "Pesquise sobre fusão nuclear": o globo cresce, os anéis recuam e cada destino ganha cidade e site.
-- [ ] "Rode um diagnóstico": aparece "Ao vivo" e CPU/RAM se mexem (abra um app pesado para ver subir).
+- [ ] "Rode um diagnóstico": aparece "Ao vivo" e CPU e RAM se mexem (abra um app pesado para ver subir).
 - [ ] "O que eu tenho hoje?" (com a agenda ligada): o dia em blocos, com o marcador de agora; passe o mouse nos blocos.
 - [ ] Notificações à direita: um timer de 1 min acabando, um lembrete do item 9 e um download concluído.
 - [ ] Arraste o painel Registro pelo cabeçalho para a coluna da esquerda; F5 e ele continua lá; "Restaurar painéis" em Ajustes desfaz.
-- [ ] Modo ambiente: feche o link e não mexa em nada por 3 min: relógio grande, clima da `JARVIS_HOME_CITY` e a próxima reunião. Mexer o mouse ou dizer "Jarvis" volta ao HUD.
-- [ ] Ajustes → Qualidade: mostra o nível e os fps. Em "Automática" num PC mais fraco, ela desce sozinha.
-- [ ] Ajustes → Som do reator: com o link aberto, o zumbido cresce quando o Jarvis fala.
+- [ ] Modo ambiente: feche o link e não mexa em nada por 3 min. Aparecem o relógio grande, o clima da `JARVIS_HOME_CITY` e a próxima reunião. Mexer o mouse ou dizer "Jarvis" volta ao HUD.
+- [ ] Ajustes, Qualidade: mostra o nível e os fps. Em "Automática", num PC mais fraco, ela desce sozinha depois de uns 8 s lenta, e o Registro diz "Qualidade da cena: Média (32 fps)".
+- [ ] Ajustes, Som do reator: com o link aberto, o zumbido cresce quando o Jarvis fala.
 - [ ] No celular pareado (item 11): tema, legenda e modo cinema funcionam; os painéis não se arrastam no celular, de propósito.
+
+## 14. Personas
+
+Detalhes em [hud.md](hud.md#o-que-cada-persona-muda).
+
+- [ ] Ajustes, Persona, F.R.I.D.A.Y. com o link fechado: o boot, a marca e o nome na barra mudam. Abra o link: ela cumprimenta ("Boa noite, chefe. F.R.I.D.A.Y. na escuta...") com voz feminina (Kore) e a transcrição mostra "F.R.I.D.A.Y.".
+- [ ] Com o link aberto, "Jarvis, modo Mark III": ele confirma na voz atual, a conversa fica quieta um instante e o Mark III se apresenta em outra voz (Orus). A holografia se rematerializa com o reator arc e a mira. Pergunte o clima: a resposta vem curta, de relatório.
+- [ ] Clique em Stealth no meio da conversa: sem partículas e sem brilho, sons baixinhos, voz sussurrada e respostas de uma frase.
+- [ ] "Troca sua voz para Aoede" com a F.R.I.D.A.Y.; volte ao J.A.R.V.I.S. (continua a voz dele) e de novo à F.R.I.D.A.Y. (Aoede).
+- [ ] Abra o HUD no celular pareado: ele mostra a mesma persona do PC.
+- [ ] O `persona.json` aparece ao lado do projeto e não entra no `git status`.
+
+## 15. Gestos no HUD
+
+Detalhes em [gestos.md](gestos.md#gestos-no-hud).
+
+- [ ] Com `JARVIS_ENABLE_GESTURES=true`, o painel Gestos aparece na coluna da direita. Sem link, os botões ficam apagados e o editor funciona.
+- [ ] Abra o link e clique em Ligar: aparece "Abrindo a câmera…" e depois "Armados". Mão aberta, punho, mova e abra: o painel mostra a janela segura e o monitor de destino, e depois o resultado.
+- [ ] Mouse no ar e Painel da câmera pelos botões ligam e desligam. O estado acompanha também quando você usa os próprios gestos (dois dedos parados abrem o painel da câmera).
+- [ ] Editar, rock, Abrir app, `spotify`, Salvar. Faça o rock: o Spotify abre sem reiniciar nada.
+- [ ] Editar, OK, Atalho, `alt+f4`, Salvar: é recusado com a explicação e nada muda no `gestos.json`.
+- [ ] Ligue o joinha a "tocar/pausar": o painel avisa que ele faz o mesmo que o OK. "Restaurar todos" volta tudo ao padrão.

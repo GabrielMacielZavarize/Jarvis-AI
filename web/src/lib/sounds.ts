@@ -3,6 +3,8 @@
  * tool start/finish, confirmation, error and timer done. Volume and on/off live in the Sistema
  * panel and are saved in this browser.
  */
+import { getPrefs } from './prefs';
+import { type SoundStyle, themeInfo } from './themes';
 import type { HudEvent } from './types';
 
 export type SoundCue =
@@ -211,6 +213,17 @@ export function audioContext(): AudioContext | null {
   return context;
 }
 
+/** A cue's tone in the persona's timbre: transposed, its default oscillator and loudness. */
+export function styledTone(spec: Tone, style: SoundStyle): Tone {
+  return {
+    ...spec,
+    from: spec.from * style.pitch,
+    to: spec.to * style.pitch,
+    gain: spec.gain * style.gain,
+    wave: spec.wave ?? style.wave,
+  };
+}
+
 function tone(ctx: AudioContext, start: number, spec: Tone, volume: number) {
   const osc = ctx.createOscillator();
   const env = ctx.createGain();
@@ -233,7 +246,8 @@ export function playCue(cue: SoundCue, options: { force?: boolean } = {}) {
   const ctx = audioContext();
   if (!ctx) return;
   const now = ctx.currentTime + 0.01;
-  for (const spec of SOUND_CUES[cue]) tone(ctx, now + spec.at, spec, settings.volume);
+  const style = themeInfo(getPrefs().theme).sound;
+  for (const spec of SOUND_CUES[cue]) tone(ctx, now + spec.at, styledTone(spec, style), settings.volume);
 }
 
 export function playHudEventSound(event: HudEvent) {

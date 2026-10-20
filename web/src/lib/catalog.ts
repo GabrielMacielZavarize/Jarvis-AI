@@ -47,6 +47,10 @@ export const TOOL_LABELS: Record<string, string> = {
   check_microphone: 'Microfone',
   end_session: 'Encerrando sessão',
   change_voice: 'Módulo de voz',
+  // What a hand gesture did (the engine reports it like a tool).
+  gesture: 'Comando por gesto',
+  gesture_control: 'Controle por gestos',
+  gesture_shortcuts: 'Atalhos de gesto',
   remember: 'Gravando memória',
   recall: 'Consulta de memória',
   forget: 'Apagando memória',
@@ -104,7 +108,7 @@ export const TOOL_LABELS: Record<string, string> = {
   cancel_calendar_change: 'Mudança cancelada',
 };
 
-/** Protocol code of every agent tool, as in the README table. */
+/** Protocol code of every agent tool, as in docs/protocolos.md. */
 const PROTOCOL_TOOLS: Record<string, string[]> = {
   'WX-01': ['get_weather'],
   'NET-02': ['search_web'],
@@ -123,7 +127,7 @@ const PROTOCOL_TOOLS: Record<string, string[]> = {
   'APP-15': ['search_apps', 'prepare_app_install', 'confirm_app_install', 'cancel_app_install'],
   'MIC-16': ['check_microphone'],
   'PWR-17': ['end_session'],
-  'GST-18': ['gesture_control', 'gesture_shortcuts'],
+  'GST-18': ['gesture_control', 'gesture_shortcuts', 'gesture'],
   'CAM-19': ['look_at_camera', 'camera_view'],
   'MOU-20': [
     'click_on_screen',

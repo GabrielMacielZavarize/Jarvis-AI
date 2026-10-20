@@ -18,7 +18,7 @@ describe('panel layout', () => {
   it('shows every panel exactly once, whatever was saved', () => {
     expect(normalizeLayout({ left: ['log', 'log', 'nope'], right: ['system'] })).toEqual({
       left: ['log', 'lan', 'cards'],
-      right: ['system', 'conversation'],
+      right: ['system', 'conversation', 'gestures'],
     });
     expect(normalizeLayout(undefined)).toEqual(DEFAULT_LAYOUT);
   });
@@ -26,7 +26,7 @@ describe('panel layout', () => {
   it('moves a panel to another column or position', () => {
     expect(movePanel(DEFAULT_LAYOUT, 'log', 'left', 0)).toEqual({
       left: ['log', 'system', 'lan', 'cards'],
-      right: ['conversation'],
+      right: ['conversation', 'gestures'],
     });
     expect(movePanel(DEFAULT_LAYOUT, 'system', 'left', 99).left).toEqual(['lan', 'cards', 'system']);
   });

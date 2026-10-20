@@ -33,6 +33,9 @@ gestos.json.tmp
 
 # Escolha de voz feita por voz ("troca sua voz para X")
 voz.json
+# Protocolo do HUD (J.A.R.V.I.S., Mark III, F.R.I.D.A.Y., Stealth) que o agente segue
+persona.json
+persona.json.tmp
 
 # Rotinas do Jarvis (bom dia, modo foco...) e seus horários
 rotinas.json

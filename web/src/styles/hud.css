@@ -717,6 +717,8 @@
 
 .conversation {
   flex: 1;
+  /* Another panel in the column (Gestos with its editor open) never squeezes the transcript away. */
+  min-height: 200px;
 }
 .transcript {
   display: flex;
@@ -1713,4 +1715,207 @@
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text-faint);
+}
+
+/* ───────────────────────── Gestos (GST-18) ───────────────────────── */
+
+.chip-btn--on {
+  border-color: var(--line-strong);
+  background: rgb(var(--c-primary-rgb) / 0.12);
+  color: var(--c-primary);
+}
+/* Compact in the column: with the editor open it keeps its height and scrolls inside. */
+.gestures {
+  flex: 0 1 auto;
+  max-height: min(48vh, 460px);
+}
+.gestures .panel__body {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+.gestures__status {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.gestures__state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.gestures__state small {
+  font-weight: 400;
+  color: var(--text-dim);
+}
+.gestures__state--armed .led,
+.gestures__state--grab .led,
+.gestures__state--mouse .led {
+  background: var(--c-ok);
+  box-shadow: 0 0 8px var(--c-ok);
+}
+.gestures__state--close .led {
+  background: var(--c-danger);
+  box-shadow: 0 0 8px var(--c-danger);
+}
+.gestures__state--idle .led {
+  background: var(--c-accent);
+}
+.gestures__holding,
+.gestures__last {
+  overflow: hidden;
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+.gestures__holding b {
+  font-weight: 600;
+  color: var(--c-primary);
+}
+.gestures__last small {
+  color: var(--text-faint);
+}
+.gestures__last--error {
+  color: #ffb3b3;
+}
+.gestures__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gestures__hint,
+.gestures__notice {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--text-faint);
+}
+.gestures__hint code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.gestures__notice {
+  padding: 6px 9px;
+  border-left: 2px solid var(--c-ok);
+  background: rgb(82 255 176 / 0.06);
+  color: var(--text-dim);
+}
+.gestures__notice--error {
+  border-left-color: var(--c-danger);
+  background: rgb(255 90 90 / 0.08);
+  color: #ffd2d2;
+}
+.gestures__editor {
+  display: grid;
+  gap: 8px;
+  animation: setting-in 0.28s ease-out;
+}
+.gestures__list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gesture-row {
+  padding: 6px 4px;
+  border-bottom: 1px dashed rgb(var(--c-primary-rgb) / 0.12);
+}
+.gesture-row__head {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 0.9fr) minmax(0, 1.4fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.gesture-row__glyph {
+  font-size: 16px;
+  text-align: center;
+}
+.gesture-row__name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.gesture-row__label {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+.gesture-row--custom .gesture-row__label {
+  color: var(--c-primary);
+}
+.gesture-row__warn {
+  margin: 3px 0 0 30px;
+  font-size: 12px;
+  color: var(--c-accent);
+}
+.binding-form {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 2px 30px;
+}
+.binding-form__how {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--text-faint);
+}
+.binding-form__row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 6px;
+}
+.binding-form__row .select {
+  margin-top: 0;
+  font-size: 13px;
+}
+.binding-form__row--actions {
+  display: flex;
+  gap: 6px;
+}
+.binding-form__input {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  background: rgb(0 8 14 / 0.75);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+}
+.binding-form__input:focus {
+  border-color: var(--line-strong);
+}
+.binding-form__input::placeholder {
+  color: var(--text-faint);
+}
+.gestures__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.gestures__fixed {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.gestures__fixed dt {
+  font-weight: 600;
+  color: var(--text);
+}
+.gestures__fixed dd {
+  margin: 0;
+  color: var(--text-dim);
 }

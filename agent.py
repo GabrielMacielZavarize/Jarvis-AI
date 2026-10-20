@@ -72,6 +72,12 @@ async def jarvis_agent(ctx: agents.JobContext):
 
         # The pool may have started on a fallback (paused primary or rotation): the HUD shows which.
         await publish_hud_event("model", model=runtime.model)
+    # Persona trocada no HUD durante a conversa: persona e voz mudam na hora (personas.py).
+    from personas import watch_persona
+
+    persona_task = watch_persona(runtime.session, lambda: runtime.session.current_agent)
+    ctx.add_shutdown_callback(lambda: _cancel(persona_task))
+
     if settings.memory_enabled:
         # Depois do start: o participante local só existe com a sala conectada.
         from memory import serve_memory_panel
@@ -96,15 +102,22 @@ async def jarvis_agent(ctx: agents.JobContext):
         start_reminder_relay(runtime.session, settings.hud_url)
 
     if settings.gestures_enabled:
-        from gestures import MIC, autostart_requested, start_for_session
+        from gestures import MIC, SERVICE, attach_hud, autostart_requested, serve_gesture_panel, start_for_session
 
         # Tapar a câmera muta/desmuta o que o Jarvis ouve nesta sessão.
         MIC.bind(runtime.session, asyncio.get_running_loop())
+        # O painel Gestos do HUD: estado ao vivo (eventos) e os botões (RPC), ligados por esta sessão.
+        attach_hud(asyncio.get_running_loop())
+        serve_gesture_panel(ctx.room)
 
         async def unbind_mic() -> None:
             MIC.unbind()
 
+        async def stop_gestures() -> None:
+            await asyncio.to_thread(SERVICE.stop)
+
         ctx.add_shutdown_callback(unbind_mic)
+        ctx.add_shutdown_callback(stop_gestures)
         if autostart_requested():  # python jarvis.py --gestures
             await start_for_session(ctx)
 

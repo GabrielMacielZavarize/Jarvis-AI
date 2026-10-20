@@ -3,10 +3,10 @@
  * reactor hum and where each panel sits. Same pattern as the interface sounds (sounds.ts).
  */
 import { useSyncExternalStore } from 'react';
-import { DEFAULT_THEME, isTheme, type ThemeId } from './themes';
+import { DEFAULT_THEME, isTheme, type ThemeId, themeInfo } from './themes';
 
 export type QualityPref = 'auto' | 'high' | 'medium' | 'low';
-export type PanelId = 'system' | 'lan' | 'cards' | 'conversation' | 'log';
+export type PanelId = 'system' | 'lan' | 'cards' | 'conversation' | 'gestures' | 'log';
 export type Column = 'left' | 'right';
 export type PanelLayout = Record<Column, PanelId[]>;
 
@@ -29,8 +29,9 @@ export const QUALITY_LABELS: Record<QualityPref, string> = {
   low: 'Economia',
 };
 
-export const PANEL_IDS: PanelId[] = ['system', 'lan', 'cards', 'conversation', 'log'];
-export const DEFAULT_LAYOUT: PanelLayout = { left: ['system', 'lan', 'cards'], right: ['conversation', 'log'] };
+export const PANEL_IDS: PanelId[] = ['system', 'lan', 'cards', 'conversation', 'gestures', 'log'];
+// The Gestos panel (GST-18) only shows when the server has the gestures on.
+export const DEFAULT_LAYOUT: PanelLayout = { left: ['system', 'lan', 'cards'], right: ['conversation', 'gestures', 'log'] };
 
 export const DEFAULT_PREFS: HudPrefs = {
   theme: DEFAULT_THEME,
@@ -115,9 +116,11 @@ function savePrefs(prefs: HudPrefs, storage: Storage | null = browserStorage()) 
   }
 }
 
-/** The theme also styles what lives outside the HUD (boot, expanded panels, pairing screen). */
+/** The theme also styles what lives outside the HUD (boot, expanded panels, pairing screen) and names the tab. */
 function applyTheme(theme: ThemeId) {
-  if (typeof document !== 'undefined') document.documentElement.dataset.theme = theme;
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.theme = theme;
+  document.title = themeInfo(theme).brand;
 }
 
 let prefs = loadPrefs();

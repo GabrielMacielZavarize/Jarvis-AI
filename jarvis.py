@@ -49,10 +49,23 @@ def _ensure_web_build(force: bool) -> bool:
         return False
 
     print("[HUD] Compilando a interface web (primeira execução)...")
-    if not (WEB_DIR / "node_modules").exists():
+    if _dependencies_stale():
         subprocess.run([npm, "install"], cwd=WEB_DIR, check=True)
     subprocess.run([npm, "run", "build"], cwd=WEB_DIR, check=True)
     return True
+
+
+def _dependencies_stale(web_dir: Path | None = None) -> bool:
+    """node_modules is missing or older than package-lock.json (a pull brought a new dependency).
+
+    npm writes node_modules/.package-lock.json on every install, so its date is the last install.
+    """
+    web = web_dir or WEB_DIR
+    installed = web / "node_modules" / ".package-lock.json"
+    if not installed.exists():
+        return True
+    lock = web / "package-lock.json"
+    return lock.exists() and lock.stat().st_mtime > installed.stat().st_mtime
 
 
 def _port_is_free(host: str, port: int) -> bool:

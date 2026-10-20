@@ -390,3 +390,38 @@ def list_gestures(path: Path | None = None) -> str:
     custom = "; ".join(describe(gesture, bindings[gesture]) for gesture in GESTURES)
     fixed = "; ".join(f"{name}: {what}" for name, what in FIXED_GESTURES)
     return f"Gestos personalizáveis — {custom}. Fixos — {fixed}."
+
+
+# ───────────────────────── painel Gestos do HUD ─────────────────────────
+
+
+def catalog(path: Path | None = None) -> dict[str, Any]:
+    """Everything the HUD's Gestos panel shows and edits: each customizable gesture with how to do
+    it, what it does now and by default, which ones do the same thing, and the reference lists."""
+    bindings = load_bindings(path)
+    owners: dict[Binding, list[str]] = {}
+    for gesture, binding in bindings.items():
+        if binding is not None:
+            owners.setdefault(binding, []).append(gesture)
+    gestures = []
+    for gesture, info in GESTURES.items():
+        binding = bindings[gesture]
+        default = parse_binding(info.default) if info.default else None
+        twins = [GESTURES[other].name for other in owners.get(binding, []) if other != gesture] if binding else []
+        gestures.append(
+            {
+                "id": gesture,
+                "name": info.name,
+                "how": info.how,
+                "binding": binding.to_json() if binding else {"tipo": "nada"},
+                "label": _action_text(binding),
+                "default": _action_text(default),
+                "custom": binding != default,
+                "same_as": twins,
+            }
+        )
+    return {
+        "gestures": gestures,
+        "fixed": [{"name": name, "what": what} for name, what in FIXED_GESTURES],
+        "actions": [{"id": action, "label": label} for action, label in ACTIONS.items()],
+    }

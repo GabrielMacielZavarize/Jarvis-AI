@@ -24,6 +24,7 @@ import asyncio
 import contextvars
 import dataclasses
 import hashlib
+import json
 import logging
 import os
 import queue
@@ -1065,6 +1066,29 @@ class GestureService:
             return "Painel de gestos aberto no canto, com a câmera e o mapa das telas."
         return "Painel de gestos fechado; os gestos continuam ligados."
 
+    def snapshot(self) -> dict[str, Any]:
+        """What the HUD's Gestos panel shows: on/off, the state of the hand machine and the panel."""
+        engine = self._engine
+        if not self.running or engine is None:
+            return {"running": False, "state": "off", "panel": False, "hand": False, "fps": 0, "source": "", "error": self._error}
+        status = engine.status
+        states = {State.IDLE: "idle", State.ARMED: "armed", State.GRAB: "grab", State.CLOSE: "close", State.MOUSE: "mouse"}
+        return {
+            "running": True,
+            "state": states[status.state],
+            "panel": engine.panel_visible,
+            "hand": bool(status.hand),
+            "fps": round(engine.fps),
+            "source": self._source,
+            "error": None,
+        }
+
+    def arm(self) -> str:
+        if not self.running or self._engine is None:
+            return self.start()
+        self._engine.request("arm")
+        return "Gestos armados."
+
     def describe(self) -> str:
         engine = self._engine
         if not self.running or engine is None:
@@ -1090,6 +1114,8 @@ def voice_action(action: str, service: GestureService | None = None) -> str:
     service = service or SERVICE
     if action == "on":
         return service.start()
+    if action == "arm":
+        return service.arm()
     if action == "off":
         return service.stop()
     if action == "mouse_on":
@@ -1128,6 +1154,36 @@ def attach_hud(loop: asyncio.AbstractEventLoop, service: GestureService | None =
             loop.call_soon_threadsafe(schedule, context=context)
 
     service.set_listener("hud", publish)
+
+
+GESTURE_RPC_METHOD = "jarvis.gestures"
+PANEL_ACTIONS = ("status", "on", "off", "arm", "mouse_on", "mouse_off", "panel_on", "panel_off")
+
+
+def handle_panel_request(payload: str, service: GestureService | None = None) -> dict[str, Any]:
+    """One button of the HUD's Gestos panel (or "status" when it opens): the reply says what happened."""
+    service = service or SERVICE
+    try:
+        request = json.loads(payload or "{}")
+    except ValueError:
+        request = {}
+    action = request.get("action") if isinstance(request, dict) else None
+    if action not in PANEL_ACTIONS:
+        return {"ok": False, "message": "Ação desconhecida para os gestos.", **service.snapshot()}
+    message = service.describe() if action == "status" else voice_action(action, service)
+    if action != "status":
+        logger.info("Gestos pelo HUD: %s → %s", action, message)
+    return {"ok": True, "message": message, **service.snapshot()}
+
+
+def serve_gesture_panel(room: Any, service: GestureService | None = None) -> None:
+    """Answer the HUD's Gestos panel buttons on this room (the camera may take seconds to open)."""
+
+    async def _on_request(data: Any) -> str:
+        reply = await asyncio.to_thread(handle_panel_request, str(getattr(data, "payload", "") or ""), service)
+        return json.dumps(reply, ensure_ascii=False)
+
+    room.local_participant.register_rpc_method(GESTURE_RPC_METHOD, _on_request)
 
 
 def autostart_requested() -> bool:

@@ -31,11 +31,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import camera
+import gesture_mapping
+from gesture_engine import CALIBRATION_FILE as GESTURE_CALIBRATION_FILE
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
 from routines import RoutineScheduler
 from proactive import ProactiveEngine, build_proactive_router
 from presence import NEEDS_CAMERA, PresenceService, get_service, voice_action
+from personas import is_persona, save_persona, saved_persona
 from lan_access import DeviceRegistry, LanGuard, TlsFiles, build_lan_router, device_of, ensure_certificates, lan_addresses, lan_url
 from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
@@ -149,6 +152,15 @@ class AgentDispatchRequest(BaseModel):
 
 class RoomConfigRequest(BaseModel):
     agents: list[AgentDispatchRequest] | None = None
+
+
+class GestureBindingRequest(BaseModel):
+    kind: Literal["action", "layout", "app", "site", "keys", "none"]
+    value: str | None = Field(default=None, max_length=120)
+
+
+class PersonaRequest(BaseModel):
+    persona: str = Field(min_length=1, max_length=20)
 
 
 class TokenRequest(BaseModel):
@@ -288,9 +300,20 @@ def _active_voice(settings: Settings) -> str | None:
     """Voice the next Gemini session starts with (VOZ-30), for the Sistema panel."""
     if settings.backend != "gemini-realtime":
         return None
+    from personas import load_persona
     from voices import effective_voice
 
-    return effective_voice(settings.google_voice)
+    return effective_voice(settings.google_voice, persona=load_persona().id)
+
+
+def _layout_names() -> list[str]:
+    """Saved window layouts (layouts.json), for the gesture that applies one."""
+    try:
+        from pc_control import load_layouts
+
+        return sorted(load_layouts())
+    except Exception:
+        return []
 
 
 def create_app(
@@ -482,8 +505,67 @@ def create_app(
             "home": _geocode_home(settings.home_city) if settings.home_city else None,
             "wake_word": {"enabled": settings.wake_word_enabled, "silence_s": settings.wake_silence_seconds},
             "lan": bool(app.state.lan_urls),
+            # HUD persona chosen on any device (None: nobody chose yet, the browser keeps its own).
+            "persona": saved_persona(),
             "errors": backend_errors + livekit_errors,
         }
+
+    @app.get("/api/persona")
+    def get_persona() -> dict[str, Any]:
+        return {"persona": saved_persona()}
+
+    @app.post("/api/persona")
+    def set_persona(body: PersonaRequest, request: Request) -> dict[str, Any]:
+        """The HUD persona (theme) changed: the agent picks up the persona and voice (personas.py)."""
+        _require_local(request, "A troca de persona")
+        if not is_persona(body.persona):
+            raise HTTPException(status_code=400, detail=f"Persona desconhecida: {body.persona}")
+        if saved_persona() != body.persona:
+            save_persona(body.persona)
+            logger.info("Persona do HUD: %s.", body.persona)
+        return {"persona": body.persona}
+
+    # ── Gestos (GST-18): o painel do HUD vê e muda o que cada gesto livre faz (gestos.json) ──
+
+    def gesture_catalog() -> dict[str, Any]:
+        settings = current_settings()
+        return {
+            **gesture_mapping.catalog(),
+            "enabled": settings.gestures_enabled,
+            "layouts": _layout_names(),
+            "calibrated": GESTURE_CALIBRATION_FILE.exists(),
+        }
+
+    @app.get("/api/gestures")
+    def gestures(request: Request) -> dict[str, Any]:
+        _require_local(request, "A configuração dos gestos")
+        return gesture_catalog()
+
+    @app.put("/api/gestures/{gesture}")
+    def set_gesture(gesture: str, body: GestureBindingRequest, request: Request) -> dict[str, Any]:
+        """Same rules as the voice ("o rock abre o Spotify"): closing, deleting and typing are refused.
+        The engine re-reads gestos.json by its date, so the change works on the next gesture."""
+        _require_local(request, "A configuração dos gestos")
+        try:
+            message = gesture_mapping.set_binding(gesture, body.kind, body.value)
+        except gesture_mapping.MappingError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        logger.info("Gesto pelo HUD: %s", message)
+        return {"message": message, **gesture_catalog()}
+
+    @app.delete("/api/gestures/{gesture}")
+    def reset_gesture(gesture: str, request: Request) -> dict[str, Any]:
+        _require_local(request, "A configuração dos gestos")
+        try:
+            message = gesture_mapping.reset_binding(gesture)
+        except gesture_mapping.MappingError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"message": message, **gesture_catalog()}
+
+    @app.delete("/api/gestures")
+    def reset_gestures(request: Request) -> dict[str, Any]:
+        _require_local(request, "A configuração dos gestos")
+        return {"message": gesture_mapping.reset_binding(None), **gesture_catalog()}
 
     @app.post("/api/token")
     def issue_token(body: TokenRequest | None = None) -> dict[str, str]:

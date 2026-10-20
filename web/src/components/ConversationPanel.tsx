@@ -1,5 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { formatClock } from '../lib/format';
+import { usePrefs } from '../lib/prefs';
+import { themeInfo } from '../lib/themes';
 import type { ChatLine } from '../lib/types';
 import { Panel } from './Panel';
 
@@ -15,6 +17,8 @@ export function ConversationPanel({ lines, thinking, canSend, onSend }: Conversa
   const [sending, setSending] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  // Who answers depends on the persona (F.R.I.D.A.Y. speaks for herself).
+  const speaker = themeInfo(usePrefs().theme).speaker;
 
   useEffect(() => {
     const el = scroller.current;
@@ -88,15 +92,15 @@ export function ConversationPanel({ lines, thinking, canSend, onSend }: Conversa
             {lines.map((line) => (
               <div key={line.id} className={`line line--${line.role}`}>
                 <div className="line__who">
-                  {line.role === 'agent' ? 'J.A.R.V.I.S.' : 'VOCÊ'}
+                  {line.role === 'agent' ? speaker : 'VOCÊ'}
                   <time>{formatClock(line.ts).slice(0, 5)}</time>
                 </div>
                 <div className="line__text">{line.text}</div>
               </div>
             ))}
             {thinking && (
-              <div className="line line--agent" aria-label="Jarvis está processando">
-                <div className="line__who">J.A.R.V.I.S.</div>
+              <div className="line line--agent" aria-label={`${speaker} está processando`}>
+                <div className="line__who">{speaker}</div>
                 <div className="typing">
                   <i />
                   <i />
