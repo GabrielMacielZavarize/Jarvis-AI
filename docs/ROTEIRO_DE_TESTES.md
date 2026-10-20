@@ -235,6 +235,20 @@ Detalhes em [integracoes.md](integracoes.md). Precisa de `JARVIS_ENABLE_MCP=true
 - [ ] Com `create_issue` liberada, "cria uma issue chamada teste": nada é criado antes de "confirmar integração" e o código.
 - [ ] Sem o token no `.env`, o link abre normal e o Jarvis diz que a integração está indisponível.
 
+## 20. Ferramentas sob demanda
+
+Detalhes em [ferramentas-sob-demanda.md](ferramentas-sob-demanda.md). Ligue tudo no `.env` (PC, mouse, agenda, email, câmera, gestos, avisos e MCP) e deixe `JARVIS_TOOL_ROUTING=auto`.
+
+- [ ] O terminal do agente não mostra nenhum grupo carregado ao abrir o link. "Que horas são?" responde direto, sem "Um instante.".
+- [ ] "O que eu tenho hoje?": ele diz "Um instante.", a placa mostra "FER-33 · Carregando ferramentas · Agenda" e logo depois vem a agenda sem você repetir. Anote quanto tempo passa entre o "Um instante." e a resposta.
+- [ ] Na mesma conversa, "e amanhã?": responde direto, sem "Um instante." de novo.
+- [ ] "Abre o Spotify e põe o volume em 30": um "Um instante." só, para janelas e mídia juntas.
+- [ ] "Marca dentista sexta às 15h", depois peça janelas, mídia, mouse e tela antes de confirmar. Diga "confirmar agenda" e o código: o evento é criado.
+- [ ] "Quais issues abertas eu tenho no Jarvis-AI?": o GitHub conecta só agora (veja o terminal) e a lista aparece.
+- [ ] Peça a agenda e faça o Gemini cair (cota ou um modelo inválido no `GOOGLE_MODEL`): no modelo de reserva, "e amanhã?" responde sem pedir o grupo de novo.
+- [ ] Repita os pedidos com `JARVIS_TOOL_ROUTING=false`: nenhum "Um instante." e tudo funciona como antes. Compare quantas vezes ele escolheu a ferramenta errada nos dois modos.
+- [ ] Com o `.env` padrão (memória, diário e rotinas) e `auto`: nada muda em relação a antes.
+
 ## 21. Casa inteligente
 
 Detalhes em [casa.md](casa.md). Precisa de `JARVIS_ENABLE_MCP=true`, da integração Model Context Protocol Server no Home Assistant, da entrada `home_assistant` no `mcp.json` e do `HOME_ASSISTANT_TOKEN` no `.env`.

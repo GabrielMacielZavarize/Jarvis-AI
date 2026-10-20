@@ -91,6 +91,18 @@ def _parse_bool(raw_value: str | None, env_name: str, default: bool = False) -> 
     )
 
 
+def _parse_tool_routing(raw_value: str | None) -> str:
+    """JARVIS_TOOL_ROUTING: "auto" (default), or any true/false spelling."""
+    normalized = (raw_value or "").strip().lower()
+    if not normalized or normalized == "auto":
+        return "auto"
+    if normalized in TRUTHY_VALUES:
+        return "true"
+    if normalized in FALSY_VALUES:
+        return "false"
+    raise SettingsError(f"Valor inválido em JARVIS_TOOL_ROUTING: {raw_value!r}. Use auto, true ou false.")
+
+
 def _parse_number(
     raw_value: str | None, env_name: str, default: float, minimum: float, maximum: float
 ) -> float:
@@ -293,6 +305,8 @@ class Settings:
     livekit_url: str | None = None
     livekit_api_key: str | None = None
     livekit_api_secret: str | None = None
+    # Ferramentas sob demanda (FER-33): auto, true ou false.
+    tool_routing: str = "auto"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -454,6 +468,7 @@ class Settings:
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),
             livekit_api_key=_clean_optional(env_map.get("LIVEKIT_API_KEY")),
             livekit_api_secret=_clean_optional(env_map.get("LIVEKIT_API_SECRET")),
+            tool_routing=_parse_tool_routing(env_map.get("JARVIS_TOOL_ROUTING")),
         )
 
     def wake_threshold_for(self, word: str) -> float:

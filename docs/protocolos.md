@@ -39,6 +39,8 @@ Cada ferramenta do Jarvis tem um código de protocolo, que aparece no HUD (na pl
 | OLH-35 | `watch_screen` | Vigia o texto de uma janela (terminal, PhpStorm, a janela em foco) e avisa quando aparece um erro novo, oferecendo a explicação do TEL-31 | "Fica de olho no terminal.", "Fica de olho no PhpStorm.", "Para de vigiar.", "Que janela você está vigiando?" |
 | DIA-36 | `diary_lookup`, `forget_diary` | Diário das conversas: no fim de cada conversa, um resumo do pedido, do feito e do pendente. Busca por data e pelo sentido, painel Diário | "O que eu te pedi ontem?", "O que a gente fez na sexta?", "Onde paramos no projeto do Jarvis?", "Esquece essa conversa." |
 
+| MCP-32 | `mcp_status`, `confirm_mcp_action`, `cancel_mcp_action` e as ferramentas liberadas no `mcp.json` (`github_list_issues`...) | Usa ferramentas de servidores MCP (GitHub, Notion, Spotify...). Só as do `permitir` chegam ao modelo, e as que escrevem pedem código | "Quais issues abertas eu tenho no Jarvis-AI?", "Procura a página da reunião no Notion.", "Quais integrações você tem?" |
+| FER-33 | `use_tools` | Ferramentas sob demanda: o modelo pede um grupo (agenda, janelas, mouse, cada integração MCP...) quando o assunto chega. Quem chama é o próprio modelo | "O que eu tenho hoje?" com a agenda fora do núcleo: "Um instante." e a resposta |
 | SAU-40 | Nenhuma (painel do HUD) | Histórico local de tempo de resposta, ativações, falhas e modelos, com sugestões de ajuste do `.env` | Abra o painel Saúde no HUD |
 
 A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm ferramenta de voz. Estão em [voz.md](voz.md#palavra-de-ativação) e [celular.md](celular.md).
@@ -63,6 +65,7 @@ A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm 
 | LAN-26 | `python jarvis.py --lan` ou `JARVIS_LAN=true` |
 | OLH-35 | `JARVIS_ENABLE_PC_CONTROL=true` e `JARVIS_PROACTIVE=true` |
 | MCP | `JARVIS_ENABLE_MCP=true` e os servidores no `mcp.json` (veja [integracoes.md](integracoes.md)) |
+| FER | `JARVIS_TOOL_ROUTING=auto` (padrão) liga com mais de 60 ferramentas. `true` sempre, `false` nunca (veja [ferramentas-sob-demanda.md](ferramentas-sob-demanda.md)) |
 | SAU-40 | Vem ligado. `JARVIS_HEALTH=false` desliga (veja [saude.md](saude.md)) |
 
 ## Painéis, abas e atalhos de site

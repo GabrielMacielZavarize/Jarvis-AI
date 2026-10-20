@@ -46,6 +46,8 @@ class JarvisRuntime:
     room_options: room_io.RoomOptions
     # Modelo do Gemini Live em uso agora; muda quando a conversa passa para um modelo de reserva.
     model: str = ""
+    # Ferramentas sob demanda (FER-33): None quando o modelo vê todas as ferramentas.
+    router: Any | None = None
 
 
 # Prints de tela precisam de resolução para o texto ficar legível.
@@ -238,7 +240,9 @@ def build_runtime(
 ) -> JarvisRuntime:
     """``vad`` comes preloaded by the worker process (agent.py); ``model`` is the pool's choice."""
     backend = build_backend_components(settings, model)
-    tools = build_tools(settings)
+    from tool_routing import route_tools
+
+    tools, router = route_tools(build_tools(settings), settings.tool_routing)
 
     session_kwargs: dict[str, Any] = {
         "tools": tools,
@@ -267,6 +271,7 @@ def build_runtime(
             routines=_routines_summary() if settings.routines_enabled else None,
             persona=persona,
             integrations=_integrations_summary() if settings.mcp_enabled else None,
+            tool_groups=router.summary() if router else None,
         )
     )
     room_options = room_io.RoomOptions(
@@ -281,6 +286,7 @@ def build_runtime(
         session=session,
         room_options=room_options,
         model=(model or settings.google_model) if settings.backend == "gemini-realtime" else "",
+        router=router,
     )
 
 
@@ -329,6 +335,8 @@ def watch_model_failover(runtime: JarvisRuntime, pool: ModelPool) -> None:
             agent = JarvisAgent(
                 current.instructions,
                 chat_ctx=current.chat_ctx.copy(),
+                # Grupos carregados por use_tools (FER-33) seguem no modelo de reserva.
+                tools=list(current.tools),
                 llm=build_gemini_model(runtime.settings, target),
             )
             agent.resumed = True

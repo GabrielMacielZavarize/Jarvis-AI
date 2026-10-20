@@ -24,6 +24,8 @@ Enviar email, instalar app, mexer na agenda, cliques arriscados do mouse e ferra
 
 Não valem "pode ir", "manda", "sim", "não confirmar 482913", "confirmar 482913 e ..." (qualquer palavra fora da frase) e frases que não sejam a sua última fala.
 
+Com as ferramentas sob demanda ([ferramentas-sob-demanda.md](ferramentas-sob-demanda.md)), as ferramentas de confirmar e cancelar ficam sempre com o modelo. Uma ação pendente nunca perde a ferramenta que a confirma quando um grupo sai, e a troca de grupos não muda a frase nem o código.
+
 Cada tipo pede a sua palavra: "instalação" para instalar, "clique" para o mouse ("confirmar clique 482913"), "agenda" ou "evento" para a agenda ("confirmar agenda 482913") e "integração" para as ferramentas MCP que escrevem ("confirmar integração 482913"). Uma frase não serve para a outra. Se a transcrição da sua fala chegar um instante atrasada, o Jarvis espera até 3 segundos por ela.
 
 ## Instalação de aplicativos

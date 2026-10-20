@@ -35,6 +35,9 @@ async def jarvis_agent(ctx: agents.JobContext):
     watch_user_voice(runtime.session)
     watch_response_time(runtime.session, lambda: runtime.model)
     watch_model_failover(runtime, pool)
+    if runtime.router is not None:
+        # Integrações MCP conectadas por use_tools (FER-33) fecham com a sessão.
+        ctx.add_shutdown_callback(runtime.router.aclose)
     if settings.computer_use_enabled:
         # Modo ditado (DIT-29): escuta as transcrições desde o começo da sessão.
         from dictation import watch_dictation

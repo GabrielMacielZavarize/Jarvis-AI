@@ -73,6 +73,7 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `tray.py` | Ícone na bandeja (BAN-41): estado, menu, rotas `/api/tray`, início com o Windows e logs em arquivo |
 | `tray_icon.py` | O ícone da bandeja em Win32 puro: `Shell_NotifyIconW`, menu e notificações |
 | `mcp_client.py` | Integrações MCP (MCP-32): `mcp.json`, filtro do `permitir`, confirmação das que escrevem (e da casa: porta, portão, alarme) e o diagnóstico |
+| `tool_routing.py` | Ferramentas sob demanda (FER-33): núcleo, grupos, a ferramenta `use_tools` e a troca com `update_tools` depois da resposta |
 | `health.py` | Painel de saúde (SAU-40): `saude.db`, resumo, sugestões, rotas `/api/health` e o envio dos eventos |
 | `lan_access.py` | Celular na rede (LAN-26): pareamento, tokens por aparelho, bloqueio das rotas e certificados |
 | `generate_playground_token.py` | Token para o LiveKit Agents Playground |
