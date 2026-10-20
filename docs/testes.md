@@ -46,3 +46,52 @@ Tudo roda com mocks: os testes não instalam, não tocam, não abrem, não clica
 | Casa inteligente | `tests/test_casa.py` confere a entrada do Home Assistant no `mcp.example.json`, o `http://` só para IPs da rede de casa, luz, ar e volume rodando direto, porta, fechadura, portão, garagem, alarme e câmera pedindo código mesmo em `sem_confirmar` (no nome e nos argumentos, com e sem acento) e a leitura do estado sem código. Também roda um Home Assistant falso por stdio (`tests/mcp_fake_home_assistant.py`) com `GetLiveContext`, `HassTurnOn`, `HassTurnOff` e `HassLightSet` |
 
 No HUD (vitest, em `web/`): o som de cada evento, o volume salvo no navegador e os estados "pensando" e "executando" do núcleo (`sounds.test.ts`, `coreActivity.test.ts`), preferências salvas (persona, qualidade, legenda) e layout dos painéis, qualidade automática da cena (só desce depois de uma lentidão seguida), o modo visual que não pisca entre os estados (`visualMode.test.ts`), a palavra ouvida e a persona que ela chama (`wake.test.ts`), o perfil de cada persona e o timbre dos sons (`themes.test.ts`), o painel Gestos (`gestures.test.ts`), tempo de resposta, modo ambiente, geometria dos gráficos, som do reator, o destaque de sintaxe o painel do assistente de tela, a marca "pelo sentido" do painel Memória, o painel Diário (apagar pelo RPC, filtro mantido, dias e rótulos em `diaryLink.test.ts`), os servidores MCP no painel Protocolos, o código OLH-35 nos avisos do vigia e, no celular, o código do QR, o nome do aparelho, as chamadas de pareamento e revogação, a cena leve e o manifest do PWA.
+
+## CI no GitHub Actions
+
+O `.github/workflows/ci.yml` roda a cada push na `main` e em cada pull request. São três jobs em paralelo no Ubuntu.
+
+| Job | O que roda |
+| --- | --- |
+| pytest | Python 3.12, `TZ=America/Sao_Paulo`, `PYTHONDONTWRITEBYTECODE=1`, `xvfb-run -a python -m pytest -q -rs tests`. Instala `xvfb`, `python3-tk` e `libegl1` e baixa o modelo do detector de rosto do MediaPipe (fica no cache) |
+| vitest e build do HUD | Node 22, `npm ci`, `npm test` e `npm run build` em `web/` |
+| testes visuais do HUD | Playwright com Chromium contra `python jarvis.py --no-agent` |
+
+O cache do pip usa o `requirements.txt` e o do npm usa o `web/package-lock.json`. No Linux o `requirements.txt` já deixa o openwakeword de fora (não tem wheel para o Python 3.12) e traz o `opencv-contrib-python` que o mediapipe precisa. Os dois testes pulados são esperados, porque só existem no Windows. O do detector de rosto real roda porque o CI baixa o modelo do MediaPipe.
+
+Quando um teste visual falha, o relatório do Playwright fica nos artefatos da execução por 7 dias.
+
+Sem o `PYTHONDONTWRITEBYTECODE=1`, a primeira execução num checkout novo travava no `test_dictation.py` e terminava em segmentation fault: o Python gravando os `.pyc` no meio da suíte. Com os `.pyc` já compilados ou sem gravar nenhum, passa. Um teste parado por mais de 60 s despeja a pilha de todas as threads no log (`faulthandler_timeout=60`) e o passo para em 10 minutos.
+
+### Testes visuais do HUD
+
+Ficam em `web/e2e/hud.e2e.ts`. O `web/playwright.config.ts` sobe o servidor de verdade na porta 8123, sem agente, entregando o `web/dist` compilado.
+
+| Teste | O que confere |
+| --- | --- |
+| Cada persona | Com a persona gravada no servidor, o HUD abre com o `data-theme`, o nome no topo, o núcleo 3D e os painéis Sistema, Protocolos, Transcrição e Registro, sem erro no console |
+| Simulação | O botão Simulação passa por conectando, falando, ouvindo e pensando sem piscar: nenhum estado dura menos de 300 ms nem volta ao anterior logo depois. O respiro entre as frases do clima continua em "falando". Aparecem as projeções do clima, do diagnóstico e do timer, a transcrição e o registro |
+
+O teste grava a persona no `persona.json` e devolve a sua no fim.
+
+### Reproduzir localmente
+
+```bash
+python3.12 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt pytest
+sudo apt-get install -y xvfb python3-tk libegl1
+TZ=America/Sao_Paulo PYTHONDONTWRITEBYTECODE=1 xvfb-run -a python -m pytest -q -rs tests
+
+cd web
+npm ci && npm test && npm run build
+npx playwright install chromium
+npm run e2e
+```
+
+| Variável | Para que serve |
+| --- | --- |
+| `JARVIS_PYTHON` | Python que sobe o servidor nos testes visuais (padrão `python`) |
+| `JARVIS_E2E_PORT` | Porta do servidor dos testes visuais (padrão 8123) |
+| `PW_CHROMIUM_PATH` | Chromium já instalado, no lugar do baixado pelo Playwright |
+
+O `npm run e2e` usa o `web/dist` que já existe, então rode o `npm run build` antes. Se a porta ainda estiver presa por uma execução anterior, troque o `JARVIS_E2E_PORT`.
