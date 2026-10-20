@@ -234,3 +234,18 @@ Detalhes em [integracoes.md](integracoes.md). Precisa de `JARVIS_ENABLE_MCP=true
 - [ ] Uma ferramenta fora do `permitir` não aparece no `mcp_status` nem é chamada.
 - [ ] Com `create_issue` liberada, "cria uma issue chamada teste": nada é criado antes de "confirmar integração" e o código.
 - [ ] Sem o token no `.env`, o link abre normal e o Jarvis diz que a integração está indisponível.
+
+## 25. Clica aqui apontando
+
+Detalhes em [mouse-e-ditado.md](mouse-e-ditado.md#clica-aqui-apontando). Precisa de `JARVIS_ENABLE_COMPUTER_USE=true`, dos gestos armados e do link aberto.
+
+- [ ] Vídeo do YouTube pausado no monitor vertical, mouse parado no notebook. Aponte para o play e diga "Jarvis, clica aqui". A mira fica parada no play com "CLICANDO AQUI", o cursor desliza até ela e o vídeo toca. O terminal não mostra consulta ao modelo de visão.
+- [ ] O painel MOU-20 mostra o print da tela certa com a mira laranja em cima do play.
+- [ ] Baixe a mão logo depois de falar: o clique ainda sai no ponto e a mira continua até o clique.
+- [ ] Aponte para o botão Enviar de um email ou do WhatsApp e diga "clica aqui": nada é clicado, a mira fica com "CONFIRMAR CLIQUE AQUI?" e o Jarvis pede "confirmar clique" e o código. Com o código, o clique sai no mesmo ponto.
+- [ ] Aponte para o HUD, para uma janela do UAC ou do Gerenciador de Tarefas e diga "clica aqui": recusado, sem mexer no cursor.
+- [ ] Num jogo ou vídeo em tela cheia, "clica aqui" pede o código (o Jarvis diz que não conseguiu ler o ponto).
+- [ ] Aponte para a busca do YouTube e diga "digita lo-fi aqui": o Jarvis clica na busca e digita nela. Apontando para o meio da página, ele recusa e nada é digitado.
+- [ ] Aponte para a caixa de mensagem do WhatsApp e diga "escreve aqui: já vou". O texto cai na caixa apontada, mesmo com outra janela em foco antes, e nada é enviado.
+- [ ] Aponte para um campo de senha e diga "digita olá aqui": recusado.
+- [ ] Sem apontar, "clica no botão de play" e "digita olá" funcionam como antes.

@@ -438,6 +438,21 @@ class ToolTests(ControllerTestCase):
             await dictation.write_here(self.context("escreve aqui oi nova linha já vou"), "")
         self.assertEqual(self.field, "Oi⇧\nJá vou")
 
+    async def test_write_here_with_the_finger_clicks_the_pointed_field_first(self) -> None:
+        cu.set_pointer(lambda _age: (500, 400), Mock())
+        self.addCleanup(cu.set_pointer, None)
+        field = cu.PointedElement("Mensagem", cu.UIA_EDIT, False)
+        with (
+            patch.object(cu, "element_at", return_value=field),
+            patch.object(cu, "POINT_PREVIEW_S", 0),
+            patch("dictation.publish_hud_event", AsyncMock(return_value=True)),
+        ):
+            reply = await dictation.write_here(self.context("Escreve aqui: chego em 10 minutos"), "")
+        self.assertEqual(self.desktop.cursor, (500, 400))
+        self.assertEqual([e.flags for e in self.desktop.mouse], [cu.MOUSEEVENTF_LEFTDOWN, cu.MOUSEEVENTF_LEFTUP])
+        self.assertEqual(self.field, "Chego em 10 minutos")
+        self.assertIn("onde o usuário apontou", reply)
+
     async def test_controller_is_created_once_per_session(self) -> None:
         session = FakeSession()
         first = dictation.watch_dictation(session)

@@ -52,6 +52,8 @@ Os atalhos seguem uma allowlist: copiar, colar, recortar, desfazer, salvar, busc
 
 Cliques arriscados pedem confirmação falada. Se o elemento (pelo texto dele, pela sua descrição ou pela avaliação do modelo) envia, compra, paga, publica, apaga ou confirma algo, nada é clicado: o Jarvis mostra o alvo no HUD, fala um código e só clica depois de "confirmar clique" e o código. Antes de clicar ele confere se a mesma janela continua no lugar, e a confirmação expira em 2 minutos. Enter num app de mensagens ou de email também pede confirmação, a menos que você tenha pedido para enviar.
 
+O "clica aqui" com o dedo apontando passa pelas mesmas travas, com o nome do elemento embaixo do ponto (UI Automation) no lugar do rótulo do modelo de visão. O ponto vem só dos gestos, nunca da tela, e só vale se a sua última fala pede a ação e diz "aqui" ou "ali". Apontar para o HUD é recusado. Se não dá para saber o que tem no ponto, o clique pede o código, e o "digita aqui" só clica em campos de texto.
+
 São no máximo 10 ações por pedido e 8 passos por tarefa, tudo no painel MOU-20 e no terminal. Mexer no mouse, apertar Esc ou dizer "Jarvis, para" interrompe na hora.
 
 O que continua possível, e por isso o padrão é desligado: um clique "inofensivo" induzido por texto na tela quando a sua última fala já pedia alguma ação. E apps que embutem terminal (VS Code, PhpStorm) só são protegidos pelo filtro de comandos. Os prints vão para o Gemini, como na leitura de tela.
