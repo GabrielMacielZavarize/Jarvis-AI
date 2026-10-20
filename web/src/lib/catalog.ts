@@ -112,6 +112,8 @@ export const TOOL_LABELS: Record<string, string> = {
   mcp_status: 'Integrações MCP',
   confirm_mcp_action: 'Ação confirmada',
   cancel_mcp_action: 'Ação cancelada',
+  // Ferramentas sob demanda: the detail names the groups being loaded ("Agenda").
+  use_tools: 'Carregando ferramentas',
 };
 
 /** Protocol code of every agent tool, as in docs/protocolos.md. */
@@ -163,6 +165,7 @@ const PROTOCOL_TOOLS: Record<string, string[]> = {
   'VOZ-30': ['change_voice'],
   'TEL-31': ['explain_screen', 'copy_fix'],
   'MCP-32': ['mcp_status', 'mcp', 'confirm_mcp_action', 'cancel_mcp_action'],
+  'FER-33': ['use_tools'],
 };
 
 const TOOL_CODES = new Map(

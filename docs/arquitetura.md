@@ -68,6 +68,7 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `wake_word.py` | Detector local da palavra "Jarvis" (openWakeWord), iniciado pelo `jarvis.py` |
 | `wake_hub.py` | Ponte entre o detector e o HUD: avisa a aba por SSE ou abre o navegador |
 | `mcp_client.py` | Integrações MCP (MCP-32): `mcp.json`, filtro do `permitir`, confirmação das que escrevem e o diagnóstico |
+| `tool_routing.py` | Ferramentas sob demanda (FER-33): núcleo, grupos, a ferramenta `use_tools` e a troca com `update_tools` depois da resposta |
 | `lan_access.py` | Celular na rede (LAN-26): pareamento, tokens por aparelho, bloqueio das rotas e certificados |
 | `generate_playground_token.py` | Token para o LiveKit Agents Playground |
 

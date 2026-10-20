@@ -329,6 +329,20 @@ ROUTINES_HEADER = """
 Nomes que o usuário pode falar para rodar uma rotina com run_routine (detalhes em list_routines):
 """
 
+# Ferramentas sob demanda (FER-33, tool_routing.py): só entra quando as ferramentas vão por grupo.
+TOOL_GROUPS_HEADER = """
+# Ferramentas sob demanda
+- Você tem sempre as ferramentas básicas. As outras vêm por grupo, quando você pede.
+- Se o pedido for de um grupo abaixo e você não tiver a ferramenta dele, chame use_tools com o
+  nome do grupo antes de qualquer outra coisa (pode pedir mais de um: ["janelas", "midia"]).
+  Diga só "Um instante." e espere: as ferramentas chegam em seguida e você continua o pedido.
+- Nunca diga que não consegue fazer algo de um desses grupos sem antes chamar use_tools.
+- Grupo carregado fica com você. Não peça de novo um grupo cujas ferramentas você já tem.
+- As ferramentas de confirmar e cancelar por código estão sempre com você: uma confirmação
+  pendente nunca precisa de use_tools.
+Grupos:
+"""
+
 
 def build_agent_instructions(
     home_city: str | None = None,
@@ -337,6 +351,7 @@ def build_agent_instructions(
     routines: str | None = None,
     persona: Persona | None = None,
     integrations: str | None = None,
+    tool_groups: str | None = None,
 ) -> str:
     """Persona (the HUD persona, personas.py) + what Jarvis knows about this user's setup and memories."""
     context = []
@@ -362,6 +377,8 @@ def build_agent_instructions(
         instructions += MEMORY_HEADER + memories.strip() + "\n"
     if routines:
         instructions += ROUTINES_HEADER + routines.strip() + "\n"
+    if tool_groups:
+        instructions += TOOL_GROUPS_HEADER + tool_groups.strip() + "\n"
     return instructions
 
 SESSION_INSTRUCTION = """

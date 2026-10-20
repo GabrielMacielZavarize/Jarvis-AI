@@ -78,6 +78,8 @@ O Gemini Live erra mais quando tem ferramentas demais no contexto, e o Jarvis j�
 
 Servidores locais (`npx`) sobem junto com cada conversa, então o link pode demorar um pouco mais para abrir. Se incomodar, prefira o servidor HTTP do serviço quando existir.
 
+Com as ferramentas sob demanda ligadas ([ferramentas-sob-demanda.md](ferramentas-sob-demanda.md)), cada servidor vira um grupo com o nome dele. Ele não conecta quando o link abre, e sim na primeira vez que o Jarvis pede o grupo ("Um instante." e a resposta). Até lá o `mcp_status` diz "ainda conectando".
+
 As regras do que um servidor pode e não pode fazer estão em [seguranca.md](seguranca.md#integrações-mcp).
 
 ## Como testar
