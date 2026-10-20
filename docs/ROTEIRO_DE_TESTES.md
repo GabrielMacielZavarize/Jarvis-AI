@@ -263,6 +263,18 @@ Detalhes em [assistente-de-tela.md](assistente-de-tela.md#fica-de-olho-numa-jane
 - [ ] Feche o terminal vigiado: aparece no HUD que o vigia parou porque a janela fechou. Deixe outro vigia 30 minutos parado: ele para sozinho.
 - [ ] "Fica de olho no KeePass" é recusado. "Para de vigiar" desliga, e o Gerenciador de Tarefas mostra o `jarvis.py` sem gasto de CPU perceptível enquanto vigia.
 
+## 23. Diário das conversas
+
+Detalhes em [diario.md](diario.md). Precisa da `GOOGLE_API_KEY` e de `JARVIS_DIARY=true` (o padrão).
+
+- [ ] Converse uns minutos sobre um assunto (um bug do Jarvis-AI, por exemplo), deixe algo para depois e encerre o link. O `diario.json` aparece ao lado do projeto, com a entrada de hoje, e não entra no `git status`.
+- [ ] Abra o link, pergunte só "que horas são?" e encerre: nenhuma entrada nova.
+- [ ] Abra de novo: "o que eu te pedi hoje?" responde com o pedido e o pendente, e o painel Diário mostra a conversa no dia.
+- [ ] "Onde paramos no projeto do Jarvis?" acha a conversa mesmo sem as mesmas palavras, com "pelo sentido" no painel.
+- [ ] Diga uma senha falsa na conversa ("minha senha do wifi é teste123") e encerre: ela não aparece no `diario.json`.
+- [ ] "Esquece essa conversa" e encerre: nenhuma entrada nova. "Apaga o diário de hoje": as de hoje somem. O × do painel apaga uma só, depois do "Apagar?".
+- [ ] Com `JARVIS_DIARY=false`, encerre uma conversa longa: nada é gravado e o painel Protocolos não mostra o DIA-36.
+
 ## 25. Clica aqui apontando
 
 Detalhes em [mouse-e-ditado.md](mouse-e-ditado.md#clica-aqui-apontando). Precisa de `JARVIS_ENABLE_COMPUTER_USE=true`, dos gestos armados e do link aberto.

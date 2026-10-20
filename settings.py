@@ -281,6 +281,7 @@ class Settings:
     lan_enabled: bool = False
     mcp_enabled: bool = False
     mcp_timeout: float = DEFAULT_MCP_TIMEOUT
+    diary_enabled: bool = True
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -431,6 +432,7 @@ class Settings:
             mcp_timeout=_parse_number(
                 env_map.get("JARVIS_MCP_TIMEOUT"), "JARVIS_MCP_TIMEOUT", DEFAULT_MCP_TIMEOUT, 2, 60
             ),
+            diary_enabled=_parse_bool(env_map.get("JARVIS_DIARY"), "JARVIS_DIARY", default=True),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),

@@ -34,6 +34,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
   { id: 'run_routine', code: 'ROT-24', label: 'Rotinas', hint: '“Bom dia, Jarvis.” · “Modo foco.” · “Todo dia útil às 8h roda o bom dia.”' },
   { id: 'get_agenda', code: 'AGD-27', label: 'Google Agenda', hint: '“O que eu tenho hoje?” · “Marca dentista sexta às 15h.”' },
+  { id: 'diary_lookup', code: 'DIA-36', label: 'Diário das conversas', hint: '“O que eu te pedi ontem?” · “Onde paramos no projeto do Jarvis?”' },
   { id: 'mcp_status', code: 'MCP-32', label: 'Integrações MCP', hint: '“Quais issues abertas eu tenho?” · “Anota isso no Notion.”' },
   { id: 'watch_screen', code: 'OLH-35', label: 'Vigia de janela', hint: '“Fica de olho no terminal.” · “Para de vigiar.”' },
 ];
@@ -56,6 +57,8 @@ export const TOOL_LABELS: Record<string, string> = {
   remember: 'Gravando memória',
   recall: 'Consulta de memória',
   forget: 'Apagando memória',
+  diary_lookup: 'Consulta ao diário',
+  forget_diary: 'Apagando do diário',
   list_routines: 'Rotinas salvas',
   run_routine: 'Executando rotina',
   confirm_routine_step: 'Passo confirmado',
@@ -166,6 +169,7 @@ const PROTOCOL_TOOLS: Record<string, string[]> = {
   'TEL-31': ['explain_screen', 'copy_fix'],
   'MCP-32': ['mcp_status', 'mcp', 'confirm_mcp_action', 'cancel_mcp_action'],
   'OLH-35': ['watch_screen'],
+  'DIA-36': ['diary_lookup', 'forget_diary'],
 };
 
 const TOOL_CODES = new Map(

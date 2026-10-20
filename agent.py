@@ -86,6 +86,13 @@ async def jarvis_agent(ctx: agents.JobContext):
         # Vetores da busca pelo sentido das memórias que ainda não têm (as antigas, na primeira vez).
         index_in_background()
 
+    if settings.diary_enabled:
+        # DIA-36: no fim do link, o resumo desta conversa vai para o diario.json.
+        from diary import serve_diary_panel, write_on_shutdown
+
+        serve_diary_panel(ctx.room)
+        write_on_shutdown(ctx, runtime.session)
+
     if settings.routines_enabled:
         from routines import watch_scheduled_routines
 

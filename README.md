@@ -14,6 +14,7 @@ In English: real-time voice assistant built on LiveKit Agents (Gemini Live or Op
 - Clica, digita e rola a tela por você, e tem um modo ditado que escreve no campo em foco o que você fala.
 - Lê a tela e explica erros, código e páginas, com a correção pronta para copiar.
 - Fica de olho no terminal ou no PhpStorm e avisa quando aparece um erro novo, oferecendo a explicação.
+- Resume cada conversa num diário e responde "o que eu te pedi ontem?" e "onde paramos no projeto?".
 - Guarda fatos entre conversas, roda rotinas ("bom dia, Jarvis", "modo foco") e avisa sozinho de lembretes, bateria, downloads e reuniões.
 - Lê e mexe no Google Agenda, manda email e instala apps pelo winget. O que grava ou envia só acontece depois de um código falado.
 - Usa as ferramentas de servidores MCP (GitHub, Notion, Spotify...) com as mesmas travas: só o que você liberar, e o que escreve pede código.
@@ -76,6 +77,7 @@ Linux, macOS, OpenAI e as demais opções estão em [docs/instalacao.md](docs/in
 | Gestos das mãos | [gestos.md](docs/gestos.md) |
 | Câmera e presença | [camera-e-presenca.md](docs/camera-e-presenca.md) |
 | Memória e rotinas | [memoria-e-rotinas.md](docs/memoria-e-rotinas.md) |
+| Diário das conversas | [diario.md](docs/diario.md) |
 | Google Agenda | [agenda.md](docs/agenda.md) |
 | Integrações MCP (GitHub, Notion...) | [integracoes.md](docs/integracoes.md) |
 | Casa inteligente (Home Assistant) | [casa.md](docs/casa.md) |

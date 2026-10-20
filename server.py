@@ -93,6 +93,7 @@ PC_TOOL_NAMES = [
     "copy_fix",
 ]
 MEMORY_TOOL_NAMES = ["remember", "recall", "forget"]
+DIARY_TOOL_NAMES = ["diary_lookup", "forget_diary"]
 ROUTINE_TOOL_NAMES = [
     "list_routines",
     "run_routine",
@@ -498,6 +499,7 @@ def create_app(
         tools = (
             TOOL_NAMES
             + (MEMORY_TOOL_NAMES if settings.memory_enabled else [])
+            + (DIARY_TOOL_NAMES if settings.diary_enabled else [])
             + (ROUTINE_TOOL_NAMES if settings.routines_enabled else [])
             + (PC_TOOL_NAMES if settings.pc_control_enabled else [])
             + (GESTURE_TOOL_NAMES if settings.gestures_enabled else [])
@@ -526,6 +528,7 @@ def create_app(
             "presence": settings.presence_enabled,
             "computer_use": settings.computer_use_enabled,
             "memory": settings.memory_enabled,
+            "diary": settings.diary_enabled,
             "voice": _active_voice(settings),
             "routines": {
                 "enabled": settings.routines_enabled,

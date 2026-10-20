@@ -49,6 +49,8 @@ Se o arquivo ficar ilegível, ele é guardado como `memoria.corrompido-<data>.js
 
 As regras do que pode e do que não pode ser guardado estão em [seguranca.md](seguranca.md#memória).
 
+O resumo de cada conversa ("o que eu te pedi ontem?") é outra coisa, o diário: [diario.md](diario.md).
+
 ## Rotinas
 
 Protocolo ROT-24. Também vem ligado (`JARVIS_ENABLE_ROUTINES=false` desliga). Os passos que mexem no PC precisam de `JARVIS_ENABLE_PC_CONTROL=true`.
