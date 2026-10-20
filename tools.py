@@ -1456,4 +1456,9 @@ def build_tools(settings: Settings) -> list[Any]:
         from proactive import build_proactive_tools
 
         tools.extend(build_proactive_tools())
+        if settings.pc_control_enabled:
+            # OLH-35: "fica de olho no terminal" junta o TEL-31 com os avisos.
+            from screen_watch import build_watch_tools
+
+            tools.extend(build_watch_tools(settings))
     return tools

@@ -131,7 +131,9 @@ export function noticeCard(notice: NoticeEvent): NoteData {
 /** The notification a notice slides in on the right edge; critical ones wait for a click. */
 export function noticeToast(notice: NoticeEvent): Pick<Toast, 'level' | 'title' | 'message' | 'code'> {
   const level = notice.priority === 'critical' ? 'critical' : notice.priority === 'high' ? 'warn' : 'info';
-  return { level, title: notice.title, message: notice.message, code: 'PRO-28' };
+  // OLH-35: erro novo na janela vigiada (screen_watch.py) chega pelo mesmo caminho.
+  const code = notice.topic === 'watch' ? 'OLH-35' : 'PRO-28';
+  return { level, title: notice.title, message: notice.message, code };
 }
 
 export function noticeLogLevel(priority: NoticePriority): LogLevel {

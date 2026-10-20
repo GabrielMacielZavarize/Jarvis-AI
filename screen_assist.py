@@ -79,7 +79,7 @@ ENV_SECRET = re.compile(
 )
 
 Task = Literal["explain_error", "whats_wrong", "explain_code", "summarize", "translate", "explain"]
-Target = Literal["auto", "window", "here", "selection", "clipboard"]
+Target = Literal["auto", "window", "here", "selection", "clipboard", "watched"]
 
 TASK_LABELS = {
     "explain_error": "Explicação do erro",
@@ -288,6 +288,29 @@ def _win_window_text(hwnd: int) -> str | None:
     return _with_uia(read)
 
 
+def _win_visible_text(hwnd: int) -> str | None:
+    """Only the text a window shows right now (``GetVisibleRanges``): cheap enough to poll."""
+
+    def read(automation: Any, uia: Any) -> str | None:
+        root = automation.ElementFromHandle(hwnd)
+        own = _text_pattern(root, uia)
+        candidates = [own] if own else []
+        found = root.FindAll(TREE_SCOPE_DESCENDANTS, automation.CreatePropertyCondition(UIA_IS_TEXT_PATTERN_AVAILABLE, True))
+        for index in range(min(found.Length, 30)):
+            pattern = _text_pattern(found.GetElement(index), uia)
+            if pattern:
+                candidates.append(pattern)
+        best = ""
+        for pattern in candidates:
+            ranges = pattern.GetVisibleRanges()
+            text = "\n".join(str(ranges.GetElement(i).GetText(MAX_TEXT_CHARS) or "") for i in range(ranges.Length))
+            if len(text.strip()) > len(best.strip()):
+                best = text
+        return best if best.strip() else None
+
+    return _with_uia(read)
+
+
 def _win_text_at(point: tuple[int, int]) -> str | None:
     """The lines around a screen point (TextPattern), or the labels of the element under it."""
 
@@ -343,6 +366,25 @@ POINTER: Any = None
 def set_pointer(source: Any) -> None:
     global POINTER
     POINTER = source
+
+
+# Janela vigiada pelo OLH-35 (screen_watch.watched_window), ligada pelo build_tools.
+WATCHED: Any = None
+
+
+def set_watched(source: Any) -> None:
+    global WATCHED
+    WATCHED = source
+
+
+def _watched_window() -> WindowInfo | None:
+    if WATCHED is None:
+        return None
+    try:
+        return WATCHED()
+    except Exception:
+        logger.debug("Falha ao perguntar a janela vigiada.", exc_info=True)
+        return None
 
 
 def _pointed_point() -> tuple[int, int] | None:
@@ -470,6 +512,8 @@ def gather(task: str, target: str) -> Capture:
 
     if not IS_WINDOWS:
         raise ScreenAssistError("ler a tela só funciona no Windows.")
+    if target == "watched":
+        return _gather_watched(task)
     pointed = _pointed_point() if target == "here" else None
     if pointed is not None:
         return _gather_pointed(task, pointed)
@@ -519,6 +563,20 @@ def _gather_pointed(task: str, point: tuple[int, int]) -> Capture:
         capture.pointed = True
         return capture
     return Capture(source="here_image", label=label, image=_win_grab_here(point), window=window, pointed=True)
+
+
+def _gather_watched(task: str) -> Capture:
+    """The window OLH-35 is watching, even in the background: its text only, never a print."""
+    window = _watched_window()
+    if window is None:
+        raise ScreenAssistError("não estou de olho em nenhuma janela agora.")
+    if reason := never_read_reason(window):
+        raise ScreenAssistError(f"essa janela é {reason}; por segurança eu não leio.")
+    text = _win_visible_text(window.hwnd) or _win_window_text(window.hwnd)
+    capture = _from_text("window_text", text, f"{window_label(window)}, que estou vigiando", window, task)
+    if capture is None:
+        raise ScreenAssistError("não consegui ler o texto da janela que estou vigiando.")
+    return capture
 
 
 # ───────────────────────── modelo (Gemini pela API normal) ─────────────────────────
@@ -838,7 +896,9 @@ async def explain_screen(
         target: auto (selection, else the focused window), here (the user says "aqui"/"isso
             aqui": the spot the user pointed at with the index finger, when gestures are on, else
             the area around the mouse cursor), window (the whole focused window, ignore the
-            selection), selection (only the selected text) or clipboard ("o que eu copiei").
+            selection), selection (only the selected text), clipboard ("o que eu copiei") or
+            watched (the window Jarvis is watching with watch_screen, after a "quer que eu
+            explique esse erro?" notice).
         question: The user's own words when they ask something specific.
         language: Only for translate, when the user names the target language ("pro inglês").
     """

@@ -47,6 +47,7 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `installer.py` | Busca e instalação de apps pelo winget, com confirmação por código |
 | `computer_use.py` | Mouse e teclado (MOU-20): visão com `box_2d`, `SendInput`, `SetCursorPos` e as travas |
 | `screen_assist.py` | Assistente de tela (TEL-31): lê seleção, janela ou cursor por UI Automation e explica com o Gemini |
+| `screen_watch.py` | Vigia de janela (OLH-35): lê o texto da janela vigiada no servidor do HUD e avisa erros novos pelos avisos proativos |
 | `dictation.py` | Modo ditado (DIT-29): transcrições da fala, comandos falados e teclado do MOU-20 |
 | `confirmation.py` | A frase "confirmar <código>", tolerante à transcrição de voz |
 | `memory.py` | Memória entre conversas (`memoria.json`), busca pelo sentido, filtro de segredos e painel |
