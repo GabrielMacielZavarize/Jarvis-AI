@@ -318,6 +318,15 @@ Detalhes em [mouse-e-ditado.md](mouse-e-ditado.md#clica-aqui-apontando). Precisa
 - [ ] Aponte para um campo de senha e diga "digita olá aqui": recusado.
 - [ ] Sem apontar, "clica no botão de play" e "digita olá" funcionam como antes.
 
+## 26. CI no GitHub Actions
+
+Detalhes em [testes.md](testes.md#ci-no-github-actions).
+
+- [ ] Depois do push, a aba Actions mostra os três jobs (pytest, vitest e build do HUD, testes visuais do HUD) verdes.
+- [ ] Um pull request mostra os três jobs como checks.
+- [ ] A segunda execução usa o cache do pip, do npm e do modelo do MediaPipe (o passo de cache diz "Cache restored").
+- [ ] No Windows, `npm run e2e` em `web/` passa com `JARVIS_PYTHON=python` e não troca a persona que estava escolhida.
+
 ## 27. Painel de saúde
 
 Detalhes em [saude.md](saude.md).

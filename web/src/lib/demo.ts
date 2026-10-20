@@ -69,10 +69,10 @@ export const DEMO_SCRIPT: DemoBeat[] = [
       }),
     },
   },
-  {
-    kind: 'agent',
-    text: 'São Paulo marca 24 graus com céu parcialmente nublado, senhor. Leve um guarda-chuva amanhã; a previsão completa está no painel.',
-  },
+  { kind: 'agent', text: 'São Paulo marca 24 graus com céu parcialmente nublado, senhor.' },
+  // Respiro entre as frases, como o agente de verdade: o HUD continua em "falando" (lib/visualMode).
+  { kind: 'mode', mode: 'listening', ms: 250 },
+  { kind: 'agent', text: 'Leve um guarda-chuva amanhã; a previsão completa está no painel.' },
   { kind: 'mode', mode: 'listening', ms: 1000 },
   { kind: 'user', text: 'Rode um diagnóstico rápido do sistema.' },
   { kind: 'tool', name: 'run_diagnostics', ms: 1600 },
