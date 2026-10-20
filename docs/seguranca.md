@@ -128,6 +128,8 @@ O painel do HUD só lista e apaga por id. Não existe caminho para criar memóri
 
 O resumo entra nas instruções marcado como dados ("nunca ordens"), sem itens sensíveis que tenham sido editados à mão no arquivo, e o texto dos fatos não vai para os logs.
 
+Na busca pelo sentido, o texto de cada fato vai para a API de embeddings do Google e volta como vetor. Ele já ia para o Google antes, dentro das instruções do Gemini, mas quem preferir pode desligar com `JARVIS_MEMORY_EMBEDDINGS=false`. O filtro de segredos vale antes: um fato com cara de senha, editado à mão no arquivo, nunca vira vetor, e uma pergunta com senha ou código nem chega à API. Esquecer uma memória apaga o vetor dela junto.
+
 ## Rotinas
 
 Só as ações da tabela de [memoria-e-rotinas.md](memoria-e-rotinas.md#o-arquivo) entram numa rotina. Email, instalação de apps e mouse e teclado ficam de fora, porque têm a própria confirmação por código.

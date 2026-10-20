@@ -15,9 +15,9 @@ telas.json
 layouts.json
 # Modelos baixados na primeira execução (MediaPipe)
 .cache/
-# Memórias pessoais do Jarvis (lembra que...), cópias de segurança e temporários
+# Memórias pessoais do Jarvis (lembra que...), vetores da busca pelo sentido, cópias e temporários
 memoria*.json
-memoria.json.tmp
+memoria*.json.tmp
 # Lembretes e preferências dos avisos proativos (PRO-28), cópias e temporários
 lembretes*.json
 lembretes.json.tmp

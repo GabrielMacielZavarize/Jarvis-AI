@@ -49,7 +49,7 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `screen_assist.py` | Assistente de tela (TEL-31): lê seleção, janela ou cursor por UI Automation e explica com o Gemini |
 | `dictation.py` | Modo ditado (DIT-29): transcrições da fala, comandos falados e teclado do MOU-20 |
 | `confirmation.py` | A frase "confirmar <código>", tolerante à transcrição de voz |
-| `memory.py` | Memória entre conversas (`memoria.json`), filtro de segredos e painel |
+| `memory.py` | Memória entre conversas (`memoria.json`), busca pelo sentido, filtro de segredos e painel |
 | `voices.py` | Voz do Jarvis (VOZ-30): vozes do Gemini Live, `voz.json` (uma voz por persona) e a ferramenta `change_voice` |
 | `routines.py` | Rotinas (`rotinas.json`): passos, execução com falhas parciais, ferramentas e agendador |
 | `calendar_tools.py` | Google Agenda (AGD-27): login OAuth, datas em português, ferramentas e avisos de reunião |
@@ -82,7 +82,7 @@ E o HUD, em `web/src`:
 
 ## Arquivos locais
 
-Ficam na pasta do projeto, fora do git: `.env`, `memoria.json`, `rotinas.json`, `lembretes.json`, `layouts.json`, `telas.json`, `atalhos.json`, `gestos.json`, `gestos_calibracao.json`, `voz.json`, `persona.json`, `modelos.json`, `presenca_rosto.json`, `aparelhos.json`, `google_credentials.json`, `google_token.json` e a pasta `.jarvis-tls/`.
+Ficam na pasta do projeto, fora do git: `.env`, `memoria.json`, `memoria_vetores.json`, `rotinas.json`, `lembretes.json`, `layouts.json`, `telas.json`, `atalhos.json`, `gestos.json`, `gestos_calibracao.json`, `voz.json`, `persona.json`, `modelos.json`, `presenca_rosto.json`, `aparelhos.json`, `google_credentials.json`, `google_token.json` e a pasta `.jarvis-tls/`.
 
 ## Referências
 

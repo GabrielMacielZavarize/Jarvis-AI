@@ -8,6 +8,31 @@ Peça "lembra que eu prefiro lo-fi pra programar", "anota que minha reunião de 
 
 "O que você sabe sobre mim?" ou "qual é a minha reunião?" chamam o `recall`, e a lista aparece no painel Memória.
 
+### Busca pelo sentido
+
+O `recall` não precisa das mesmas palavras do fato. "O que eu te falei do meu projeto?" encontra "Trabalha no Jarvis-AI à noite" e "do que eu gosto de ouvir?" encontra "Prefere lo-fi para programar". Cada fato vira um vetor pelo modelo de embeddings do Gemini (com a mesma `GOOGLE_API_KEY`) e a pergunta é comparada com eles. Fato com a mesma palavra da pergunta continua aparecendo e vem primeiro.
+
+O vetor é calculado logo depois de guardar, sem atrasar a resposta, e fica no `memoria_vetores.json` (fora do git). As memórias que já existiam ganham vetor no começo da conversa seguinte. Fato editado à mão no `memoria.json` ganha vetor novo sozinho.
+
+No painel Memória, a busca mostra embaixo de cada item se ele veio "pelo sentido" ou "pelas palavras" e a semelhança com a pergunta.
+
+```env
+JARVIS_MEMORY_EMBEDDINGS=true                       # false = só a busca por palavras
+JARVIS_MEMORY_MIN_SIMILARITY=0.6                    # semelhança mínima para entrar só pelo sentido
+JARVIS_MEMORY_TOP_K=8                               # máximo de fatos que entram só pelo sentido
+JARVIS_MEMORY_EMBEDDING_MODEL=gemini-embedding-001
+```
+
+O limiar de 0.6 é um ponto de partida. Para ajustar com as suas memórias:
+
+```bash
+python memory.py --busca "do que eu gosto de ouvir?"
+```
+
+Ele lista cada memória com a nota e se ela entraria. Se vier memória sem relação, suba o limiar; se faltar alguma, desça. `python memory.py --reindex` recalcula todos os vetores, por exemplo depois de trocar o modelo.
+
+Sem rede, sem chave ou se a API demorar mais de 5 segundos, o `recall` faz a busca por palavras e segue normal. O `forget` continua só pelas palavras, para não apagar uma memória parecida no lugar da certa.
+
 "Esquece isso" (logo depois de guardar) ou "apaga o que eu falei do lo-fi" chamam o `forget`. Se várias memórias combinarem, o Jarvis pergunta qual. "Esquece tudo que você sabe sobre mim" apaga tudo.
 
 "A reunião agora é às 10" guarda a nova e remove a antiga (`replaces`).

@@ -193,3 +193,14 @@ Detalhes em [gestos.md](gestos.md#gestos-no-hud).
 - [ ] Editar, rock, Abrir app, `spotify`, Salvar. Faça o rock: o Spotify abre sem reiniciar nada.
 - [ ] Editar, OK, Atalho, `alt+f4`, Salvar: é recusado com a explicação e nada muda no `gestos.json`.
 - [ ] Ligue o joinha a "tocar/pausar": o painel avisa que ele faz o mesmo que o OK. "Restaurar todos" volta tudo ao padrão.
+
+## 16. Memória pelo sentido
+
+Detalhes em [memoria-e-rotinas.md](memoria-e-rotinas.md#busca-pelo-sentido).
+
+- [ ] "Lembra que eu trabalho no Jarvis-AI à noite" e "lembra que eu prefiro lo-fi pra programar". O `memoria_vetores.json` aparece ao lado do projeto e não entra no `git status`.
+- [ ] "O que eu te falei do meu projeto?": o Jarvis responde com o Jarvis-AI e o painel Memória mostra "pelo sentido" com a nota.
+- [ ] "Do que eu gosto de ouvir?": vem o lo-fi. "Qual a capital da França?": nenhuma memória entra no painel.
+- [ ] `python memory.py --busca "do que eu gosto de ouvir?"` mostra as notas. Anote as das memórias certas e das sem relação; se ficarem perto do 0.6, ajuste `JARVIS_MEMORY_MIN_SIMILARITY`.
+- [ ] "Esquece o que eu falei do lo-fi": a memória e o vetor dela somem (o id não aparece mais no `memoria_vetores.json`).
+- [ ] Desligue a internet e pergunte "qual é a minha reunião?": a busca por palavras responde normal.

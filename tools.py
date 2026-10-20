@@ -1399,8 +1399,9 @@ def build_tools(settings: Settings) -> list[Any]:
 
     tools.extend(build_voice_tools(settings))
     if settings.memory_enabled:
-        from memory import build_memory_tools
+        from memory import build_memory_tools, configure_embeddings
 
+        configure_embeddings(settings)
         tools.extend(build_memory_tools())
     if settings.routines_enabled:
         from routines import build_routine_tools

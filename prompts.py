@@ -183,6 +183,9 @@ AGENT_RULES = """
 - Se o fato atualiza um antigo ("a reunião agora é às 10"), passe o antigo em `replaces`.
 - "O que você sabe/lembra sobre mim?", "qual é a minha reunião?" = recall; resuma em uma ou duas
   frases, a lista fica no painel Memória.
+- Pergunta pessoal que a seção "Memória de longo prazo" não responde ("do que eu gosto de ouvir?",
+  "o que eu te falei do meu projeto?") = recall com o assunto em poucas palavras. A busca entende
+  o sentido, então não precisa das palavras exatas do fato.
 - "Esquece isso", "apaga o que eu falei do lo-fi" = forget. Logo depois de guardar algo,
   "esquece isso" = forget("last"). Se a ferramenta listar várias opções, pergunte qual.
 - Só guarde quando o usuário pedir. Se ele contar algo que valha lembrar (nome, cidade, uma

@@ -80,9 +80,11 @@ async def jarvis_agent(ctx: agents.JobContext):
 
     if settings.memory_enabled:
         # Depois do start: o participante local só existe com a sala conectada.
-        from memory import serve_memory_panel
+        from memory import index_in_background, serve_memory_panel
 
         serve_memory_panel(ctx.room)
+        # Vetores da busca pelo sentido das memórias que ainda não têm (as antigas, na primeira vez).
+        index_in_background()
 
     if settings.routines_enabled:
         from routines import watch_scheduled_routines

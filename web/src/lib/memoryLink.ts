@@ -41,7 +41,14 @@ export function parseMemoryReply(raw: string): MemoryReply {
     query: data.query ?? null,
     highlight: data.highlight ?? null,
     message: data.message ?? null,
+    search: data.search ?? null,
   };
+}
+
+/** "pelo sentido · 82%": how recall found the item, shown under it when the search used embeddings. */
+export function memoryMatchLabel(item: MemoryItem): string {
+  const how = item.match === 'meaning' ? 'pelo sentido' : 'pelas palavras';
+  return typeof item.score === 'number' ? `${how} · ${Math.round(item.score * 100)}%` : how;
 }
 
 /** Demo mode has no agent: the panel just drops the item locally. */
@@ -56,6 +63,7 @@ function forgetLocally(current: MemoryData, id: string): MemoryReply {
     query: current.query ?? null,
     highlight: null,
     message: removed ? `Esquecido: ${removed.fact}` : 'Essa memória já não existia.',
+    search: current.search ?? null,
   };
 }
 
@@ -67,10 +75,10 @@ export async function forgetMemory(current: MemoryData, id: string): Promise<Mem
   }
   const request: MemoryRequest = { action: 'forget', id };
   const reply = parseMemoryReply(await transport(JSON.stringify(request)));
-  // A filtered panel ("o que você sabe sobre música?") stays filtered after the delete.
+  // A filtered panel ("o que você sabe sobre música?") stays filtered, in the same order and
+  // with the "pelo sentido" marks, after the delete.
   if (current.query) {
-    const kept = new Set(current.items.map((item) => item.id));
-    return { ...reply, query: current.query, items: reply.items.filter((item) => kept.has(item.id)) };
+    return { ...reply, query: current.query, search: current.search ?? null, items: current.items.filter((item) => item.id !== id) };
   }
   return reply;
 }

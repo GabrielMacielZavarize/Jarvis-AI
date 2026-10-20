@@ -70,6 +70,18 @@ def main() -> int:
         f"{'ativado, visão com ' + settings.computer_use_model if settings.computer_use_enabled else 'desativado'}"
     )
 
+    if not settings.memory_enabled:
+        print("Memória (MEM-23): desativada")
+    elif not settings.memory_embeddings:
+        print("Memória (MEM-23): busca só por palavras (JARVIS_MEMORY_EMBEDDINGS=false)")
+    elif not settings.google_api_key:
+        print("Memória (MEM-23): busca só por palavras; a busca pelo sentido precisa da GOOGLE_API_KEY")
+    else:
+        print(
+            f"Memória (MEM-23): busca pelo sentido com {settings.memory_embedding_model}, "
+            f"limiar {settings.memory_min_similarity:.2f}"
+        )
+
     if settings.calendar_enabled:
         from calendar_tools import CREDENTIALS_FILE, is_connected
 

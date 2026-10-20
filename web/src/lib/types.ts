@@ -153,6 +153,10 @@ export interface MemoryItem {
   category: MemoryCategory;
   /** ISO date-time of when it was saved. */
   created_at: string;
+  /** How recall found it when the search used embeddings: by meaning or by the same words. */
+  match?: 'meaning' | 'words';
+  /** Cosine similarity with the question (0 to 1). */
+  score?: number;
 }
 
 export interface MemoryData {
@@ -163,6 +167,8 @@ export interface MemoryData {
   total: number;
   /** Words recall filtered by. */
   query?: string | null;
+  /** semantic = embeddings + words; words = the plain search (offline, no key or switched off). */
+  search?: 'semantic' | 'words' | null;
   /** Id of the memory just saved. */
   highlight?: string | null;
   message?: string | null;
