@@ -403,6 +403,7 @@ class GestureEngine:
         self._drag: MapDrag | None = None
         self._mouse_uv: tuple[float, float] | None = None
         self._hand_release = False  # o quadro atual soltou a janela com a mão à vista (não perdeu a mão)
+        self._marked: tuple[tuple[int, int], float] | None = None  # (ponto físico, até quando)
         if armed:
             self.request("arm")
         if mouse:
@@ -685,7 +686,16 @@ class GestureEngine:
         point = self.machine.pointed_at(self.clock(), max_age)
         return uv_to_real(*point, self._bounds()) if point is not None else None
 
+    def mark_point(self, point: tuple[int, int], seconds: float, title: str) -> None:
+        """Hold the crosshair on ``point`` (physical pixels) for ``seconds``, e.g. before a click."""
+        until = self.clock() + seconds
+        self._marked = ((int(point[0]), int(point[1])), until)
+        self._flash = (title, "armed", until)
+
     def _aim_point(self, t: float) -> tuple[int, int] | None:
+        marked = self._marked
+        if marked is not None and t < marked[1]:
+            return marked[0]
         point = self.machine.aim(t, AIM_LINGER_S)
         return uv_to_real(*point, self._bounds()) if point is not None else None
 
@@ -1125,6 +1135,14 @@ class GestureService:
         if not self.running or engine is None:
             return None
         return engine.pointed_screen_point(max_age)
+
+    def mark_point(self, point: tuple[int, int], seconds: float, title: str) -> bool:
+        """Show the crosshair on a spot Jarvis is about to click; False with gestures off."""
+        engine = self._engine
+        if not self.running or engine is None:
+            return False
+        engine.mark_point(point, seconds, title)
+        return True
 
     def arm(self) -> str:
         if not self.running or self._engine is None:

@@ -725,16 +725,23 @@ async def write_here(context: RunContext, text: str) -> str:
     Args:
         text: What the user asked to write, exactly as said, without "escreve aqui".
     """
+    pointed = cu.pointed_point()
     try:
         heard = await cu._authorize(context)
         spoken = said_after_write(heard) or text
         final = write_once(spoken)
         await tool_status("write_here", "running", f"{len(final)} caracteres")
+        field_name = None
+        if pointed is not None and cu.refers_here(heard):
+            # "Escreve aqui" com o dedo apontando: o campo apontado, não o que já estava em foco.
+            field_name = await cu.focus_pointed(context, pointed)
         window = await asyncio.to_thread(cu.foreground_window)
         landed = await asyncio.to_thread(apply_edit, window, 0, final)
         where = f"'{cu._truncate(window.title, 40)}'" if window else "no campo em foco"
         check = {True: " e conferi no campo", False: ", mas o campo não mostra o texto como deveria; peça para conferir"}.get(landed, "")
         message = f"Escrevi \"{cu._truncate(final, 60)}\" em {where}{check}. Nada foi enviado."
+        if field_name:
+            message += " Antes cliquei no campo onde o usuário apontou com o dedo."
         await publish_hud_event(
             HUD_EVENT, state="once", active=False, protocol=PROTOCOL, message=message, tail=final[-TAIL_CHARS:],
             typed=final, heard=spoken, window=window.title if window else None, beep="tick", caps=False,

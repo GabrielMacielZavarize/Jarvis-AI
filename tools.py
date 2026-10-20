@@ -1422,6 +1422,11 @@ def build_tools(settings: Settings) -> list[Any]:
         if settings.pc_control_enabled:
             # "Explica isso aqui" com o dedo apontando: o assistente de tela usa o ponto apontado.
             screen_assist.set_pointer(SERVICE.pointed_screen_point)
+        if settings.computer_use_enabled:
+            import computer_use
+
+            # "Clica aqui" com o dedo apontando: o MOU-20 clica no ponto apontado, com a mira antes.
+            computer_use.set_pointer(SERVICE.pointed_screen_point, SERVICE.mark_point)
     if settings.mcp_enabled:
         from mcp_client import build_mcp_tools
 
