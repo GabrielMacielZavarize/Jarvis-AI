@@ -1,6 +1,6 @@
 # Ferramentas sob demanda
 
-Protocolo FER-33. Com tudo ligado o Jarvis tem 75 ferramentas, e com as integrações MCP passa de 100. O Gemini Live escolhe pior quando vê tantas de uma vez. Com as ferramentas sob demanda, ele começa só com as básicas e pede um grupo quando o assunto chega.
+Protocolo FER-33. Com tudo ligado o Jarvis tem 79 ferramentas, e com as integrações MCP passa de 100. O Gemini Live escolhe pior quando vê tantas de uma vez. Com as ferramentas sob demanda, ele começa só com as básicas e pede um grupo quando o assunto chega.
 
 ```env
 JARVIS_TOOL_ROUTING=auto   # auto, true ou false
@@ -31,14 +31,15 @@ Fica sempre com o modelo: clima, pesquisa, notícias, hora, diagnóstico, timers
 | --- | --- |
 | `agenda` | `get_agenda`, `next_meeting`, `prepare_calendar_event`, `prepare_calendar_update`, `prepare_calendar_delete` |
 | `email` | `check_email_address`, `draft_email` |
-| `tela` | `look_at_screen`, `explain_screen`, `copy_fix`, `take_screenshot` |
+| `tela` | `look_at_screen`, `explain_screen`, `copy_fix`, `take_screenshot`, `watch_screen` |
 | `janelas` | `open_app`, `close_app`, `open_website`, `save_shortcut`, `browser_tab`, `open_folder`, `manage_window`, `manage_screens`, `manage_layouts`, `arrange_windows`, `lock_computer` |
 | `midia` | `play_youtube`, `open_streaming`, `media_control`, `set_volume` |
 | `mouse` | `click_on_screen`, `move_mouse`, `type_text`, `press_keys`, `scroll`, `do_on_screen`, `start_dictation`, `write_here` |
 | `gestos` | `gesture_control`, `gesture_shortcuts` |
 | `camera` | `look_at_camera`, `camera_view`, `presence_control` |
-| `rotinas` | `list_routines`, `save_routine`, `delete_routine`, `schedule_routine` |
+| `rotinas` | `list_routines`, `save_routine`, `delete_routine`, `schedule_routine`, `set_routine_trigger` |
 | `avisos` | `set_reminder`, `list_reminders`, `cancel_reminder`, `configure_alerts` |
+| `diario` | `diary_lookup`, `forget_diary` |
 | `apps` | `search_apps`, `prepare_app_install` |
 | um por servidor MCP | as ferramentas liberadas dele (`github`, `notion`...) |
 
@@ -50,11 +51,11 @@ Feitas no container com tudo ligado, contando o JSON das declarações que vão 
 
 | Conjunto | Ferramentas | Tokens |
 | --- | --- | --- |
-| Todas | 75 | 13.000 |
-| Núcleo | 28 | 3.400 |
+| Todas | 79 | 14.200 |
+| Núcleo | 27 | 3.200 |
 | Maior grupo (`janelas`) | 11 | 2.300 |
-| Grupo médio | 2 a 5 | 300 a 900 |
-| `.env` padrão (memória e rotinas) | 22 | fica tudo junto no `auto` |
+| Grupo médio | 2 a 5 | 300 a 1.100 |
+| `.env` padrão (memória, diário e rotinas) | 25 | fica tudo junto no `auto` |
 
 O que o `update_tools` faz no Gemini Live, conferido no livekit-agents 1.8.8 com um cliente falso (`tests/test_tool_routing.py`):
 
@@ -67,7 +68,7 @@ O que o `update_tools` faz no Gemini Live, conferido no livekit-agents 1.8.8 com
 
 Por que não pela transcrição: no Gemini Live a transcrição final da sua fala só chega quando a resposta dele termina. Trocar as ferramentas ali serviria só para o pedido seguinte, e trocar durante a sua fala perderia o áudio já enviado. A escolha fica com o modelo, pelo `use_tools`, que custa uma chamada curta e a frase "Um instante." antes da reconexão.
 
-Por que `auto` e não `true`: cada grupo novo custa essa frase e uma reconexão, perto de 1 a 2 segundos na primeira vez do assunto. Com o `.env` padrão são 22 ferramentas e o ganho não paga a espera. Com tudo ligado, o modelo deixa de ver 9.600 tokens de ferramentas que não têm nada a ver com o pedido.
+Por que `auto` e não `true`: cada grupo novo custa essa frase e uma reconexão, perto de 1 a 2 segundos na primeira vez do assunto. Com o `.env` padrão são 25 ferramentas e o ganho não paga a espera. Com tudo ligado, o modelo deixa de ver 11.000 tokens de ferramentas que não têm nada a ver com o pedido.
 
 ## Confirmações
 

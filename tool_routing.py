@@ -1,6 +1,6 @@
 """Ferramentas sob demanda (protocolo FER-33): o Gemini Live só vê as ferramentas do assunto.
 
-Com tudo ligado o Jarvis passa de 75 ferramentas (cerca de 13 mil tokens só de declarações) e,
+Com tudo ligado o Jarvis passa de 75 ferramentas (cerca de 14 mil tokens só de declarações) e,
 com as integrações MCP, de 100. Com tantas o modelo escolhe pior. Aqui elas viram:
 
 - um núcleo sempre presente: clima, pesquisa, hora, timers, HUD, memória, voz, encerrar, tudo
@@ -67,8 +67,8 @@ GROUPS: tuple[ToolGroup, ...] = (
     ToolGroup(
         "tela",
         "Assistente de tela",
-        "ler, explicar ou copiar o que está na tela, erros, prints",
-        ("look_at_screen", "explain_screen", "copy_fix", "take_screenshot"),
+        "ler, explicar ou copiar o que está na tela, erros, prints, ficar de olho numa janela",
+        ("look_at_screen", "explain_screen", "copy_fix", "take_screenshot", "watch_screen"),
     ),
     ToolGroup(
         "janelas",
@@ -101,14 +101,20 @@ GROUPS: tuple[ToolGroup, ...] = (
     ToolGroup(
         "rotinas",
         "Rotinas",
-        "listar, criar, apagar ou agendar rotinas (rodar uma rotina não precisa do grupo)",
-        ("list_routines", "save_routine", "delete_routine", "schedule_routine"),
+        "listar, criar, apagar ou agendar rotinas e os gatilhos por contexto (rodar uma rotina não precisa do grupo)",
+        ("list_routines", "save_routine", "delete_routine", "schedule_routine", "set_routine_trigger"),
     ),
     ToolGroup(
         "avisos",
         "Lembretes e avisos",
         "lembretes com dia e hora, listar lembretes, avisos proativos",
         ("set_reminder", "list_reminders", "cancel_reminder", "configure_alerts"),
+    ),
+    ToolGroup(
+        "diario",
+        "Diário",
+        "o que foi conversado em outros dias, apagar algo do diário",
+        ("diary_lookup", "forget_diary"),
     ),
     ToolGroup("apps", "Instalar apps", "procurar e instalar aplicativos", ("search_apps", "prepare_app_install")),
 )
