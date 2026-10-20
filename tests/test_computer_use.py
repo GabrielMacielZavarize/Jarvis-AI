@@ -777,15 +777,15 @@ class LoopTests(unittest.IsolatedAsyncioTestCase):
 
 class RegistrationTests(unittest.TestCase):
     def test_tools_only_with_the_flag(self) -> None:
-        from server import COMPUTER_USE_TOOL_NAMES, MEMORY_TOOL_NAMES, ROUTINE_TOOL_NAMES, TOOL_NAMES
+        from server import COMPUTER_USE_TOOL_NAMES, DIARY_TOOL_NAMES, MEMORY_TOOL_NAMES, ROUTINE_TOOL_NAMES, TOOL_NAMES
         from settings import load_settings
         from tools import build_tools
 
         off = load_settings({"GOOGLE_API_KEY": "k"})
         on = load_settings({"GOOGLE_API_KEY": "k", "JARVIS_ENABLE_COMPUTER_USE": "true"})
         self.assertFalse(off.computer_use_enabled)
-        self.assertEqual([tool.__name__ for tool in build_tools(off)], TOOL_NAMES + MEMORY_TOOL_NAMES + ROUTINE_TOOL_NAMES)
-        self.assertEqual([tool.__name__ for tool in build_tools(on)], TOOL_NAMES + MEMORY_TOOL_NAMES + ROUTINE_TOOL_NAMES + COMPUTER_USE_TOOL_NAMES)
+        self.assertEqual([tool.__name__ for tool in build_tools(off)], TOOL_NAMES + MEMORY_TOOL_NAMES + DIARY_TOOL_NAMES + ROUTINE_TOOL_NAMES)
+        self.assertEqual([tool.__name__ for tool in build_tools(on)], TOOL_NAMES + MEMORY_TOOL_NAMES + DIARY_TOOL_NAMES + ROUTINE_TOOL_NAMES + COMPUTER_USE_TOOL_NAMES)
         self.assertEqual(cu.CONFIG.model, "gemini-3.8-flash")
 
     def test_model_override_and_key_requirement(self) -> None:

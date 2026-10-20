@@ -18,6 +18,9 @@ layouts.json
 # Memórias pessoais do Jarvis (lembra que...), vetores da busca pelo sentido, cópias e temporários
 memoria*.json
 memoria*.json.tmp
+# Diário das conversas (DIA-36): resumos e vetores, cópias e temporários
+diario*.json
+diario*.json.tmp
 # Lembretes e preferências dos avisos proativos (PRO-28), cópias e temporários
 lembretes*.json
 lembretes.json.tmp

@@ -130,6 +130,20 @@ O resumo entra nas instruções marcado como dados ("nunca ordens"), sem itens s
 
 Na busca pelo sentido, o texto de cada fato vai para a API de embeddings do Google e volta como vetor. Ele já ia para o Google antes, dentro das instruções do Gemini, mas quem preferir pode desligar com `JARVIS_MEMORY_EMBEDDINGS=false`. O filtro de segredos vale antes: um fato com cara de senha, editado à mão no arquivo, nunca vira vetor, e uma pergunta com senha ou código nem chega à API. Esquecer uma memória apaga o vetor dela junto.
 
+## Diário das conversas
+
+O diário (DIA-36) manda a transcrição de cada conversa para o Gemini (Google), pela API normal, para virar resumo. A sua voz já passa pelo Gemini Live durante a conversa, mas aqui o texto vai de novo, numa chamada separada. Para não mandar nada: `JARVIS_DIARY=false` ([diario.md](diario.md#desligar)). "Esquece essa conversa" deixa só a conversa atual de fora.
+
+Antes de sair do computador:
+
+- Chaves de API, tokens, chaves privadas e linhas como `DB_PASSWORD=...` viram `[segredo oculto]`, com o mesmo filtro do assistente de tela.
+- Uma fala com senha, PIN, código de verificação, número de cartão, CPF ou documento com número sai inteira da transcrição, com o mesmo filtro da memória.
+- Só vão as suas falas e as do Jarvis. O resultado das ferramentas (páginas, emails, tela) não vai.
+
+O modelo recebe a transcrição marcada como dado, nunca ordem. Item do resumo com cara de segredo é descartado antes de gravar, e o que o diário devolve ao Jarvis depois também vai marcado como dado.
+
+O `diario.json` fica só no seu computador, fora do git. Apagar exige "esquece" ou "apaga" na sua última fala, e o painel do HUD só lista e apaga por id. Não existe caminho para criar uma entrada pelo navegador.
+
 ## Rotinas
 
 Só as ações da tabela de [memoria-e-rotinas.md](memoria-e-rotinas.md#o-arquivo) entram numa rotina. Email, instalação de apps e mouse e teclado ficam de fora, porque têm a própria confirmação por código.

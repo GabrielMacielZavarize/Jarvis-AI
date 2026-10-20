@@ -36,6 +36,7 @@ Cada ferramenta do Jarvis tem um código de protocolo, que aparece no HUD (na pl
 | VOZ-30 | `change_voice` | Troca a voz, lista as vozes no HUD e volta à padrão | "Troca sua voz para Orus.", "Quais vozes você tem?", "Volta pra sua voz normal." |
 | TEL-31 | `explain_screen`, `copy_fix` | Lê a seleção, a janela em foco, o trecho perto do cursor ou o lugar apontado com o dedo e explica no painel. Copia o código sugerido para a área de transferência | "Explica esse erro.", "O que tem de errado aqui?", "O que esse código faz?", "Resume essa página.", "Traduz isso pro inglês.", "Copia a correção." |
 
+| DIA-36 | `diary_lookup`, `forget_diary` | Diário das conversas: no fim de cada conversa, um resumo do pedido, do feito e do pendente. Busca por data e pelo sentido, painel Diário | "O que eu te pedi ontem?", "O que a gente fez na sexta?", "Onde paramos no projeto do Jarvis?", "Esquece essa conversa." |
 | MCP-32 | `mcp_status`, `confirm_mcp_action`, `cancel_mcp_action` e as ferramentas liberadas no `mcp.json` (`github_list_issues`...) | Usa ferramentas de servidores MCP (GitHub, Notion, Spotify...). Só as do `permitir` chegam ao modelo, e as que escrevem pedem código | "Quais issues abertas eu tenho no Jarvis-AI?", "Procura a página da reunião no Notion.", "Quais integrações você tem?" |
 
 A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm ferramenta de voz. Estão em [voz.md](voz.md#palavra-de-ativação) e [celular.md](celular.md).
@@ -54,6 +55,7 @@ A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm 
 | AGD | `JARVIS_ENABLE_CALENDAR=true`, depois do login no Google ([agenda.md](agenda.md)) |
 | PRO | `JARVIS_PROACTIVE=true` |
 | MEM | Vem ligado. `JARVIS_ENABLE_MEMORY=false` desliga |
+| DIA | Vem ligado. `JARVIS_DIARY=false` desliga. O resumo precisa da `GOOGLE_API_KEY` (veja [diario.md](diario.md)) |
 | ROT | Vem ligado. `JARVIS_ENABLE_ROUTINES=false` desliga. Os passos que mexem no PC precisam de `JARVIS_ENABLE_PC_CONTROL=true` |
 | WAK-22 | `JARVIS_WAKE_WORD=true` |
 | LAN-26 | `python jarvis.py --lan` ou `JARVIS_LAN=true` |

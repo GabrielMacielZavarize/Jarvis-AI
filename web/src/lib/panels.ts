@@ -1,4 +1,5 @@
 import { calendarDetail } from './calendar';
+import { diaryDetail } from './diaryLink';
 import { formatDuration } from './format';
 import type { CardKind, HudCard, HudPanelAction, HudRequest, PanelInfo } from './types';
 
@@ -24,6 +25,7 @@ export const PANEL_META: Record<CardKind, { code: string; title: string; aliases
   explain: { code: 'TEL-31', title: 'Assistente de tela', aliases: ['explicacao', 'erro', 'correcao', 'codigo', 'resumo', 'traducao'] },
   routine: { code: 'ROT-24', title: 'Rotina', aliases: ['rotinas', 'modo', 'passos', 'sequencia'] },
   calendar: { code: 'AGD-27', title: 'Agenda', aliases: ['calendario', 'compromissos', 'reuniao', 'reunioes', 'eventos'] },
+  diary: { code: 'DIA-36', title: 'Diário', aliases: ['diario', 'conversas', 'historico', 'resumos', 'pendencias'] },
 };
 
 const PANEL_ACTIONS: HudPanelAction[] = ['list', 'close', 'close_all', 'expand', 'collapse'];
@@ -88,6 +90,8 @@ export function panelDetail(card: HudCard, now = Date.now()): string {
     }
     case 'calendar':
       return calendarDetail(card.data);
+    case 'diary':
+      return diaryDetail(card.data);
   }
 }
 

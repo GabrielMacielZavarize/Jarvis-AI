@@ -791,6 +791,7 @@ HUD_PANEL_KINDS = {
     "explain": "Assistente de tela",
     "routine": "Rotina",
     "calendar": "Agenda",
+    "diary": "Diário",
 }
 LAST_PANEL = "last"
 MAX_PANEL_TARGETS = 6
@@ -1403,6 +1404,11 @@ def build_tools(settings: Settings) -> list[Any]:
 
         configure_embeddings(settings)
         tools.extend(build_memory_tools())
+    if settings.diary_enabled:
+        import diary
+
+        diary.configure(settings)
+        tools.extend(diary.build_diary_tools())
     if settings.routines_enabled:
         from routines import build_routine_tools
 

@@ -234,3 +234,16 @@ Detalhes em [integracoes.md](integracoes.md). Precisa de `JARVIS_ENABLE_MCP=true
 - [ ] Uma ferramenta fora do `permitir` não aparece no `mcp_status` nem é chamada.
 - [ ] Com `create_issue` liberada, "cria uma issue chamada teste": nada é criado antes de "confirmar integração" e o código.
 - [ ] Sem o token no `.env`, o link abre normal e o Jarvis diz que a integração está indisponível.
+
+## 23. Diário das conversas
+
+Detalhes em [diario.md](diario.md). Precisa da `GOOGLE_API_KEY` e de `JARVIS_DIARY=true` (o padrão).
+
+- [ ] Converse uns minutos sobre um assunto (um bug do Jarvis-AI, por exemplo), deixe algo para depois e encerre o link. O `diario.json` aparece ao lado do projeto, com a entrada de hoje, e não entra no `git status`.
+- [ ] Abra o link, pergunte só "que horas são?" e encerre: nenhuma entrada nova.
+- [ ] Abra de novo: "o que eu te pedi hoje?" responde com o pedido e o pendente, e o painel Diário mostra a conversa no dia.
+- [ ] "Onde paramos no projeto do Jarvis?" acha a conversa mesmo sem as mesmas palavras, com "pelo sentido" no painel.
+- [ ] Diga uma senha falsa na conversa ("minha senha do wifi é teste123") e encerre: ela não aparece no `diario.json`.
+- [ ] "Esquece essa conversa" e encerre: nenhuma entrada nova. "Apaga o diário de hoje": as de hoje somem. O × do painel apaga uma só, depois do "Apagar?".
+- [ ] Com `JARVIS_DIARY=false`, encerre uma conversa longa: nada é gravado e o painel Protocolos não mostra o DIA-36.
+

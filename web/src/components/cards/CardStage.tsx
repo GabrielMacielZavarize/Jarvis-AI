@@ -7,6 +7,7 @@ import type { HudCard } from '../../lib/types';
 import { ProtocolsPanel } from '../ProtocolsPanel';
 import { CalendarBody } from './CalendarCard';
 import { CameraBody } from './CameraFeed';
+import { DiaryBody } from './DiaryCard';
 import { ExplainBody } from './ExplainCard';
 import {
   DiagnosticsBody,
@@ -62,6 +63,8 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <RoutineBody data={card.data} />;
     case 'calendar':
       return <CalendarBody data={card.data} />;
+    case 'diary':
+      return <DiaryBody id={card.id} data={card.data} />;
   }
 }
 
