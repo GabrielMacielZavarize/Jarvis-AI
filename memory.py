@@ -4,6 +4,11 @@
 O arquivo fica na pasta do projeto, fora do git, e um resumo curto entra nas instruções do
 agente no começo de cada conversa (``summary_for_prompt``).
 
+O ``recall`` acha pelo sentido: cada fato vira um vetor (embeddings do Gemini, em
+``memoria_vetores.json``, também fora do git) e a pergunta é comparada com eles. "Do que eu
+gosto de ouvir?" encontra "Prefere lo-fi para programar". Sem rede, sem chave ou com
+``JARVIS_MEMORY_EMBEDDINGS=false``, vale só a busca por palavras.
+
 O Jarvis lê páginas, pesquisas, emails e a tela, e um texto malicioso pode tentar plantar
 uma memória falsa (prompt injection). Por isso:
 
@@ -19,14 +24,17 @@ uma memória falsa (prompt injection). Por isso:
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import datetime as dt
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import secrets
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -37,10 +45,12 @@ from livekit.agents import RunContext, function_tool
 
 from confirmation import CONFIRMATION_POLL_SECONDS, CONFIRMATION_WAIT_SECONDS, NUMBER_WORDS, speech_tokens, strip_accents
 from hud import show_card, tool_status
+from settings import DEFAULT_MEMORY_EMBEDDING_MODEL, DEFAULT_MEMORY_MIN_SIMILARITY, DEFAULT_MEMORY_TOP_K
 
 logger = logging.getLogger("jarvis-memory")
 
 MEMORY_FILE = Path(__file__).resolve().parent / "memoria.json"
+VECTORS_FILE = Path(__file__).resolve().parent / "memoria_vetores.json"
 MEMORY_RPC_METHOD = "jarvis.memory"
 
 MAX_FACT_CHARS = 280
@@ -459,11 +469,13 @@ def add_memory(
         }
         memories.append(memory)
         _write(target, memories, readable)
+    if replaced:
+        drop_vectors([replaced["id"]])
     return SaveResult(memory=memory, replaced=replaced, replace_missed=missed)
 
 
 def remove_memories(ids: list[str], path: Path | None = None) -> list[dict[str, str]]:
-    """Delete these ids; returns what was really removed."""
+    """Delete these ids (and their vectors); returns what was really removed."""
     wanted = {str(memory_id) for memory_id in ids if memory_id}
     target = _path(path)
     with _LOCK:
@@ -471,6 +483,8 @@ def remove_memories(ids: list[str], path: Path | None = None) -> list[dict[str, 
         removed = [memory for memory in memories if memory["id"] in wanted]
         if removed:
             _write(target, [memory for memory in memories if memory["id"] not in wanted], readable)
+    if removed:
+        drop_vectors([memory["id"] for memory in removed])
     return removed
 
 
@@ -542,6 +556,258 @@ def best_match(item: str, memories: list[dict[str, str]]) -> dict[str, str] | No
     return found[0] if len(found) == 1 else None
 
 
+# ───────────────────────── busca pelo sentido ─────────────────────────
+
+EMBEDDING_DIMENSIONS = 768
+EMBED_BATCH = 100
+# O recall não espera mais que isso pelos embeddings; depois vale a busca por palavras.
+RECALL_EMBED_TIMEOUT_S = 5.0
+# A nota de palavras (0 a 1) soma até isso à similaridade: fato com a palavra exata sobe na lista.
+WORD_WEIGHT = 0.25
+
+
+@dataclass(slots=True)
+class EmbeddingConfig:
+    enabled: bool = False
+    api_key: str | None = None
+    model: str = DEFAULT_MEMORY_EMBEDDING_MODEL
+    min_similarity: float = DEFAULT_MEMORY_MIN_SIMILARITY
+    top_k: int = DEFAULT_MEMORY_TOP_K
+
+
+EMBEDDINGS = EmbeddingConfig()
+_CLIENT: Any = None
+_VECTOR_LOCK = threading.Lock()
+_BACKGROUND: set[asyncio.Task[Any]] = set()
+
+
+class EmbeddingError(RuntimeError):
+    """The embeddings API failed or answered something unexpected."""
+
+
+def configure_embeddings(settings: Any) -> None:
+    global _CLIENT
+    EMBEDDINGS.enabled = bool(settings.memory_embeddings)
+    EMBEDDINGS.api_key = settings.google_api_key
+    EMBEDDINGS.model = settings.memory_embedding_model
+    EMBEDDINGS.min_similarity = settings.memory_min_similarity
+    EMBEDDINGS.top_k = settings.memory_top_k
+    _CLIENT = None
+
+
+def embeddings_ready() -> bool:
+    return EMBEDDINGS.enabled and bool(EMBEDDINGS.api_key)
+
+
+def _client() -> Any:
+    global _CLIENT
+    if _CLIENT is None:
+        from google import genai
+
+        _CLIENT = genai.Client(api_key=EMBEDDINGS.api_key)
+    return _CLIENT
+
+
+def embed_texts(texts: list[str], task: str) -> list[list[float]]:
+    """One Gemini embedding per text; ``task`` is RETRIEVAL_DOCUMENT (facts) or RETRIEVAL_QUERY."""
+    from google.genai import types
+
+    vectors: list[list[float]] = []
+    for start in range(0, len(texts), EMBED_BATCH):
+        chunk = texts[start : start + EMBED_BATCH]
+        response = _client().models.embed_content(
+            model=EMBEDDINGS.model,
+            contents=chunk,
+            config=types.EmbedContentConfig(task_type=task, output_dimensionality=EMBEDDING_DIMENSIONS),
+        )
+        values = [list(item.values or []) for item in response.embeddings or []]
+        if len(values) != len(chunk) or not all(values):
+            raise EmbeddingError("a API de embeddings devolveu menos vetores que o esperado.")
+        vectors.extend(values)
+    return vectors
+
+
+def _fact_key(fact: str) -> str:
+    """Changes when the fact is edited by hand, so its vector is computed again."""
+    return hashlib.sha1(_plain(fact).encode("utf-8")).hexdigest()[:12]
+
+
+def _read_vector_file(path: Path) -> tuple[str | None, dict[str, dict[str, Any]]]:
+    """(model, {id: {"key", "vector"}}); a missing or broken file is just empty."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None, {}
+    if not isinstance(raw, dict) or not isinstance(raw.get("items"), dict):
+        return None, {}
+    items = {
+        str(memory_id): item
+        for memory_id, item in raw["items"].items()
+        if isinstance(item, dict) and isinstance(item.get("vector"), list) and item["vector"]
+    }
+    return str(raw.get("model") or ""), items
+
+
+def _write_vector_file(path: Path, model: str | None, items: dict[str, dict[str, Any]]) -> None:
+    temp = path.with_name(f"{path.name}.tmp")
+    temp.write_text(
+        json.dumps({"version": 1, "model": model, "items": items}, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    os.replace(temp, path)
+
+
+def load_vectors(memories: list[dict[str, str]], path: Path | None = None) -> dict[str, list[float]]:
+    """Vectors still valid for these memories (same model, same text), by memory id."""
+    with _VECTOR_LOCK:
+        model, stored = _read_vector_file(path or VECTORS_FILE)
+    if model != EMBEDDINGS.model:
+        return {}
+    return {
+        memory["id"]: stored[memory["id"]]["vector"]
+        for memory in memories
+        if memory["id"] in stored and stored[memory["id"]].get("key") == _fact_key(memory["fact"])
+    }
+
+
+def drop_vectors(ids: list[str], path: Path | None = None) -> None:
+    """Forgotten memories take their vectors with them, whatever model made them."""
+    wanted = set(ids)
+    target = path or VECTORS_FILE
+    with _VECTOR_LOCK:
+        model, stored = _read_vector_file(target)
+        if wanted & stored.keys():
+            _write_vector_file(target, model, {key: item for key, item in stored.items() if key not in wanted})
+
+
+def _store_vectors(new: dict[str, dict[str, Any]], path: Path | None = None) -> None:
+    target = path or VECTORS_FILE
+    with _VECTOR_LOCK:
+        # Lido dentro da trava: uma memória esquecida enquanto a API respondia não ganha vetor.
+        alive = {memory["id"]: _fact_key(memory["fact"]) for memory in load_memories()}
+        model, stored = _read_vector_file(target)
+        items = {**(stored if model == EMBEDDINGS.model else {}), **new}
+        _write_vector_file(
+            target,
+            EMBEDDINGS.model,
+            {key: item for key, item in items.items() if alive.get(key) == item.get("key")},
+        )
+
+
+def index_memories(
+    memories: list[dict[str, str]] | None = None, *, force: bool = False, path: Path | None = None
+) -> int:
+    """Compute the missing vectors (all of them with ``force``); returns how many were computed.
+
+    A fact that looks sensitive (edited by hand into the file) never becomes a vector.
+    """
+    if not embeddings_ready():
+        return 0
+    items = load_memories() if memories is None else memories
+    eligible = [memory for memory in items if not sensitive_reason(memory["fact"])]
+    known = {} if force else load_vectors(eligible, path)
+    missing = [memory for memory in eligible if memory["id"] not in known]
+    if not missing:
+        return 0
+    vectors = embed_texts([memory["fact"] for memory in missing], "RETRIEVAL_DOCUMENT")
+    _store_vectors(
+        {
+            memory["id"]: {"key": _fact_key(memory["fact"]), "vector": [round(value, 5) for value in vector]}
+            for memory, vector in zip(missing, vectors)
+        },
+        path,
+    )
+    return len(missing)
+
+
+def _index_quietly() -> int:
+    try:
+        return index_memories()
+    except Exception as exc:
+        logger.warning("Não calculei os vetores da memória (%s); a busca por palavras continua.", type(exc).__name__)
+        return 0
+
+
+def index_in_background() -> None:
+    """Vectors of new (or never indexed) memories, without holding the reply."""
+    if not embeddings_ready():
+        return
+    task = asyncio.create_task(asyncio.to_thread(_index_quietly))
+    _BACKGROUND.add(task)
+    task.add_done_callback(_BACKGROUND.discard)
+
+
+@dataclass(slots=True)
+class Hit:
+    memory: dict[str, str]
+    score: float
+    similarity: float | None = None
+    by_meaning: bool = False
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+    return sum(x * y for x, y in zip(a, b)) / norm if norm else 0.0
+
+
+def hybrid_search(
+    query: str,
+    memories: list[dict[str, str]],
+    vectors: dict[str, list[float]],
+    query_vector: list[float],
+    *,
+    min_similarity: float,
+    top_k: int,
+) -> list[Hit]:
+    """Memories close in meaning to the query plus those sharing its words, best first.
+
+    A word match always comes back, as in the plain search. A match only by meaning needs
+    ``min_similarity``, and those fill the list up to ``top_k``.
+    """
+    words = _words(query)
+    by_words: list[Hit] = []
+    by_meaning: list[Hit] = []
+    for memory in reversed(memories):
+        word_score = _score(words, memory) if words else 0.0
+        vector = vectors.get(memory["id"])
+        similarity = _cosine(query_vector, vector) if vector else None
+        score = (similarity or 0.0) + WORD_WEIGHT * word_score
+        if word_score >= 0.5:
+            by_words.append(Hit(memory, score, similarity))
+        elif similarity is not None and similarity >= min_similarity:
+            by_meaning.append(Hit(memory, score, similarity, by_meaning=True))
+    by_meaning.sort(key=lambda hit: hit.score, reverse=True)
+    hits = by_words + by_meaning[: max(0, top_k - len(by_words))]
+    hits.sort(key=lambda hit: hit.score, reverse=True)
+    return hits
+
+
+def semantic_search(query: str, memories: list[dict[str, str]]) -> list[Hit] | None:
+    """Hybrid search with embeddings; None when it is off or failed (the caller uses the words)."""
+    if not embeddings_ready() or not memories or not _words(query) or sensitive_reason(query):
+        return None
+    try:
+        index_memories(memories)
+        vectors = load_vectors(memories)
+        if not vectors:
+            return None
+        query_vector = embed_texts([query], "RETRIEVAL_QUERY")[0]
+    except Exception as exc:
+        logger.warning("Busca pelo sentido indisponível (%s); usando as palavras.", type(exc).__name__)
+        return None
+    return hybrid_search(
+        query, memories, vectors, query_vector, min_similarity=EMBEDDINGS.min_similarity, top_k=EMBEDDINGS.top_k
+    )
+
+
+def _hit_item(hit: Hit) -> dict[str, Any]:
+    """A panel item that also says how it was found ("pelo sentido") and the similarity."""
+    item: dict[str, Any] = {**hit.memory, "match": "meaning" if hit.by_meaning else "words"}
+    if hit.similarity is not None:
+        item["score"] = round(hit.similarity, 2)
+    return item
+
+
 # ───────────────────────── resumo e painel ─────────────────────────
 
 
@@ -574,12 +840,13 @@ def summary_for_prompt(memories: list[dict[str, str]] | None = None, *, max_char
 
 def memory_card(
     status: Literal["list", "saved", "forgotten", "refused"],
-    memories: list[dict[str, str]],
+    memories: list[dict[str, Any]],
     *,
     total: int | None = None,
     query: str | None = None,
     highlight: str | None = None,
     message: str | None = None,
+    search: Literal["semantic", "words"] | None = None,
 ) -> dict[str, Any]:
     """Data of the HUD's Memória panel (MEM-23): items newest first, ids for the delete buttons."""
     return {
@@ -589,6 +856,7 @@ def memory_card(
         "query": query,
         "highlight": highlight,
         "message": message,
+        "search": search,
     }
 
 
@@ -655,6 +923,8 @@ async def remember(
         return "NÃO guardei: não consegui gravar o arquivo de memória."
 
     memory = result.memory
+    if not result.duplicate:
+        index_in_background()
     memories = list(reversed(load_memories()))
     await show_card("memory", memory_card("saved", memories, highlight=memory["id"]))
     await tool_status("remember", "done", CATEGORY_LABELS[memory["category"]])
@@ -679,14 +949,31 @@ async def recall(context: RunContext, query: str | None = None) -> str:
     Use it for "o que você sabe/lembra sobre mim?", "qual é a minha reunião de segunda?",
     "do que eu gosto pra programar?". Always check here instead of relying only on the
     memories from the start of the conversation: the user may have deleted some on the HUD.
+    The search understands meaning, so the query does not need the exact words of the fact.
 
     Args:
-        query: Optional words to filter ("reunião", "música", "agenda"). Omit to list everything.
+        query: Optional subject to look for ("reunião", "música que eu gosto", "meu projeto").
+            Omit to list everything.
     """
     await tool_status("recall", "running", query)
     memories = load_memories()
-    found = search_memories(query, memories)
-    await show_card("memory", memory_card("list", found, total=len(memories), query=(query or "").strip() or None))
+    hits = None
+    if query and memories:
+        try:
+            hits = await asyncio.wait_for(asyncio.to_thread(semantic_search, query, memories), RECALL_EMBED_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            logger.warning("Os embeddings demoraram; o recall usou a busca por palavras.")
+    if hits is None:
+        found = search_memories(query, memories)
+        items: list[dict[str, Any]] = found
+    else:
+        found = [hit.memory for hit in hits]
+        items = [_hit_item(hit) for hit in hits]
+    search = None if not _words(query or "") else "semantic" if hits is not None else "words"
+    await show_card(
+        "memory",
+        memory_card("list", items, total=len(memories), query=(query or "").strip() or None, search=search),
+    )
     await tool_status("recall", "done", query)
     if not memories:
         return "A memória está vazia: o usuário ainda não pediu para você lembrar de nada."
@@ -792,3 +1079,70 @@ def serve_memory_panel(room: Any) -> None:
         return json.dumps(reply, ensure_ascii=False)
 
     room.local_participant.register_rpc_method(MEMORY_RPC_METHOD, _on_request)
+
+
+# ───────────────────────── linha de comando ─────────────────────────
+
+
+def _show_scores(query: str) -> None:
+    memories = load_memories()
+    index_memories(memories)
+    vectors = load_vectors(memories)
+    query_vector = embed_texts([query], "RETRIEVAL_QUERY")[0]
+    words = _words(query)
+    rows = sorted(
+        ((_cosine(query_vector, vectors[m["id"]]), _score(words, m) if words else 0.0, m) for m in memories if m["id"] in vectors),
+        key=lambda row: row[0],
+        reverse=True,
+    )
+    print(f"Limiar atual: {EMBEDDINGS.min_similarity:.2f} (JARVIS_MEMORY_MIN_SIMILARITY).\n")
+    for similarity, word_score, memory in rows:
+        verdict = "palavras" if word_score >= 0.5 else "sentido" if similarity >= EMBEDDINGS.min_similarity else "fora"
+        print(f"{similarity:.2f}  {'█' * max(0, round(similarity * 30)):<30}  {verdict:<9} {memory['fact']}")
+    left = len(memories) - len(rows)
+    if left:
+        print(f"\n({left} memória(s) sem vetor: parecem dado sensível e ficam só na busca por palavras.)")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Memória de longo prazo do Jarvis (MEM-23).")
+    parser.add_argument("--reindex", action="store_true", help="Recalcula os vetores de todas as memórias.")
+    parser.add_argument(
+        "--busca",
+        metavar="PERGUNTA",
+        help="Mostra a similaridade de cada memória com a pergunta, para calibrar o limiar.",
+    )
+    args = parser.parse_args(argv)
+    if not args.reindex and not args.busca:
+        parser.print_help()
+        return 0
+
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+    from settings import SettingsError, load_settings
+
+    try:
+        configure_embeddings(load_settings())
+    except SettingsError as exc:
+        print(exc)
+        return 1
+    if not EMBEDDINGS.enabled:
+        print("A busca pelo sentido está desligada (JARVIS_MEMORY_EMBEDDINGS=false).")
+        return 1
+    if not EMBEDDINGS.api_key:
+        print("Falta a GOOGLE_API_KEY no .env: os vetores são calculados pela API do Gemini.")
+        return 1
+    try:
+        if args.reindex:
+            count = index_memories(force=True)
+            print(f"{count} memória(s) com vetor novo em {VECTORS_FILE.name} (modelo {EMBEDDINGS.model}).")
+        if args.busca:
+            _show_scores(args.busca)
+    except Exception as exc:
+        print(f"Não consegui falar com a API de embeddings: {exc}")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

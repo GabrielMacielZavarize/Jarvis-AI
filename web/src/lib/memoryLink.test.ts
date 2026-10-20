@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { savedDate } from './format';
 import { useHud } from './hudStore';
-import { forgetMemory, MemoryOfflineError, parseMemoryReply, setMemoryTransport } from './memoryLink';
+import { forgetMemory, memoryMatchLabel, MemoryOfflineError, parseMemoryReply, setMemoryTransport } from './memoryLink';
 import { matchPanels, panelDetail } from './panels';
 import type { HudCard, MemoryData } from './types';
 
@@ -52,6 +52,30 @@ describe('forgetMemory', () => {
     expect(reply.items.map((item) => item.id)).toEqual(['a1']);
   });
 
+  it('keeps the order and the "pelo sentido" marks of a semantic search after the delete', async () => {
+    setMemoryTransport(async () =>
+      JSON.stringify({ ok: true, status: 'forgotten', items: [memories.items[0], memories.items[1]], total: 2 }),
+    );
+    const found: MemoryData = {
+      ...memories,
+      query: 'do que eu gosto de ouvir',
+      search: 'semantic',
+      items: [
+        { ...memories.items[1], match: 'meaning', score: 0.71 },
+        { ...memories.items[0], match: 'meaning', score: 0.83 },
+        { ...memories.items[2], match: 'meaning', score: 0.64 },
+      ],
+    };
+
+    const reply = await forgetMemory(found, 'c3');
+
+    expect(reply.search).toBe('semantic');
+    expect(reply.items.map((item) => [item.id, item.score])).toEqual([
+      ['b2', 0.71],
+      ['a1', 0.83],
+    ]);
+  });
+
   it('fails clearly without a link to the agent', async () => {
     await expect(forgetMemory(memories, 'a1')).rejects.toBeInstanceOf(MemoryOfflineError);
   });
@@ -71,6 +95,23 @@ describe('parseMemoryReply', () => {
     expect(reply.items).toHaveLength(1);
     expect(reply.total).toBe(1);
     expect(reply.status).toBe('list');
+    expect(reply.search).toBeNull();
+  });
+
+  it('keeps how each item was found', () => {
+    const reply = parseMemoryReply(
+      JSON.stringify({ ok: true, search: 'semantic', items: [{ ...memories.items[0], match: 'meaning', score: 0.82 }] }),
+    );
+    expect(reply.search).toBe('semantic');
+    expect(reply.items[0]).toMatchObject({ match: 'meaning', score: 0.82 });
+  });
+});
+
+describe('memoryMatchLabel', () => {
+  it('says how recall found the memory and the similarity', () => {
+    expect(memoryMatchLabel({ ...memories.items[0], match: 'meaning', score: 0.824 })).toBe('pelo sentido · 82%');
+    expect(memoryMatchLabel({ ...memories.items[0], match: 'words', score: 0.4 })).toBe('pelas palavras · 40%');
+    expect(memoryMatchLabel({ ...memories.items[0], match: 'words' })).toBe('pelas palavras');
   });
 });
 

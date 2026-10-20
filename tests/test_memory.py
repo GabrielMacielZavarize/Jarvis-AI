@@ -1,22 +1,29 @@
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
+import io
 import json
 import tempfile
+import threading
 import time
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
+from contextlib import redirect_stdout
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import memory
 from memory import (
     MEMORY_RPC_METHOD,
+    EmbeddingConfig,
     MemoryRefused,
     add_memory,
     forget,
     handle_panel_request,
+    hybrid_search,
+    index_memories,
     load_memories,
     recall,
     remember,
@@ -51,7 +58,14 @@ class MemoryFileTestCase(unittest.IsolatedAsyncioTestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.path = Path(folder.name) / "memoria.json"
-        for target, value in (("memory.MEMORY_FILE", self.path), ("memory.INTENT_WAIT_SECONDS", 0)):
+        self.vectors_path = Path(folder.name) / "memoria_vetores.json"
+        for target, value in (
+            ("memory.MEMORY_FILE", self.path),
+            ("memory.VECTORS_FILE", self.vectors_path),
+            ("memory.INTENT_WAIT_SECONDS", 0),
+            # Sem embeddings por padrão: build_tools de outros testes liga a busca pelo sentido.
+            ("memory.EMBEDDINGS", EmbeddingConfig()),
+        ):
             patcher = patch(target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -440,3 +454,214 @@ class MemoryPanelTests(MemoryFileTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+CONCEPTS = (
+    ("lo-fi", "ouvir", "música"),
+    ("jarvis-ai", "projeto"),
+    ("criciúma", "cidade"),
+    ("frança", "capital"),
+)
+
+
+class FakeEmbedder:
+    """One dimension per concept plus a small constant, so unrelated texts score near zero."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[str], str]] = []
+        self.error: Exception | None = None
+
+    def __call__(self, texts: list[str], task: str) -> list[list[float]]:
+        self.calls.append((list(texts), task))
+        if self.error is not None:
+            raise self.error
+        return [[1.0 if any(word in text.lower() for word in words) else 0.0 for words in CONCEPTS] + [0.1] for text in texts]
+
+    def texts(self, task: str) -> list[str]:
+        return [text for texts, called_task in self.calls if called_task == task for text in texts]
+
+
+class SemanticMemoryTests(MemoryFileTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        memory.EMBEDDINGS.enabled = True
+        memory.EMBEDDINGS.api_key = "test-key"
+        memory.EMBEDDINGS.model = "embedding-falso"
+        self.embedder = FakeEmbedder()
+        patcher = patch("memory.embed_texts", self.embedder)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.project = add_memory("Trabalha no Jarvis-AI à noite", "trabalho", now=MONDAY).memory
+        self.music = add_memory("Prefere lo-fi para programar", "preferencia", now=MONDAY).memory
+        self.city = add_memory("Mora em Criciúma", "perfil", now=MONDAY).memory
+
+    def stored_vectors(self) -> dict:
+        return json.loads(self.vectors_path.read_text(encoding="utf-8"))
+
+    async def ask(self, question: str, query: str) -> str:
+        return await recall(context_saying(("user", question)), query)
+
+    async def test_recall_finds_by_meaning_not_only_by_words(self) -> None:
+        result = await self.ask("o que eu falei do meu projeto?", "meu projeto")
+
+        self.assertIn("Trabalha no Jarvis-AI à noite", result)
+        self.assertNotIn("lo-fi", result)
+        card = self.last_card()
+        self.assertEqual(card["search"], "semantic")
+        self.assertEqual([item["fact"] for item in card["items"]], ["Trabalha no Jarvis-AI à noite"])
+        self.assertEqual(card["items"][0]["match"], "meaning")
+        self.assertGreater(card["items"][0]["score"], 0.9)
+
+        result = await self.ask("do que eu gosto de ouvir?", "do que eu gosto de ouvir")
+        self.assertIn("Prefere lo-fi para programar", result)
+        self.assertNotIn("Jarvis-AI", result)
+
+    async def test_an_unrelated_question_brings_no_memory(self) -> None:
+        result = await self.ask("qual a capital da França?", "capital da França")
+
+        self.assertTrue(result.startswith("Nada na memória"))
+        self.assertEqual(self.last_card()["items"], [])
+
+    async def test_the_same_words_still_count_and_come_first(self) -> None:
+        add_memory("Gosta de jazz enquanto programa", "preferencia")
+
+        await self.ask("o que eu falei do lo-fi?", "lo-fi para ouvir")
+
+        items = self.last_card()["items"]
+        self.assertEqual(items[0]["fact"], "Prefere lo-fi para programar")
+        self.assertEqual(items[0]["match"], "words")
+
+    async def test_first_recall_indexes_the_old_memories_in_one_batch(self) -> None:
+        await self.ask("o que eu falei do meu projeto?", "meu projeto")
+
+        documents = [texts for texts, task in self.embedder.calls if task == "RETRIEVAL_DOCUMENT"]
+        self.assertEqual(len(documents), 1)
+        self.assertEqual(len(documents[0]), 3)
+        stored = self.stored_vectors()
+        self.assertEqual(stored["model"], "embedding-falso")
+        self.assertEqual(set(stored["items"]), {self.project["id"], self.music["id"], self.city["id"]})
+
+        self.embedder.calls.clear()
+        await self.ask("onde eu moro?", "cidade onde moro")
+        self.assertEqual(self.embedder.texts("RETRIEVAL_DOCUMENT"), [])
+        self.assertEqual(self.embedder.texts("RETRIEVAL_QUERY"), ["cidade onde moro"])
+
+    async def test_a_new_memory_gets_its_vector_in_the_background(self) -> None:
+        context = context_saying(("user", "lembra que eu moro perto da cidade de Içara"))
+
+        await remember(context, "Mora perto de Içara", "perfil")
+        await asyncio.gather(*memory._BACKGROUND)
+
+        self.assertEqual(len(self.stored_vectors()["items"]), 4)
+
+    async def test_forget_takes_the_vector_with_it(self) -> None:
+        index_memories()
+
+        await forget(context_saying(("user", "esquece o que eu falei do lo-fi")), "lo-fi")
+        self.assertNotIn(self.music["id"], self.stored_vectors()["items"])
+
+        handle_panel_request(json.dumps({"action": "forget", "id": self.city["id"]}))
+        self.assertNotIn(self.city["id"], self.stored_vectors()["items"])
+
+        add_memory("Trabalha no Jarvis-AI de manhã", "trabalho", replaces="Jarvis-AI à noite")
+        self.assertEqual(self.stored_vectors()["items"], {})
+
+    async def test_passwords_never_become_vectors(self) -> None:
+        items = [self.project, {"id": "bad001", "fact": "senha do wifi: batata123", "category": "outro"}]
+        self.path.write_text(json.dumps({"memories": items}), encoding="utf-8")
+
+        index_memories()
+        await self.ask("qual a senha do wifi?", "senha do wifi")
+
+        sent = self.embedder.texts("RETRIEVAL_DOCUMENT") + self.embedder.texts("RETRIEVAL_QUERY")
+        self.assertFalse(any("batata" in text or "senha" in text for text in sent))
+        self.assertEqual(set(self.stored_vectors()["items"]), {self.project["id"]})
+
+    async def test_without_network_recall_works_as_before(self) -> None:
+        self.embedder.error = OSError("sem rede")
+
+        result = await self.ask("qual é a minha cidade?", "Criciúma")
+
+        self.assertIn("Mora em Criciúma", result)
+        card = self.last_card()
+        self.assertEqual(card["search"], "words")
+        self.assertNotIn("match", card["items"][0])
+        self.assertFalse(self.vectors_path.exists())
+
+    async def test_a_slow_api_falls_back_to_the_words(self) -> None:
+        release = threading.Event()
+
+        def slow(texts: list[str], task: str) -> list[list[float]]:
+            # Falha ao ser liberado: a thread que sobra não grava nada fora da pasta do teste.
+            release.wait(2)
+            raise OSError("respondeu tarde demais")
+
+        with patch("memory.embed_texts", slow), patch("memory.RECALL_EMBED_TIMEOUT_S", 0.05):
+            result = await self.ask("qual é a minha cidade?", "Criciúma")
+        release.set()
+
+        self.assertIn("Mora em Criciúma", result)
+        self.assertEqual(self.last_card()["search"], "words")
+
+    async def test_switched_off_nothing_leaves_the_computer(self) -> None:
+        memory.EMBEDDINGS.enabled = False
+
+        result = await self.ask("o que eu falei do meu projeto?", "meu projeto")
+
+        self.assertTrue(result.startswith("Nada na memória"))
+        self.assertEqual(self.embedder.calls, [])
+
+    def test_an_edited_fact_or_another_model_gets_a_new_vector(self) -> None:
+        self.assertEqual(index_memories(), 3)
+        self.assertEqual(index_memories(), 0)
+
+        items = json.loads(self.path.read_text(encoding="utf-8"))["memories"]
+        items[2]["fact"] = "Mora em Criciúma, perto da SATC"
+        self.path.write_text(json.dumps({"memories": items}), encoding="utf-8")
+        self.assertEqual(index_memories(), 1)
+
+        memory.EMBEDDINGS.model = "outro-modelo"
+        self.assertEqual(index_memories(), 3)
+        self.assertEqual(index_memories(force=True), 3)
+
+    def test_meaning_only_matches_are_capped_but_word_matches_are_not(self) -> None:
+        memories = [{"id": f"m{i}", "fact": f"Fato {i}", "category": "outro", "created_at": ""} for i in range(6)]
+        memories.append({"id": "w1", "fact": "Gosta de lo-fi", "category": "preferencia", "created_at": ""})
+        vectors = {f"m{i}": [1.0, 0.1 * i] for i in range(6)} | {"w1": [0.0, 1.0]}
+
+        hits = hybrid_search("lo-fi", memories, vectors, [1.0, 0.0], min_similarity=0.6, top_k=3)
+
+        self.assertEqual([hit.memory["id"] for hit in hits], ["m0", "m1", "w1"])
+        self.assertFalse(hits[2].by_meaning)
+
+    def test_settings_switch_and_tune_the_semantic_search(self) -> None:
+        settings = load_settings(
+            {
+                "GOOGLE_API_KEY": "test-key",
+                "JARVIS_MEMORY_EMBEDDINGS": "false",
+                "JARVIS_MEMORY_MIN_SIMILARITY": "0,7",
+                "JARVIS_MEMORY_TOP_K": "5",
+            }
+        )
+        self.assertFalse(settings.memory_embeddings)
+        self.assertEqual((settings.memory_min_similarity, settings.memory_top_k), (0.7, 5))
+        self.assertTrue(load_settings({}).memory_embeddings)
+
+        build_tools(settings)
+        self.assertFalse(memory.embeddings_ready())
+        build_tools(load_settings({"GOOGLE_API_KEY": "test-key"}))
+        self.assertTrue(memory.embeddings_ready())
+
+    def test_reindex_from_the_command_line(self) -> None:
+        output = io.StringIO()
+        with patch("settings.load_settings", return_value=load_settings({"GOOGLE_API_KEY": "test-key"})), redirect_stdout(output):
+            code = memory.main(["--reindex"])
+
+        self.assertEqual(code, 0)
+        self.assertIn("3 memória(s) com vetor novo", output.getvalue())
+        self.assertEqual(len(self.stored_vectors()["items"]), 3)
+
+        output = io.StringIO()
+        with patch("settings.load_settings", return_value=load_settings({})), redirect_stdout(output):
+            self.assertEqual(memory.main(["--reindex"]), 1)
+        self.assertIn("GOOGLE_API_KEY", output.getvalue())

@@ -46,6 +46,11 @@ DEFAULT_CALENDAR_REMINDER_MINUTES = 10
 DEFAULT_QUIET_HOURS = "23:00-07:00"
 CLOCK_RANGE = re.compile(r"^\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*(?:-|a|as|às|até|ate)\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*$", re.IGNORECASE)
 DEFAULT_PRESENCE_AWAY_MINUTES = 5
+# Busca pelo sentido da memória (MEM-23): modelo de embeddings da API Gemini e quanto a pergunta
+# precisa parecer com o fato para ele entrar no recall (cosseno de -1 a 1).
+DEFAULT_MEMORY_EMBEDDING_MODEL = "gemini-embedding-001"
+DEFAULT_MEMORY_MIN_SIMILARITY = 0.6
+DEFAULT_MEMORY_TOP_K = 8
 
 
 class SettingsError(ValueError):
@@ -223,6 +228,10 @@ class Settings:
     computer_use_enabled: bool = False
     computer_use_model: str = DEFAULT_COMPUTER_USE_MODEL
     memory_enabled: bool = True
+    memory_embeddings: bool = True
+    memory_embedding_model: str = DEFAULT_MEMORY_EMBEDDING_MODEL
+    memory_min_similarity: float = DEFAULT_MEMORY_MIN_SIMILARITY
+    memory_top_k: int = DEFAULT_MEMORY_TOP_K
     routines_enabled: bool = True
     calendar_enabled: bool = False
     calendar_reminder_minutes: int = DEFAULT_CALENDAR_REMINDER_MINUTES
@@ -320,6 +329,22 @@ class Settings:
                 env_map.get("JARVIS_ENABLE_MEMORY"),
                 "JARVIS_ENABLE_MEMORY",
                 default=True,
+            ),
+            memory_embeddings=_parse_bool(
+                env_map.get("JARVIS_MEMORY_EMBEDDINGS"), "JARVIS_MEMORY_EMBEDDINGS", default=True
+            ),
+            memory_embedding_model=(
+                _clean_optional(env_map.get("JARVIS_MEMORY_EMBEDDING_MODEL")) or DEFAULT_MEMORY_EMBEDDING_MODEL
+            ),
+            memory_min_similarity=_parse_number(
+                env_map.get("JARVIS_MEMORY_MIN_SIMILARITY"),
+                "JARVIS_MEMORY_MIN_SIMILARITY",
+                DEFAULT_MEMORY_MIN_SIMILARITY,
+                0.1,
+                0.99,
+            ),
+            memory_top_k=int(
+                _parse_number(env_map.get("JARVIS_MEMORY_TOP_K"), "JARVIS_MEMORY_TOP_K", DEFAULT_MEMORY_TOP_K, 1, 30)
             ),
             routines_enabled=_parse_bool(
                 env_map.get("JARVIS_ENABLE_ROUTINES"),

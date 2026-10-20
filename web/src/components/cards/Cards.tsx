@@ -3,7 +3,7 @@ import { useClock } from '../../hooks/useClock';
 import { fitDomain } from '../../lib/chart';
 import { formatDuration, formatUptime, groupCode, hostnameOf, relativeTime, savedDate, weekdayShort } from '../../lib/format';
 import { useHud } from '../../lib/hudStore';
-import { forgetMemory, MemoryOfflineError } from '../../lib/memoryLink';
+import { forgetMemory, memoryMatchLabel, MemoryOfflineError } from '../../lib/memoryLink';
 import type {
   DiagnosticsData,
   EmailData,
@@ -720,7 +720,7 @@ export function MemoryBody({ id, data }: { id: string; data: MemoryData }) {
       <div className="mem__head">
         <span className={`status-chip ${tone}`}>{label}</span>
         <span className="card__sub">
-          {data.query ? `Busca: “${data.query}” · ` : ''}
+          {data.query ? `${data.search === 'semantic' ? 'Busca pelo sentido' : 'Busca'}: “${data.query}” · ` : ''}
           {data.total} {data.total === 1 ? 'item' : 'itens'}
         </span>
       </div>
@@ -740,7 +740,10 @@ export function MemoryBody({ id, data }: { id: string; data: MemoryData }) {
                   <li key={item.id} className={`mem__item${item.id === data.highlight ? ' mem__item--new' : ''}`}>
                     <div className="mem__text">
                       <span className="mem__fact">{item.fact}</span>
-                      <span className="mem__date">salvo em {savedDate(item.created_at) || '—'}</span>
+                      <span className="mem__date">
+                        salvo em {savedDate(item.created_at) || '—'}
+                        {item.match && <span className={`mem__match mem__match--${item.match}`}>{memoryMatchLabel(item)}</span>}
+                      </span>
                     </div>
                     <button
                       type="button"
