@@ -15,7 +15,7 @@ In English: real-time voice assistant built on LiveKit Agents (Gemini Live or Op
 - Lê a tela e explica erros, código e páginas, com a correção pronta para copiar.
 - Fica de olho no terminal ou no PhpStorm e avisa quando aparece um erro novo, oferecendo a explicação.
 - Resume cada conversa num diário e responde "o que eu te pedi ontem?" e "onde paramos no projeto?".
-- Guarda fatos entre conversas, roda rotinas ("bom dia, Jarvis", "modo foco") e avisa sozinho de lembretes, bateria, downloads e reuniões.
+- Guarda fatos entre conversas, roda rotinas ("bom dia, Jarvis", "modo foco", também sozinhas quando você abre um app ou conecta o fone) e avisa sozinho de lembretes, bateria, downloads e reuniões.
 - Lê e mexe no Google Agenda, manda email e instala apps pelo winget. O que grava ou envia só acontece depois de um código falado.
 - Usa as ferramentas de servidores MCP (GitHub, Notion, Spotify...) com as mesmas travas: só o que você liberar, e o que escreve pede código.
 - Controla a casa pelo Home Assistant: apaga a luz, liga o ar e diz se a porta está trancada. Destrancar porta, abrir portão e mexer em alarme ou câmera pedem código.

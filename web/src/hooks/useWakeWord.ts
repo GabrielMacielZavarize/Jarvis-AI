@@ -12,6 +12,7 @@ import {
   noticeLogLevel,
   noticeToast,
   parseWakeEvent,
+  routineWakeTitle,
   silenceLeft,
   wakePersona,
   wakeWordLabel,
@@ -113,7 +114,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const report = useCallback((result: 'connected' | 'failed' | 'ignored') => post('/api/wake/result', { client: clientId, result }), [clientId]);
 
   const onWake = useCallback(
-    (score: number, routine?: string, reason?: 'calendar' | 'notice' | 'presence', word?: string, persona?: string) => {
+    (score: number, routine?: string, reason?: 'calendar' | 'notice' | 'presence' | 'context', word?: string, persona?: string) => {
       const byPresence = reason === 'presence';
       const heard = `“${wakeWordLabel(word)}”`;
       const state = latest.current;
@@ -126,7 +127,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         hud.addLog(
           'warn',
           routine
-            ? `Rotina agendada “${routine}”, mas o LiveKit não está configurado`
+            ? `${routineWakeTitle(reason)} “${routine}”, mas o LiveKit não está configurado`
             : byPresence
               ? 'Você voltou, mas o LiveKit não está configurado'
               : `Ouvi ${heard}, mas o LiveKit não está configurado`,
@@ -141,8 +142,8 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       }
       playWakeChime();
       if (routine) {
-        hud.addLog('ok', `Rotina agendada · “${routine}”`);
-        hud.pushToast({ level: 'info', title: 'Rotina agendada', message: routine, code: 'ROT-24' });
+        hud.addLog('ok', `${routineWakeTitle(reason)} · “${routine}”`);
+        hud.pushToast({ level: 'info', title: routineWakeTitle(reason), message: routine, code: 'ROT-24' });
       } else if (reason === 'calendar') {
         hud.addLog('ok', 'Aviso da agenda · reunião chegando');
         hud.pushToast({ level: 'warn', title: 'Reunião chegando', message: 'O Jarvis vai avisar os detalhes.', code: 'AGD-27' });

@@ -275,6 +275,20 @@ Detalhes em [diario.md](diario.md). Precisa da `GOOGLE_API_KEY` e de `JARVIS_DIA
 - [ ] "Esquece essa conversa" e encerre: nenhuma entrada nova. "Apaga o diário de hoje": as de hoje somem. O × do painel apaga uma só, depois do "Apagar?".
 - [ ] Com `JARVIS_DIARY=false`, encerre uma conversa longa: nada é gravado e o painel Protocolos não mostra o DIA-36.
 
+## 24. Rotinas por contexto
+
+Detalhes em [memoria-e-rotinas.md](memoria-e-rotinas.md#por-contexto). Precisa de `JARVIS_ENABLE_PC_CONTROL=true`. Para chegar e sair, também da presença.
+
+- [ ] Com o PhpStorm fechado, "quando eu abrir o PhpStorm, roda o modo foco". Abra o PhpStorm sem aba do HUD: o navegador abre, o painel Rotina mostra "por contexto" e o Jarvis diz que rodou porque o PhpStorm abriu.
+- [ ] Com a conversa aberta, feche e abra o PhpStorm depois de 30 minutos: a rotina roda na conversa, sem abrir outro link. Antes disso, nada acontece.
+- [ ] Reinicie o `python jarvis.py` com o PhpStorm já aberto: nada dispara.
+- [ ] "Quando o Spotify ficar em foco, roda o lo-fi": trocar de janela para o Spotify dispara uma vez.
+- [ ] "Quando eu conectar o fone, roda o modo foco": ligue o fone Bluetooth e espere até 15 segundos.
+- [ ] Com a presença ligada, "quando eu sair, roda a boa noite": saia da frente da câmera; o Jarvis pergunta antes de bloquear e nada é bloqueado sem o seu "sim".
+- [ ] "Quando o PC entrar na rede (nome da sua rede), roda o bom dia": desconecte e reconecte o Wi-Fi.
+- [ ] "Desliga o gatilho do modo foco" e abra o PhpStorm: nada acontece. Com `JARVIS_CONTEXT_TRIGGERS=false`, nenhum gatilho dispara e o `/api/status` mostra 0 em `context_triggers`.
+- [ ] Uma rotina que abre a Steam não dispara uma segunda rotina presa à Steam (intervalo de 90 segundos).
+
 ## 25. Clica aqui apontando
 
 Detalhes em [mouse-e-ditado.md](mouse-e-ditado.md#clica-aqui-apontando). Precisa de `JARVIS_ENABLE_COMPUTER_USE=true`, dos gestos armados e do link aberto.

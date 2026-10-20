@@ -158,6 +158,8 @@ Criar, mudar, apagar ou agendar uma rotina exige que a sua última fala fale em 
 
 O `POST /api/routines/claim`, por onde o agente pega a rotina agendada, só atende o próprio computador e recusa pedidos de outros sites.
 
+As rotinas por contexto seguem as mesmas regras. O gatilho só dispara a rotina: os passos são os mesmos da tabela, e bloquear o PC ou fechar um app continuam esperando o seu "sim". Criar, mudar ou desligar um gatilho exige a mesma fala sua sobre a rotina. O vigia lê só nomes de processos, a janela em foco, nomes de aparelhos de áudio, o nome da rede Wi-Fi e o estado da presença, e nada disso sai do PC nem fica gravado. `JARVIS_CONTEXT_TRIGGERS=false` desliga tudo.
+
 ## Palavra de ativação
 
 O detector só fala com o servidor local, usando um segredo aleatório que o `jarvis.py` gera a cada execução. Sem ele, o `/api/wake/trigger` recusa o aviso.

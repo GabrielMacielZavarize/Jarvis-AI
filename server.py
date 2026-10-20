@@ -36,6 +36,7 @@ from gesture_engine import CALIBRATION_FILE as GESTURE_CALIBRATION_FILE
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
 from routines import RoutineScheduler
+from context_triggers import ContextWatcher
 from proactive import ProactiveEngine, build_proactive_router
 from screen_watch import attach_screen_watch, build_watch_router
 from presence import NEEDS_CAMERA, PresenceService, get_service, voice_action
@@ -101,6 +102,7 @@ ROUTINE_TOOL_NAMES = [
     "save_routine",
     "delete_routine",
     "schedule_routine",
+    "set_routine_trigger",
 ]
 
 PRESENCE_TOOL_NAMES = ["presence_control"]
@@ -354,6 +356,7 @@ def create_app(
     proactive: Callable[[WakeHub], ProactiveEngine | None] | None = None,
     presence_service: PresenceService | None = None,
     devices: DeviceRegistry | None = None,
+    context_watcher: ContextWatcher | None = None,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
@@ -362,7 +365,8 @@ def create_app(
     replaces the clock-driven scheduler of the routines (tests); ``calendar_reminders=False``
     turns off the meeting reminders loop (tests); ``proactive`` builds the PRO-28 notice engine
     (tests); by default it runs when JARVIS_PROACTIVE=true; ``presence_service`` replaces the
-    webcam presence detector (PRS-25, tests); ``devices`` replaces ``aparelhos.json`` (tests)."""
+    webcam presence detector (PRS-25, tests); ``devices`` replaces ``aparelhos.json`` (tests);
+    ``context_watcher`` replaces the watcher of the routines fired by context (tests)."""
 
     def default_engine(wake_hub: WakeHub) -> ProactiveEngine | None:
         try:
@@ -399,6 +403,8 @@ def create_app(
                 logger.warning("Presença: %s", NEEDS_CAMERA)
         # ROT-24: as rotinas agendadas vencem aqui, no processo do servidor.
         scheduler_task = asyncio.create_task(app.state.routines.run_forever(routines_enabled))
+        # Rotinas por contexto: app aberto, fone conectado, chegada ou saída, rede Wi-Fi.
+        context_task = asyncio.create_task(app.state.context.run_forever(context_enabled))
         reminders = asyncio.create_task(_calendar_reminders()) if calendar_reminders else None
         engine = (proactive or default_engine)(app.state.wake_hub)
         app.state.proactive = engine
@@ -408,6 +414,7 @@ def create_app(
         app.state.screen_watch = attach_screen_watch(engine, settings)
         yield
         scheduler_task.cancel()
+        context_task.cancel()
         if reminders is not None:
             reminders.cancel()
         if engine is not None:
@@ -454,6 +461,19 @@ def create_app(
             return current_settings().routines_enabled
         except SettingsError:
             return False
+
+    def context_enabled() -> bool:
+        try:
+            settings = current_settings()
+        except SettingsError:
+            return False
+        return settings.routines_enabled and settings.context_triggers_enabled
+
+    def context_cooldown() -> float:
+        try:
+            return current_settings().context_cooldown_minutes
+        except SettingsError:
+            return 30.0
 
     def presence() -> PresenceService:
         return presence_service if presence_service is not None else get_service()
@@ -533,6 +553,9 @@ def create_app(
             "routines": {
                 "enabled": settings.routines_enabled,
                 "scheduled": app.state.routines.scheduled_count() if settings.routines_enabled else 0,
+                "context_triggers": app.state.context.trigger_count()
+                if settings.routines_enabled and settings.context_triggers_enabled
+                else 0,
             },
             "calendar": _calendar_status(settings),
             "proactive": settings.proactive_enabled,
@@ -744,10 +767,15 @@ def create_app(
 
     def routine_due(key: str) -> None:
         """Open the link (the HUD tab, or the browser when none is open) for a scheduled routine."""
-        if app.state.wake_hub.trigger_routine(key)["opened_browser"]:
+        reason = "context" if key in app.state.routines.reasons else "wake"
+        if app.state.wake_hub.trigger_routine(key, reason)["opened_browser"]:
             threading.Thread(target=open_browser, args=(app.state.hud_url,), daemon=True).start()
 
     app.state.routines.on_due = routine_due
+    app.state.context = context_watcher or ContextWatcher(
+        presence=lambda: presence().state()["state"], cooldown_minutes=context_cooldown
+    )
+    app.state.context.fire = app.state.routines.fire
 
     @app.get("/api/ambient")
     def ambient(request: Request) -> dict[str, Any]:
@@ -786,7 +814,9 @@ def create_app(
     def claim_routine(request: Request) -> dict[str, Any]:
         """The agent picks up the scheduled routine that came due (each one is handed out once)."""
         _require_local(request)
-        return {"routine": app.state.routines.claim()}
+        key = app.state.routines.claim()
+        context = app.state.routines.claim_reason(key)
+        return {"routine": key, **({"context": context} if context else {})}
 
     if (WEB_DIST / "index.html").exists():
         app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="hud")

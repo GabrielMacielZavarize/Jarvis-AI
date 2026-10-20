@@ -519,7 +519,7 @@ class ServerRoutineTests(unittest.TestCase):
 
     def test_status_and_claim(self) -> None:
         body = self.client.get("/api/status").json()
-        self.assertEqual(body["routines"], {"enabled": True, "scheduled": 1})
+        self.assertEqual(body["routines"], {"enabled": True, "scheduled": 1, "context_triggers": 0})
         self.assertEqual(self.client.post("/api/routines/claim").json(), {"routine": None})
 
         self.scheduler.tick()

@@ -799,7 +799,7 @@ export function RoutineBody({ data }: { data: RoutineData }) {
       <div className="rot__head">
         <span className={`status-chip ${tone}`}>{label}</span>
         <span className="card__sub">
-          {data.name} · {done}/{data.steps.length} {data.trigger === 'agenda' ? '· agendada' : ''}
+          {data.name} · {done}/{data.steps.length} {data.trigger === 'agenda' ? '· agendada' : data.trigger === 'contexto' ? '· por contexto' : ''}
         </span>
       </div>
       <ol className="rot__steps">

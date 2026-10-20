@@ -7,6 +7,7 @@ import {
   noticeLogLevel,
   noticeToast,
   parseWakeEvent,
+  routineWakeTitle,
   silenceLeft,
   wakePersona,
   wakeWordLabel,
@@ -44,6 +45,17 @@ describe('parseWakeEvent', () => {
       presence: true,
       silence_s: 30,
     });
+  });
+
+  it('reads a routine fired by a context trigger (ROT-24)', () => {
+    expect(parseWakeEvent('{"type":"wake","score":1,"reason":"context","routine":"modo foco"}')).toEqual({
+      type: 'wake',
+      score: 1,
+      reason: 'context',
+      routine: 'modo foco',
+    });
+    expect(routineWakeTitle('context')).toBe('Rotina por contexto');
+    expect(routineWakeTitle()).toBe('Rotina agendada');
   });
 
   it('reads the word heard and the persona it called', () => {
