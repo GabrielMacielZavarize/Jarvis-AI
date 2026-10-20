@@ -61,6 +61,7 @@ export const TOOL_LABELS: Record<string, string> = {
   save_routine: 'Gravando rotina',
   delete_routine: 'Apagando rotina',
   schedule_routine: 'Agendando rotina',
+  set_routine_trigger: 'Gatilho de rotina',
   show_on_hud: 'Projeção no HUD',
   check_email_address: 'Conferência de endereço',
   draft_email: 'Rascunho de email',
@@ -147,7 +148,7 @@ const PROTOCOL_TOOLS: Record<string, string[]> = {
   ],
   'LAY-21': ['manage_layouts', 'arrange_windows'],
   'MEM-23': ['remember', 'recall', 'forget'],
-  'ROT-24': ['run_routine', 'list_routines', 'save_routine', 'delete_routine', 'schedule_routine', 'confirm_routine_step'],
+  'ROT-24': ['run_routine', 'list_routines', 'save_routine', 'delete_routine', 'schedule_routine', 'confirm_routine_step', 'set_routine_trigger'],
   'PRS-25': ['presence_control'],
   'AGD-27': [
     'get_agenda',

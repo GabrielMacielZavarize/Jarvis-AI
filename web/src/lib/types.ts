@@ -218,7 +218,7 @@ export interface RoutineData {
   id: string;
   name: string;
   /** voz = the user asked; agenda = the schedule fired it. */
-  trigger: 'voz' | 'agenda';
+  trigger: 'voz' | 'agenda' | 'contexto';
   /** confirm = a dangerous step (lock the PC, close an app) waits for the user's "sim". */
   status: 'running' | 'confirm' | 'done' | 'partial' | 'failed';
   started_at: number;

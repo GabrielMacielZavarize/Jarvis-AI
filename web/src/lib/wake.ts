@@ -33,18 +33,24 @@ export type WakeEvent =
   /**
    * routine: a scheduled routine (ROT-24) opened the link; reason: why it woke instead of a heard
    * "Jarvis" (calendar = AGD-27 meeting reminder, notice = PRO-28 proactive notice, presence =
-   * PRS-25: the webcam saw the user sit back down). word: the name heard ("friday"); persona: the
+   * PRS-25: the webcam saw the user sit back down; context = the routine was fired by a context
+   * trigger, such as an app opening, instead of the clock). word: the name heard ("friday"); persona: the
    * persona that name calls, already saved on the server, when the HUD must switch to it.
    */
   | {
       type: 'wake';
       score: number;
       routine?: string;
-      reason?: 'calendar' | 'notice' | 'presence';
+      reason?: 'calendar' | 'notice' | 'presence' | 'context';
       word?: string;
       persona?: string;
     }
   | NoticeEvent;
+
+/** ROT-24: how the HUD names a routine that opened the link (by the clock or by a context trigger). */
+export function routineWakeTitle(reason?: string): string {
+  return reason === 'context' ? 'Rotina por contexto' : 'Rotina agendada';
+}
 
 export function parseWakeEvent(raw: string): WakeEvent | null {
   try {

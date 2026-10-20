@@ -21,6 +21,9 @@ Agendamento ("todo dia útil às 8h roda o bom dia"): o ``RoutineScheduler`` rod
 servidor do HUD (``server.py``). Na hora, ele guarda a rotina como pendente e abre o link pela
 mesma via da palavra de ativação (``wake_hub.py``); o agente, ao começar a sessão ou durante
 uma conversa já aberta, pega a pendente em ``POST /api/routines/claim`` e o Jarvis fala o resultado.
+
+Gatilhos por contexto ("quando eu abrir o PhpStorm, roda o modo foco") ficam em ``context_triggers.py``
+e entregam a rotina pelo mesmo caminho, com ``RoutineScheduler.fire``.
 """
 
 from __future__ import annotations
@@ -429,7 +432,16 @@ def _valid_routine(key: str, raw: Any) -> dict[str, Any] | None:
         "aliases": [alias for alias in dict.fromkeys(aliases) if alias][:MAX_ALIASES],
         "steps": steps[:MAX_STEPS],
         "schedule": _valid_schedule(raw.get("schedule")),
+        "triggers": _valid_triggers(raw.get("triggers")),
     }
+
+
+def _valid_triggers(raw: Any) -> list[dict[str, Any]]:
+    if not raw:
+        return []
+    from context_triggers import valid_triggers
+
+    return valid_triggers(raw)
 
 
 def load_routines(path: Path | None = None) -> dict[str, dict[str, Any]]:
@@ -510,6 +522,10 @@ def summary_for_prompt(routines: dict[str, dict[str, Any]] | None = None) -> str
         when = describe_schedule(routine["schedule"])
         if when:
             extra.append(f"agendada {when}")
+        if routine.get("triggers"):
+            from context_triggers import describe_triggers
+
+            extra.append(f"roda sozinha {describe_triggers(routine)}")
         lines.append(f"- {routine['name']}" + (f" ({'; '.join(extra)})" if extra else ""))
     return "\n".join(lines) or None
 
@@ -543,7 +559,7 @@ class StepResult:
 class RoutineRun:
     key: str
     name: str
-    trigger: Literal["voz", "agenda"]
+    trigger: Literal["voz", "agenda", "contexto"]
     results: list[StepResult]
     run_id: str = field(default_factory=lambda: secrets.token_hex(4))
     started_at: float = field(default_factory=time.time)
@@ -701,7 +717,7 @@ async def execute_routine(
     key: str,
     routine: dict[str, Any],
     *,
-    trigger: Literal["voz", "agenda"],
+    trigger: Literal["voz", "agenda", "contexto"],
     settings: Settings | None = None,
 ) -> RoutineRun:
     """Run the safe steps in order, then park the dangerous ones waiting for the user's "sim"."""
@@ -840,6 +856,10 @@ def _routine_lines(routines: dict[str, dict[str, Any]]) -> list[str]:
         when = describe_schedule(routine["schedule"])
         steps = ", ".join(parse_step(raw).label() for raw in routine["steps"])
         lines.append(f"{routine['name']}{f' (agendada: {when})' if when else ''}: {steps}")
+        if routine.get("triggers"):
+            from context_triggers import describe_triggers
+
+            lines[-1] += f" (roda sozinha {describe_triggers(routine)})"
     return lines
 
 
@@ -970,6 +990,7 @@ async def save_routine(
             "aliases": list(dict.fromkeys([*(existing["aliases"] if existing else []), *(routine_key(a) for a in aliases or [])]))[:MAX_ALIASES],
             "steps": new_steps,
             "schedule": existing["schedule"] if existing else None,
+            "triggers": existing.get("triggers", []) if existing else [],
         }
         routines[key] = _valid_routine(key, routine) or routine
         await asyncio.to_thread(save_routines, routines)
@@ -1046,10 +1067,18 @@ async def schedule_routine(
 
 
 def build_routine_tools() -> list[Any]:
-    return [list_routines, run_routine, confirm_routine_step, save_routine, delete_routine, schedule_routine]
+    from context_triggers import set_routine_trigger
+
+    return [list_routines, run_routine, confirm_routine_step, save_routine, delete_routine, schedule_routine, set_routine_trigger]
 
 
 # ───────────────────────── agente: rotinas agendadas ─────────────────────────
+
+
+class ClaimedRoutine(str):
+    """A routine key handed out by the server; ``context`` says what fired it, when not the clock."""
+
+    context: str | None = None
 
 
 def claim_scheduled(hud_url: str, *, post: Callable[..., Any] | None = None) -> str | None:
@@ -1061,30 +1090,38 @@ def claim_scheduled(hud_url: str, *, post: Callable[..., Any] | None = None) -> 
     try:
         response = post(hud_url.rstrip("/") + CLAIM_PATH, timeout=3)
         response.raise_for_status()
-        routine = response.json().get("routine")
+        body = response.json()
+        routine = body.get("routine")
     except Exception:
         logger.debug("Servidor do HUD não respondeu sobre rotinas agendadas.", exc_info=True)
         return None
-    return routine if isinstance(routine, str) and routine else None
+    if not isinstance(routine, str) or not routine:
+        return None
+    claimed = ClaimedRoutine(routine)
+    context = body.get("context")
+    claimed.context = context if isinstance(context, str) and context else None
+    return claimed
 
 
 async def run_scheduled(session: Any, key: str) -> RoutineRun | None:
     """Run a routine the schedule fired and make Jarvis say how it went."""
     context = SessionContext(session)
+    # Rotina por contexto: o servidor diz o que a disparou ("o PhpStorm abriu").
+    why = getattr(key, "context", None)
     try:
         routines = await asyncio.to_thread(load_routines)
         found = find_routine(key, routines)
-        run = await execute_routine(context, found, routines[found], trigger="agenda")
+        run = await execute_routine(context, found, routines[found], trigger="contexto" if why else "agenda")
     except RoutineError as exc:
         logger.warning("Rotina agendada '%s' não rodou: %s", key, exc)
         return None
     try:
-        session.generate_reply(
-            instructions=(
-                f"A rotina agendada '{run.name}' acabou de rodar sozinha, no horário marcado. "
-                f"Fale com o usuário sobre o resultado:\n{build_report(run)}"
-            )
+        opening = (
+            f"A rotina '{run.name}' acabou de rodar sozinha porque {why}. "
+            if why
+            else f"A rotina agendada '{run.name}' acabou de rodar sozinha, no horário marcado. "
         )
+        session.generate_reply(instructions=f"{opening}Fale com o usuário sobre o resultado:\n{build_report(run)}")
     except Exception:
         logger.warning("Não foi possível anunciar a rotina agendada '%s'.", run.name)
     return run
@@ -1137,6 +1174,8 @@ class RoutineScheduler:
         self.on_due = on_due
         self.fired: dict[str, dt.date] = {}
         self.pending: list[tuple[str, float]] = []
+        # Rotinas disparadas por contexto: o que aconteceu, para o agente dizer.
+        self.reasons: dict[str, str] = {}
 
     def scheduled_count(self) -> int:
         try:
@@ -1159,6 +1198,7 @@ class RoutineScheduler:
             if when is None or not when <= now < when + CATCH_UP or self.fired.get(key) == now.date():
                 continue
             self.fired[key] = now.date()
+            self.reasons.pop(key, None)
             self.pending = [item for item in self.pending if item[0] != key]
             self.pending.append((key, self._monotonic() + PENDING_ROUTINE_S))
             due.append(key)
@@ -1169,6 +1209,20 @@ class RoutineScheduler:
                 except Exception:
                     logger.exception("Falha ao abrir o link para a rotina '%s'.", key)
         return due
+
+    def fire(self, key: str, reason: str) -> None:
+        """Hand a routine fired by context (context_triggers.py) to the agent, like a due schedule."""
+        self.pending = [item for item in self.pending if item[0] != key]
+        self.pending.append((key, self._monotonic() + PENDING_ROUTINE_S))
+        self.reasons[key] = reason
+        if self.on_due is not None:
+            try:
+                self.on_due(key)
+            except Exception:
+                logger.exception("Falha ao abrir o link para a rotina '%s'.", key)
+
+    def claim_reason(self, key: str | None) -> str | None:
+        return self.reasons.pop(key, None) if key else None
 
     def claim(self) -> str | None:
         now = self._monotonic()

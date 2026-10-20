@@ -13,7 +13,7 @@ In English: real-time voice assistant built on LiveKit Agents (Gemini Live or Op
 - Abre e fecha apps, sites e abas, controla mídia e volume, move janelas entre os monitores e salva layouts.
 - Clica, digita e rola a tela por você, e tem um modo ditado que escreve no campo em foco o que você fala.
 - Lê a tela e explica erros, código e páginas, com a correção pronta para copiar.
-- Guarda fatos entre conversas, roda rotinas ("bom dia, Jarvis", "modo foco") e avisa sozinho de lembretes, bateria, downloads e reuniões.
+- Guarda fatos entre conversas, roda rotinas ("bom dia, Jarvis", "modo foco", também sozinhas quando você abre um app ou conecta o fone) e avisa sozinho de lembretes, bateria, downloads e reuniões.
 - Lê e mexe no Google Agenda, manda email e instala apps pelo winget. O que grava ou envia só acontece depois de um código falado.
 - Usa as ferramentas de servidores MCP (GitHub, Notion, Spotify...) com as mesmas travas: só o que você liberar, e o que escreve pede código.
 - Olha pela webcam quando você pede, percebe quando você sai e volta e entende gestos das mãos para mexer nas janelas. Um painel no HUD mostra os gestos ao vivo e deixa trocar o que cada um faz.

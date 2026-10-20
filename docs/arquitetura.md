@@ -22,7 +22,7 @@ flowchart LR
 2. O worker (`agent.py`) entra na mesma sala do LiveKit e conversa por voz.
 3. Quando uma ferramenta roda, o `hud.py` publica eventos JSON no tópico `jarvis.hud`, e o HUD transforma cada evento num painel.
 
-O servidor (`server.py`) fica de pé o tempo todo, mesmo sem link aberto. É ele que cuida da webcam, da palavra de ativação, dos avisos proativos, da presença, dos avisos da agenda e do celular. Quando precisa falar com você, ele acorda o HUD, que abre o link.
+O servidor (`server.py`) fica de pé o tempo todo, mesmo sem link aberto. É ele que cuida da webcam, da palavra de ativação, dos avisos proativos, da presença, dos avisos da agenda, das rotinas agendadas e por contexto e do celular. Quando precisa falar com você, ele acorda o HUD, que abre o link.
 
 As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), então o áudio não engasga durante uma pesquisa.
 
@@ -52,6 +52,7 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `memory.py` | Memória entre conversas (`memoria.json`), busca pelo sentido, filtro de segredos e painel |
 | `voices.py` | Voz do Jarvis (VOZ-30): vozes do Gemini Live, `voz.json` (uma voz por persona) e a ferramenta `change_voice` |
 | `routines.py` | Rotinas (`rotinas.json`): passos, execução com falhas parciais, ferramentas e agendador |
+| `context_triggers.py` | Rotinas por contexto: gatilhos, sondas (processos, foco, áudio, Wi-Fi, presença) e o vigia no servidor |
 | `calendar_tools.py` | Google Agenda (AGD-27): login OAuth, datas em português, ferramentas e avisos de reunião |
 | `proactive.py` | Avisos proativos (PRO-28): `lembretes.json`, monitores, prioridade, silêncio e ferramentas |
 | `camera.py` | Dono único da webcam (`CameraHub`): captura, feed MJPEG e fotos |

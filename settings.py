@@ -51,6 +51,7 @@ DEFAULT_CALENDAR_REMINDER_MINUTES = 10
 DEFAULT_QUIET_HOURS = "23:00-07:00"
 CLOCK_RANGE = re.compile(r"^\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*(?:-|a|as|às|até|ate)\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*$", re.IGNORECASE)
 DEFAULT_PRESENCE_AWAY_MINUTES = 5
+DEFAULT_CONTEXT_COOLDOWN_MINUTES = 30
 # Integrações MCP (MCP-32): quanto esperar cada servidor conectar quando o link abre.
 DEFAULT_MCP_TIMEOUT = 8.0
 # Busca pelo sentido da memória (MEM-23): modelo de embeddings da API Gemini e quanto a pergunta
@@ -262,6 +263,8 @@ class Settings:
     memory_min_similarity: float = DEFAULT_MEMORY_MIN_SIMILARITY
     memory_top_k: int = DEFAULT_MEMORY_TOP_K
     routines_enabled: bool = True
+    context_triggers_enabled: bool = True
+    context_cooldown_minutes: float = DEFAULT_CONTEXT_COOLDOWN_MINUTES
     calendar_enabled: bool = False
     calendar_reminder_minutes: int = DEFAULT_CALENDAR_REMINDER_MINUTES
     home_city: str | None = None
@@ -387,6 +390,16 @@ class Settings:
                 env_map.get("JARVIS_ENABLE_ROUTINES"),
                 "JARVIS_ENABLE_ROUTINES",
                 default=True,
+            ),
+            context_triggers_enabled=_parse_bool(
+                env_map.get("JARVIS_CONTEXT_TRIGGERS"), "JARVIS_CONTEXT_TRIGGERS", default=True
+            ),
+            context_cooldown_minutes=_parse_number(
+                env_map.get("JARVIS_CONTEXT_COOLDOWN_MINUTES"),
+                "JARVIS_CONTEXT_COOLDOWN_MINUTES",
+                DEFAULT_CONTEXT_COOLDOWN_MINUTES,
+                1,
+                24 * 60,
             ),
             calendar_enabled=_parse_bool(
                 env_map.get("JARVIS_ENABLE_CALENDAR"),

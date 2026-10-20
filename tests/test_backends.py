@@ -27,6 +27,7 @@ BASE_TOOLS = [
     "save_routine",
     "delete_routine",
     "schedule_routine",
+    "set_routine_trigger",
 ]
 
 
