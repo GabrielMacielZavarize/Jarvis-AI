@@ -7,6 +7,7 @@ import {
   noticeLogLevel,
   noticeToast,
   parseWakeEvent,
+  routineWakeTitle,
   silenceLeft,
   wakePersona,
   wakeWordLabel,
@@ -44,6 +45,17 @@ describe('parseWakeEvent', () => {
       presence: true,
       silence_s: 30,
     });
+  });
+
+  it('reads a routine fired by a context trigger (ROT-24)', () => {
+    expect(parseWakeEvent('{"type":"wake","score":1,"reason":"context","routine":"modo foco"}')).toEqual({
+      type: 'wake',
+      score: 1,
+      reason: 'context',
+      routine: 'modo foco',
+    });
+    expect(routineWakeTitle('context')).toBe('Rotina por contexto');
+    expect(routineWakeTitle()).toBe('Rotina agendada');
   });
 
   it('reads the word heard and the persona it called', () => {
@@ -153,6 +165,11 @@ describe('noticeToast', () => {
     expect(noticeToast({ ...notice, priority: 'critical' })).toEqual({ level: 'critical', title: 'Bateria', message: '15% restantes', code: 'PRO-28' });
     expect(noticeToast({ ...notice, priority: 'high' }).level).toBe('warn');
     expect(noticeToast({ ...notice, priority: 'low' }).level).toBe('info');
+  });
+
+  it('marks the errors of the watched window with their own protocol (OLH-35)', () => {
+    const error = { ...notice, topic: 'watch', priority: 'normal' as const, title: 'Exceção' };
+    expect(noticeToast(error)).toEqual({ level: 'info', title: 'Exceção', message: '15% restantes', code: 'OLH-35' });
   });
 });
 

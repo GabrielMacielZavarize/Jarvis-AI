@@ -49,6 +49,8 @@ Se o arquivo ficar ilegível, ele é guardado como `memoria.corrompido-<data>.js
 
 As regras do que pode e do que não pode ser guardado estão em [seguranca.md](seguranca.md#memória).
 
+O resumo de cada conversa ("o que eu te pedi ontem?") é outra coisa, o diário: [diario.md](diario.md).
+
 ## Rotinas
 
 Protocolo ROT-24. Também vem ligado (`JARVIS_ENABLE_ROUTINES=false` desliga). Os passos que mexem no PC precisam de `JARVIS_ENABLE_PC_CONTROL=true`.
@@ -72,6 +74,30 @@ Por voz: "cria uma rotina estudo que abre o Notion e põe lo-fi", "coloca o Spot
 
 Para agendar: "todo dia útil às 8h roda o bom dia", "toda sexta às 19h roda o modo jogo", "para de rodar o bom dia sozinho". Na hora marcada, com o `python jarvis.py` aberto, o HUD conecta o link pela mesma via da palavra de ativação (abrindo o navegador se não houver aba), roda a rotina e o Jarvis fala o resultado. Se a conversa já estiver aberta, a rotina roda ali mesmo. Se o PC ligar até 10 minutos depois do horário, a rotina daquele dia ainda roda.
 
+### Por contexto
+
+Uma rotina também pode rodar sozinha quando algo acontece no PC. Por voz: "quando eu abrir o PhpStorm, roda o modo foco", "quando eu conectar o fone, roda o lo-fi", "quando eu voltar para o PC, roda o bom dia". Para desfazer: "para de rodar o modo foco quando eu abrir o PhpStorm". "Desliga esse gatilho" guarda o gatilho sem usar.
+
+| Gatilho | Quando dispara | Onde funciona |
+| --- | --- | --- |
+| `app` | O app abre (o processo aparece) | Windows e Linux |
+| `foco` | A janela do app vai para o primeiro plano | Windows |
+| `audio` | Um aparelho de áudio conecta. Sem nome, qualquer fone, headset ou aparelho Bluetooth | Windows |
+| `chegar` | Você volta para a frente do PC | Precisa da presença (`JARVIS_PRESENCE=true`) |
+| `sair` | Você sai da frente do PC | Precisa da presença |
+| `wifi` | O PC entra na rede com esse nome | Windows e Linux |
+
+O servidor do HUD olha só o que algum gatilho usa: processos e janela em foco a cada 3 a 5 segundos, aparelhos de áudio a cada 15 e o Wi-Fi a cada 30. Quando a condição passa de falsa para verdadeira, a rotina segue o mesmo caminho das agendadas: o link abre (ou a conversa aberta roda a rotina) e o Jarvis diz o que aconteceu, por exemplo "rodei o modo foco porque o PhpStorm abriu". O painel Rotina mostra "por contexto".
+
+Para não repetir:
+
+- O que já estava aberto quando o Jarvis ligou não conta. Só a mudança dispara.
+- Uma rotina não roda de novo antes do intervalo mínimo, de 30 minutos por padrão (`JARVIS_CONTEXT_COOLDOWN_MINUTES`). Cada gatilho pode ter o seu (`cooldown_minutes`).
+- Entre duas rotinas por contexto quaisquer há 90 segundos. Assim uma rotina que abre a Steam não dispara outra presa à Steam.
+- Um evento que bate em dois gatilhos da mesma rotina (o app abriu e ficou em foco) roda a rotina uma vez só.
+
+`JARVIS_CONTEXT_TRIGGERS=false` desliga todos os gatilhos. Cada rotina tem no máximo 4.
+
 ### O arquivo
 
 As rotinas ficam no `rotinas.json` (fora do git). Sem o arquivo valem as quatro de fábrica, e a primeira edição grava todas nele. Dá para editar à mão, e cada passo é uma linha `ação: argumento`:
@@ -84,7 +110,11 @@ As rotinas ficam no `rotinas.json` (fora do git). Sem o arquivo valem as quatro 
       "name": "Estudo",
       "aliases": ["hora de estudar"],
       "steps": ["app: Notion", "youtube: lo-fi para estudar", "timer: 50 Estudo", "volume: 25"],
-      "schedule": {"days": [0, 1, 2, 3, 4], "time": "19:00", "enabled": true}
+      "schedule": {"days": [0, 1, 2, 3, 4], "time": "19:00", "enabled": true},
+      "triggers": [
+        {"when": "app", "value": "Notion", "enabled": true},
+        {"when": "wifi", "value": "Biblioteca", "enabled": true, "cooldown_minutes": 120}
+      ]
     }
   }
 }
@@ -123,3 +153,4 @@ No Windows, com `JARVIS_ENABLE_PC_CONTROL=true` e `JARVIS_HOME_CITY` no `.env` (
 5. "Boa noite": layout "noite" salvo, mídia pausada e a pergunta do bloqueio. Responda "não" (nada acontece), depois rode de novo e responda "sim, pode" (a tela bloqueia).
 6. "Cria uma rotina estudo que abre o Notion e põe lo-fi" e depois "roda a rotina estudo".
 7. "Todo dia às (daqui a 2 minutos) roda o modo foco", feche a aba do HUD e espere: o navegador abre sozinho, o link conecta e o Jarvis fala o resultado. Repita com uma conversa aberta: a rotina roda nela em até 15 segundos. No fim, "para de rodar o modo foco sozinho".
+8. Feche o PhpStorm e diga "quando eu abrir o PhpStorm, roda o modo foco". Abra o PhpStorm: em poucos segundos o link abre e o Jarvis diz que rodou o modo foco porque o PhpStorm abriu. Feche e abra de novo: nada acontece antes de 30 minutos.

@@ -34,7 +34,9 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
   { id: 'run_routine', code: 'ROT-24', label: 'Rotinas', hint: '“Bom dia, Jarvis.” · “Modo foco.” · “Todo dia útil às 8h roda o bom dia.”' },
   { id: 'get_agenda', code: 'AGD-27', label: 'Google Agenda', hint: '“O que eu tenho hoje?” · “Marca dentista sexta às 15h.”' },
+  { id: 'diary_lookup', code: 'DIA-36', label: 'Diário das conversas', hint: '“O que eu te pedi ontem?” · “Onde paramos no projeto do Jarvis?”' },
   { id: 'mcp_status', code: 'MCP-32', label: 'Integrações MCP', hint: '“Quais issues abertas eu tenho?” · “Anota isso no Notion.”' },
+  { id: 'watch_screen', code: 'OLH-35', label: 'Vigia de janela', hint: '“Fica de olho no terminal.” · “Para de vigiar.”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -55,12 +57,15 @@ export const TOOL_LABELS: Record<string, string> = {
   remember: 'Gravando memória',
   recall: 'Consulta de memória',
   forget: 'Apagando memória',
+  diary_lookup: 'Consulta ao diário',
+  forget_diary: 'Apagando do diário',
   list_routines: 'Rotinas salvas',
   run_routine: 'Executando rotina',
   confirm_routine_step: 'Passo confirmado',
   save_routine: 'Gravando rotina',
   delete_routine: 'Apagando rotina',
   schedule_routine: 'Agendando rotina',
+  set_routine_trigger: 'Gatilho de rotina',
   show_on_hud: 'Projeção no HUD',
   check_email_address: 'Conferência de endereço',
   draft_email: 'Rascunho de email',
@@ -114,6 +119,7 @@ export const TOOL_LABELS: Record<string, string> = {
   cancel_mcp_action: 'Ação cancelada',
   // Ferramentas sob demanda: the detail names the groups being loaded ("Agenda").
   use_tools: 'Carregando ferramentas',
+  watch_screen: 'Vigia de janela',
 };
 
 /** Protocol code of every agent tool, as in docs/protocolos.md. */
@@ -149,7 +155,7 @@ const PROTOCOL_TOOLS: Record<string, string[]> = {
   ],
   'LAY-21': ['manage_layouts', 'arrange_windows'],
   'MEM-23': ['remember', 'recall', 'forget'],
-  'ROT-24': ['run_routine', 'list_routines', 'save_routine', 'delete_routine', 'schedule_routine', 'confirm_routine_step'],
+  'ROT-24': ['run_routine', 'list_routines', 'save_routine', 'delete_routine', 'schedule_routine', 'confirm_routine_step', 'set_routine_trigger'],
   'PRS-25': ['presence_control'],
   'AGD-27': [
     'get_agenda',
@@ -166,6 +172,8 @@ const PROTOCOL_TOOLS: Record<string, string[]> = {
   'TEL-31': ['explain_screen', 'copy_fix'],
   'MCP-32': ['mcp_status', 'mcp', 'confirm_mcp_action', 'cancel_mcp_action'],
   'FER-33': ['use_tools'],
+  'OLH-35': ['watch_screen'],
+  'DIA-36': ['diary_lookup', 'forget_diary'],
 };
 
 const TOOL_CODES = new Map(

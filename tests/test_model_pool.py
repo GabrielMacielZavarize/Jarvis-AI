@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from model_pool import COOLDOWNS, ModelPool, classify_failure, cooldown_until
@@ -159,6 +160,18 @@ class FailoverTests(unittest.TestCase):
         self.assertTrue(agent.resumed)
         self.assertEqual(agent.llm.model, MODELS[1])
         self.assertFalse(self.pool.available(MODELS[0]))
+
+    def test_pause_and_switch_go_to_the_health_panel(self) -> None:
+        with patch("backends.report_health") as reported:
+            self.run_failover("429 RESOURCE_EXHAUSTED quota")
+
+        self.assertEqual(
+            [(call.args, call.kwargs) for call in reported.call_args_list],
+            [
+                (("model_pause", MODELS[0]), {"detail": "quota"}),
+                (("model_switch", MODELS[1]), {"detail": MODELS[0]}),
+            ],
+        )
 
     def test_full_session_restarts_once_on_the_same_model(self) -> None:
         runtime, session = self.run_failover("1007 invalid argument", "1007 invalid argument")

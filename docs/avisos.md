@@ -34,6 +34,10 @@ Download concluído na pasta Downloads (a de verdade do Windows, mesmo se você 
 
 Menos de 10% livre (normal) ou de 3% (alta), em cada disco fixo, no máximo a cada 12 horas.
 
+### Erros na janela vigiada
+
+Com o controle do PC ligado, "fica de olho no terminal" faz o Jarvis avisar quando aparece um erro novo naquela janela e oferecer a explicação. Prioridade normal: fala com o link aberto e fica só no HUD com o link fechado ou no silêncio. O assunto é `watch` ("para de me avisar dos erros"). Detalhes no [OLH-35](assistente-de-tela.md#fica-de-olho-numa-janela).
+
 ## Como ele avisa
 
 Quem vigia é o servidor do HUD, que sobe com o `jarvis.py` e fica de pé o tempo todo. Cada aviso tem uma prioridade:

@@ -34,13 +34,13 @@ O Notion começa com o `permitir` vazio, então nada dele chega ao Jarvis ainda:
 
 | Campo | O que é |
 | --- | --- |
-| `url` | Servidor HTTP. Precisa ser `https://`, e `http://` só vale para `127.0.0.1` |
+| `url` | Servidor HTTP. Precisa ser `https://`, e `http://` só vale para `127.0.0.1` e IPs da rede de casa (`192.168.x.x`...) |
 | `comando` e `args` | Servidor local, que o agente inicia (como o `npx` do Notion) |
 | `token_env` | Nome da variável do `.env` com o token. No HTTP ele vai como `Authorization: Bearer`; no servidor local, como variável de ambiente com esse mesmo nome |
 | `permitir` | As ferramentas que o Jarvis pode usar. Sem essa lista, nada do servidor é liberado |
 | `confirmar` | Ferramentas que pedem código mesmo parecendo de leitura |
 | `sem_confirmar` | Ferramentas que não pedem código mesmo parecendo de escrita. Use só para coisas que você não se importa de rodar sem querer, como dar play numa música |
-| `nome` | Como o serviço aparece no HUD e na fala. O padrão já conhece GitHub, Notion, Spotify, Slack e Linear |
+| `nome` | Como o serviço aparece no HUD e na fala. O padrão já conhece GitHub, Notion, Spotify, Slack, Linear e Home Assistant (`home_assistant`) |
 
 Chaves que começam com `_` são ignoradas e servem de comentário. Um campo desconhecido (por exemplo um `token` com o valor) faz o arquivo ser recusado: o segredo fica no `.env`.
 
@@ -64,7 +64,11 @@ Durante a chamada, a placa do núcleo mostra "MCP-32 · GitHub · list_issues". 
 
 Criar issue, comentar, apagar página ou mandar mensagem seguem o esquema do email e da agenda: a ferramenta só prepara a ação, o painel mostra o que vai ser feito e o código, e nada acontece até você dizer "confirmar integração" e o código. "Cancela" desiste.
 
-O Jarvis decide pelo nome da ferramenta. Nomes com `list`, `get`, `read`, `search`, `find` e parecidos são de leitura. Nomes com `create`, `update`, `delete`, `send`, `comment`, `merge`, `play` e parecidos são de escrita, e um nome que não diz nada também pede código. O `confirmar` e o `sem_confirmar` do `mcp.json` corrigem isso ferramenta por ferramenta.
+O Jarvis decide pelo nome da ferramenta. Porta, fechadura, portão, garagem, alarme e câmera, no nome ou nos argumentos, sempre pedem código, mesmo em `sem_confirmar` (veja [casa.md](casa.md#o-que-pede-código)). Nomes com `list`, `get`, `read`, `search`, `find` e parecidos são de leitura. Nomes com `create`, `update`, `delete`, `send`, `comment`, `merge`, `play` e parecidos são de escrita, e um nome que não diz nada também pede código. O `confirmar` e o `sem_confirmar` do `mcp.json` corrigem isso ferramenta por ferramenta.
+
+## Casa inteligente
+
+O Home Assistant entra como mais um servidor: token, `mcp.json` e o que pede código estão em [casa.md](casa.md).
 
 ## Quando um servidor não responde
 

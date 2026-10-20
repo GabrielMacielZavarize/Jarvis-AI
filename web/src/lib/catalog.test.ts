@@ -8,6 +8,7 @@ describe('toolCode', () => {
     expect(toolCode('confirm_calendar_change')).toBe('AGD-27');
     expect(toolCode('mcp')).toBe('MCP-32');
     expect(toolCode('use_tools')).toBe('FER-33');
+    expect(toolCode('watch_screen')).toBe('OLH-35');
   });
 
   it('falls back to a generic code for unknown tools', () => {

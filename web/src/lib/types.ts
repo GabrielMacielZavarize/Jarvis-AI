@@ -24,7 +24,8 @@ export type CardKind =
   | 'memory'
   | 'explain'
   | 'routine'
-  | 'calendar';
+  | 'calendar'
+  | 'diary';
 
 export interface WeatherDay {
   date: string;
@@ -174,6 +175,37 @@ export interface MemoryData {
   message?: string | null;
 }
 
+/** DIA-36: the summary of one past conversation (diario.json). */
+export interface DiaryEntry {
+  id: string;
+  /** Local day the conversation started: "2026-10-19". */
+  date: string;
+  /** ISO date-time with offset. */
+  started_at: string;
+  ended_at?: string;
+  title: string;
+  asked: string[];
+  decided: string[];
+  pending: string[];
+  topics?: string[];
+  /** How the lookup found it when it used embeddings. */
+  match?: 'meaning' | 'words';
+  score?: number;
+}
+
+export interface DiaryData {
+  /** list = diary_lookup or panel refresh; forgotten = deleted; skipped = "esquece essa conversa". */
+  status: 'list' | 'forgotten' | 'skipped';
+  /** Newest first; at most 20 (``total`` counts the whole diary). */
+  items: DiaryEntry[];
+  total: number;
+  query?: string | null;
+  /** "ontem (19/10)", "semana passada (12/10 a 18/10)". */
+  period?: string | null;
+  search?: 'semantic' | 'words' | null;
+  message?: string | null;
+}
+
 export interface ExplainBlock {
   language: string;
   code: string;
@@ -218,7 +250,7 @@ export interface RoutineData {
   id: string;
   name: string;
   /** voz = the user asked; agenda = the schedule fired it. */
-  trigger: 'voz' | 'agenda';
+  trigger: 'voz' | 'agenda' | 'contexto';
   /** confirm = a dangerous step (lock the PC, close an app) waits for the user's "sim". */
   status: 'running' | 'confirm' | 'done' | 'partial' | 'failed';
   started_at: number;
@@ -416,6 +448,7 @@ export interface CardDataMap {
   explain: ExplainData;
   routine: RoutineData;
   calendar: CalendarData;
+  diary: DiaryData;
 }
 
 export type HudCard = {

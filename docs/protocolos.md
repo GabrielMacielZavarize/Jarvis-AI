@@ -25,19 +25,23 @@ Cada ferramenta do Jarvis tem um código de protocolo, que aparece no HUD (na pl
 | PWR-17 | `end_session` | Despede-se e encerra o link, como o botão Encerrar link. Não desliga o PC | "Tchau, Jarvis.", "Jarvis, desligar." |
 | GST-18 | `gesture_control`, `gesture_shortcuts` | Liga e desliga os gestos, o mouse no ar e o painel de gestos. Lista, explica e muda os gestos personalizáveis. O painel Gestos do HUD faz o mesmo por botões | "Liga os gestos.", "Liga o mouse no ar.", "Mostra o painel de gestos.", "Os gestos estão ligados?", "Lista meus gestos.", "O que faz o rock?", "Quando eu fizer joinha, pausa a música." |
 | CAM-19 | `look_at_camera`, `camera_view` | Foto da webcam, analisada e mostrada no painel Câmera. Mostra ou esconde o feed ao vivo e desliga a câmera | "O que você está vendo?", "Que livro é esse aqui?", "Mostra a câmera.", "Desliga a câmera." |
-| MOU-20 | `click_on_screen`, `move_mouse`, `type_text`, `press_keys`, `scroll`, `do_on_screen`, `confirm_screen_action`, `cancel_screen_action` | Mouse e teclado de verdade: acha o elemento num print, leva o cursor até ele e clica. Digita, usa atalhos liberados, rola e faz tarefas curtas de até 8 passos. Clique que envia, compra, paga, publica, apaga ou confirma pede código | "Clica no botão de play.", "Digita olá no bloco de notas.", "Rola a página.", "Abre o menu de configurações do Discord." |
+| MOU-20 | `click_on_screen`, `move_mouse`, `type_text`, `press_keys`, `scroll`, `do_on_screen`, `confirm_screen_action`, `cancel_screen_action` | Mouse e teclado de verdade: acha o elemento num print, leva o cursor até ele e clica. Digita, usa atalhos liberados, rola e faz tarefas curtas de até 8 passos. Clique que envia, compra, paga, publica, apaga ou confirma pede código. Com os gestos, "clica aqui" clica onde o dedo aponta | "Clica no botão de play.", "Clica aqui." (apontando), "Digita olá no bloco de notas.", "Rola a página.", "Abre o menu de configurações do Discord." |
 | LAY-21 | `manage_layouts`, `arrange_windows` | Salva e aplica layouts de janelas, junta tudo numa tela, leva as janelas de uma tela para outra, mostra a área de trabalho e desfaz tudo de uma vez | "Salva esse layout como modo trabalho.", "Modo trabalho.", "Organiza tudo pro notebook.", "Manda tudo do notebook pro monitor de cima.", "Mostra a área de trabalho.", "Desfaz." |
 | MEM-23 | `remember`, `recall`, `forget` | Memória entre conversas, com busca pelo sentido e painel para listar e apagar | "Lembra que minha reunião de segunda é às 9.", "O que você sabe sobre mim?", "Esquece isso." |
-| ROT-24 | `run_routine`, `list_routines`, `save_routine`, `delete_routine`, `schedule_routine`, `confirm_routine_step` | Várias ferramentas em sequência, com os passos no painel Rotina e agendamento por horário | "Bom dia, Jarvis.", "Modo foco.", "Cria uma rotina estudo que abre o Notion e põe lo-fi.", "Todo dia útil às 8h roda o bom dia." |
+| ROT-24 | `run_routine`, `list_routines`, `save_routine`, `delete_routine`, `schedule_routine`, `confirm_routine_step`, `set_routine_trigger` | Várias ferramentas em sequência, com os passos no painel Rotina, agendamento por horário e gatilhos por contexto | "Bom dia, Jarvis.", "Modo foco.", "Cria uma rotina estudo que abre o Notion e põe lo-fi.", "Todo dia útil às 8h roda o bom dia.", "Quando eu abrir o PhpStorm, roda o modo foco." |
 | PRS-25 | `presence_control` | Liga e desliga a presença pela webcam e escolhe se o PC bloqueia quando você sai | "Liga a presença.", "Não bloqueia quando eu sair.", "Pode bloquear quando eu sair." |
 | AGD-27 | `get_agenda`, `next_meeting`, `prepare_calendar_event`, `prepare_calendar_update`, `prepare_calendar_delete`, `confirm_calendar_change`, `cancel_calendar_change` | Lê o Google Agenda e cria, altera e apaga eventos com código de confirmação. Painel Agenda e aviso antes das reuniões | "O que eu tenho hoje?", "E amanhã?", "Qual minha próxima reunião?", "Marca dentista sexta às 15h.", "Desmarca a reunião das 10." |
 | PRO-28 | `set_reminder`, `list_reminders`, `cancel_reminder`, `configure_alerts` | Lembretes com hora e avisos sozinhos de bateria, CPU e RAM, downloads e disco | "Me lembra amanhã às 10h de ligar pro contador.", "Quais lembretes eu tenho?", "Para de me avisar sobre bateria." |
 | DIT-29 | `start_dictation`, `write_here` | Modo ditado: o que você fala vira texto no campo em foco até "fim do ditado". Ou uma frase só | "Jarvis, modo ditado.", "Escreve aqui: chego em 10 minutos." |
 | VOZ-30 | `change_voice` | Troca a voz, lista as vozes no HUD e volta à padrão | "Troca sua voz para Orus.", "Quais vozes você tem?", "Volta pra sua voz normal." |
 | TEL-31 | `explain_screen`, `copy_fix` | Lê a seleção, a janela em foco, o trecho perto do cursor ou o lugar apontado com o dedo e explica no painel. Copia o código sugerido para a área de transferência | "Explica esse erro.", "O que tem de errado aqui?", "O que esse código faz?", "Resume essa página.", "Traduz isso pro inglês.", "Copia a correção." |
+| MCP-32 | `mcp_status`, `confirm_mcp_action`, `cancel_mcp_action` e as ferramentas liberadas no `mcp.json` (`github_list_issues`...) | Usa ferramentas de servidores MCP (GitHub, Notion, Spotify...). Só as do `permitir` chegam ao modelo, e as que escrevem pedem código | "Quais issues abertas eu tenho no Jarvis-AI?", "Procura a página da reunião no Notion.", "Quais integrações você tem?", "Apaga a luz do escritório." ([casa.md](casa.md)) |
+| OLH-35 | `watch_screen` | Vigia o texto de uma janela (terminal, PhpStorm, a janela em foco) e avisa quando aparece um erro novo, oferecendo a explicação do TEL-31 | "Fica de olho no terminal.", "Fica de olho no PhpStorm.", "Para de vigiar.", "Que janela você está vigiando?" |
+| DIA-36 | `diary_lookup`, `forget_diary` | Diário das conversas: no fim de cada conversa, um resumo do pedido, do feito e do pendente. Busca por data e pelo sentido, painel Diário | "O que eu te pedi ontem?", "O que a gente fez na sexta?", "Onde paramos no projeto do Jarvis?", "Esquece essa conversa." |
 
 | MCP-32 | `mcp_status`, `confirm_mcp_action`, `cancel_mcp_action` e as ferramentas liberadas no `mcp.json` (`github_list_issues`...) | Usa ferramentas de servidores MCP (GitHub, Notion, Spotify...). Só as do `permitir` chegam ao modelo, e as que escrevem pedem código | "Quais issues abertas eu tenho no Jarvis-AI?", "Procura a página da reunião no Notion.", "Quais integrações você tem?" |
 | FER-33 | `use_tools` | Ferramentas sob demanda: o modelo pede um grupo (agenda, janelas, mouse, cada integração MCP...) quando o assunto chega. Quem chama é o próprio modelo | "O que eu tenho hoje?" com a agenda fora do núcleo: "Um instante." e a resposta |
+| SAU-40 | Nenhuma (painel do HUD) | Histórico local de tempo de resposta, ativações, falhas e modelos, com sugestões de ajuste do `.env` | Abra o painel Saúde no HUD |
 
 A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm ferramenta de voz. Estão em [voz.md](voz.md#palavra-de-ativação) e [celular.md](celular.md).
 
@@ -55,11 +59,14 @@ A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm 
 | AGD | `JARVIS_ENABLE_CALENDAR=true`, depois do login no Google ([agenda.md](agenda.md)) |
 | PRO | `JARVIS_PROACTIVE=true` |
 | MEM | Vem ligado. `JARVIS_ENABLE_MEMORY=false` desliga |
-| ROT | Vem ligado. `JARVIS_ENABLE_ROUTINES=false` desliga. Os passos que mexem no PC precisam de `JARVIS_ENABLE_PC_CONTROL=true` |
+| DIA | Vem ligado. `JARVIS_DIARY=false` desliga. O resumo precisa da `GOOGLE_API_KEY` (veja [diario.md](diario.md)) |
+| ROT | Vem ligado. `JARVIS_ENABLE_ROUTINES=false` desliga. Os passos que mexem no PC precisam de `JARVIS_ENABLE_PC_CONTROL=true`. `JARVIS_CONTEXT_TRIGGERS=false` desliga só os gatilhos por contexto |
 | WAK-22 | `JARVIS_WAKE_WORD=true` |
 | LAN-26 | `python jarvis.py --lan` ou `JARVIS_LAN=true` |
+| OLH-35 | `JARVIS_ENABLE_PC_CONTROL=true` e `JARVIS_PROACTIVE=true` |
 | MCP | `JARVIS_ENABLE_MCP=true` e os servidores no `mcp.json` (veja [integracoes.md](integracoes.md)) |
 | FER | `JARVIS_TOOL_ROUTING=auto` (padrão) liga com mais de 60 ferramentas. `true` sempre, `false` nunca (veja [ferramentas-sob-demanda.md](ferramentas-sob-demanda.md)) |
+| SAU-40 | Vem ligado. `JARVIS_HEALTH=false` desliga (veja [saude.md](saude.md)) |
 
 ## Painéis, abas e atalhos de site
 

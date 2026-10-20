@@ -51,6 +51,7 @@ DEFAULT_CALENDAR_REMINDER_MINUTES = 10
 DEFAULT_QUIET_HOURS = "23:00-07:00"
 CLOCK_RANGE = re.compile(r"^\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*(?:-|a|as|às|até|ate)\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*$", re.IGNORECASE)
 DEFAULT_PRESENCE_AWAY_MINUTES = 5
+DEFAULT_CONTEXT_COOLDOWN_MINUTES = 30
 # Integrações MCP (MCP-32): quanto esperar cada servidor conectar quando o link abre.
 DEFAULT_MCP_TIMEOUT = 8.0
 # Busca pelo sentido da memória (MEM-23): modelo de embeddings da API Gemini e quanto a pergunta
@@ -274,6 +275,8 @@ class Settings:
     memory_min_similarity: float = DEFAULT_MEMORY_MIN_SIMILARITY
     memory_top_k: int = DEFAULT_MEMORY_TOP_K
     routines_enabled: bool = True
+    context_triggers_enabled: bool = True
+    context_cooldown_minutes: float = DEFAULT_CONTEXT_COOLDOWN_MINUTES
     calendar_enabled: bool = False
     calendar_reminder_minutes: int = DEFAULT_CALENDAR_REMINDER_MINUTES
     home_city: str | None = None
@@ -293,6 +296,9 @@ class Settings:
     lan_enabled: bool = False
     mcp_enabled: bool = False
     mcp_timeout: float = DEFAULT_MCP_TIMEOUT
+    diary_enabled: bool = True
+    # Painel de saúde (SAU-40): histórico local em saude.db.
+    health_enabled: bool = True
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -402,6 +408,16 @@ class Settings:
                 "JARVIS_ENABLE_ROUTINES",
                 default=True,
             ),
+            context_triggers_enabled=_parse_bool(
+                env_map.get("JARVIS_CONTEXT_TRIGGERS"), "JARVIS_CONTEXT_TRIGGERS", default=True
+            ),
+            context_cooldown_minutes=_parse_number(
+                env_map.get("JARVIS_CONTEXT_COOLDOWN_MINUTES"),
+                "JARVIS_CONTEXT_COOLDOWN_MINUTES",
+                DEFAULT_CONTEXT_COOLDOWN_MINUTES,
+                1,
+                24 * 60,
+            ),
             calendar_enabled=_parse_bool(
                 env_map.get("JARVIS_ENABLE_CALENDAR"),
                 "JARVIS_ENABLE_CALENDAR",
@@ -445,6 +461,8 @@ class Settings:
             mcp_timeout=_parse_number(
                 env_map.get("JARVIS_MCP_TIMEOUT"), "JARVIS_MCP_TIMEOUT", DEFAULT_MCP_TIMEOUT, 2, 60
             ),
+            diary_enabled=_parse_bool(env_map.get("JARVIS_DIARY"), "JARVIS_DIARY", default=True),
+            health_enabled=_parse_bool(env_map.get("JARVIS_HEALTH"), "JARVIS_HEALTH", default=True),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),

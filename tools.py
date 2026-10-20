@@ -791,6 +791,7 @@ HUD_PANEL_KINDS = {
     "explain": "Assistente de tela",
     "routine": "Rotina",
     "calendar": "Agenda",
+    "diary": "Diário",
 }
 LAST_PANEL = "last"
 MAX_PANEL_TARGETS = 6
@@ -1403,6 +1404,11 @@ def build_tools(settings: Settings) -> list[Any]:
 
         configure_embeddings(settings)
         tools.extend(build_memory_tools())
+    if settings.diary_enabled:
+        import diary
+
+        diary.configure(settings)
+        tools.extend(diary.build_diary_tools())
     if settings.routines_enabled:
         from routines import build_routine_tools
 
@@ -1422,6 +1428,11 @@ def build_tools(settings: Settings) -> list[Any]:
         if settings.pc_control_enabled:
             # "Explica isso aqui" com o dedo apontando: o assistente de tela usa o ponto apontado.
             screen_assist.set_pointer(SERVICE.pointed_screen_point)
+        if settings.computer_use_enabled:
+            import computer_use
+
+            # "Clica aqui" com o dedo apontando: o MOU-20 clica no ponto apontado, com a mira antes.
+            computer_use.set_pointer(SERVICE.pointed_screen_point, SERVICE.mark_point)
     if settings.mcp_enabled:
         from mcp_client import build_mcp_tools
 
@@ -1456,4 +1467,9 @@ def build_tools(settings: Settings) -> list[Any]:
         from proactive import build_proactive_tools
 
         tools.extend(build_proactive_tools())
+        if settings.pc_control_enabled:
+            # OLH-35: "fica de olho no terminal" junta o TEL-31 com os avisos.
+            from screen_watch import build_watch_tools
+
+            tools.extend(build_watch_tools(settings))
     return tools

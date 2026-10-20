@@ -164,19 +164,20 @@ class WakeHub:
         self.pending_until = self._clock() + PENDING_BROWSER_S
         return {"accepted": True, "opened_browser": True}
 
-    def trigger_routine(self, routine: str) -> dict[str, Any]:
+    def trigger_routine(self, routine: str, reason: str = "wake") -> dict[str, Any]:
         """Open the link for a scheduled routine (ROT-24), the same way a heard "Jarvis" does.
 
         With a conversation already open (or opening) nothing is needed: the agent picks the
-        routine up by itself.
+        routine up by itself. ``reason="context"``: a context trigger fired it, not the clock.
         """
         if self._pending() or any(client.session_active for client in self.clients.values()):
             return {"accepted": False, "opened_browser": False}
         target = self._pick_client()
         if target is not None:
-            self._deliver(target, 1.0, routine=routine)
+            self._deliver(target, 1.0, reason, routine=routine)
             return {"accepted": True, "opened_browser": False}
         self.undelivered_score = 1.0
+        self.undelivered_reason = reason
         self.undelivered_routine = routine
         self.pending_until = self._clock() + PENDING_BROWSER_S
         return {"accepted": True, "opened_browser": True}
@@ -353,7 +354,9 @@ def build_wake_router(
     *,
     secret: str | None,
     open_browser: Callable[[str], Any],
+    on_wake: Callable[[str | None, float], None] | None = None,
 ) -> APIRouter:
+    """``on_wake`` records each wake the HUD accepted (word, score) for the health panel (SAU-40)."""
     router = APIRouter(prefix="/api/wake")
 
     def require_detector(request: Request) -> None:
@@ -408,6 +411,8 @@ def build_wake_router(
         word = word if word in WAKE_WORDS else None
         persona = persona_for_wake(word, saved_persona() or DEFAULT_PERSONA, hub.detector_words)
         result = hub.trigger(body.score, word=word, persona=persona)
+        if result["accepted"] and on_wake is not None:
+            on_wake(word, body.score)
         if result["accepted"] and persona:
             # Antes de qualquer await: o persona.json muda antes de o HUD receber o aviso e abrir o link.
             save_persona(persona)

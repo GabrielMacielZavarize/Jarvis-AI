@@ -26,7 +26,7 @@ Com os gestos armados, aponte com o indicador para um lugar de qualquer monitor 
 
 Enquanto o indicador está esticado, uma mira pequena aparece no ponto, e some cerca de 1 s depois de você baixar a mão. Ela não captura cliques e não aparece nos prints. O ponto usa o mesmo mapeamento do mouse no ar: a mão funciona como um trackpad no ar, não como um raio saindo do dedo. Por isso a mira serve para acertar o lugar antes de falar.
 
-Apontar nunca clica nem move o cursor. O ponto vale por 2,5 s depois da última vez que o dedo ficou parado, então dá tempo de terminar a frase com a mão já baixada.
+Apontar sozinho nunca clica nem move o cursor. Com o mouse e teclado ligados, "Jarvis, clica aqui" ou "digita olá aqui" agem no ponto apontado (veja [mouse-e-ditado.md](mouse-e-ditado.md#clica-aqui-apontando)). Antes do clique a mira fica parada no ponto, mesmo com a mão já baixada, e o aviso mostra "CLICANDO AQUI". O ponto vale por 2,5 s depois da última vez que o dedo ficou parado, então dá tempo de terminar a frase com a mão já baixada.
 
 O indicador parado também liga o mouse no ar, e a regra para os dois não brigarem é a fala: se você começa a falar enquanto aponta (ou até 2 s depois de uma fala), o indicador vira só o ponteiro e o aviso mostra "APONTANDO". Esse mesmo indicador não liga o mouse no ar até você baixar a mão ou mudar de pose. Sem falar, o indicador parado por 1 s liga o mouse no ar como sempre. Se o mouse no ar já tiver ligado, o cursor está onde o dedo aponta e o "aqui" também funciona.
 
@@ -186,3 +186,7 @@ Com `JARVIS_ENABLE_PC_CONTROL=true`, os gestos armados e o link aberto:
 4. Sem apontar, "o que tem de errado aqui?" volta a usar o cursor do mouse.
 5. Calado, indicador parado por 1 s: o mouse no ar liga como antes.
 6. No `python gestures.py --preview`, aponte e fale perto do microfone algumas vezes. Se o mouse no ar ainda ligar antes de você começar a falar, anote quanto tempo você costuma levar entre apontar e falar.
+
+### Clica aqui apontando
+
+Com `JARVIS_ENABLE_COMPUTER_USE=true`, os gestos armados e o link aberto, siga a [seção 25 do roteiro](ROTEIRO_DE_TESTES.md#25-clica-aqui-apontando).

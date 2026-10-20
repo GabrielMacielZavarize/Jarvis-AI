@@ -8,6 +8,7 @@ import jwt
 from fastapi.testclient import TestClient
 
 from server import (
+    DIARY_TOOL_NAMES,
     EMAIL_TOOL_NAMES,
     INSTALL_TOOL_NAMES,
     MEMORY_TOOL_NAMES,
@@ -19,8 +20,8 @@ from server import (
 from settings import load_settings
 from tools import build_tools
 
-# A memória vem ligada por padrão (JARVIS_ENABLE_MEMORY=true).
-DEFAULT_TOOLS = TOOL_NAMES + MEMORY_TOOL_NAMES + ROUTINE_TOOL_NAMES
+# A memória e o diário vêm ligados por padrão (JARVIS_ENABLE_MEMORY=true, JARVIS_DIARY=true).
+DEFAULT_TOOLS = TOOL_NAMES + MEMORY_TOOL_NAMES + DIARY_TOOL_NAMES + ROUTINE_TOOL_NAMES
 
 LOCAL = "http://127.0.0.1:8000"
 

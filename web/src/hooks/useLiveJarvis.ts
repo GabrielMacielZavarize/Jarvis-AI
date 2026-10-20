@@ -17,6 +17,7 @@ import { GESTURE_RPC_METHOD, INITIAL_GESTURES, reduceGesture, setGestureTranspor
 import { markToolResult } from '../lib/coreActivity';
 import { useHud } from '../lib/hudStore';
 import { MEMORY_RPC_METHOD, setMemoryTransport } from '../lib/memoryLink';
+import { DIARY_RPC_METHOD, setDiaryTransport } from '../lib/diaryLink';
 import { describeMicrophone } from '../lib/microphone';
 import { parseHudRequest } from '../lib/panels';
 import { getPrefs, setPrefs } from '../lib/prefs';
@@ -333,6 +334,10 @@ export function useLiveJarvis(): LiveJarvis {
     setMemoryTransport(async (payload) =>
       room.localParticipant.performRpc({ destinationIdentity: agentIdentity(), method: MEMORY_RPC_METHOD, payload, responseTimeout: 8000 }),
     );
+    // The Diário panel's "apagar" button: diario.json also lives with the agent.
+    setDiaryTransport(async (payload) =>
+      room.localParticipant.performRpc({ destinationIdentity: agentIdentity(), method: DIARY_RPC_METHOD, payload, responseTimeout: 8000 }),
+    );
     // The Gestos panel's buttons (on/off, air mouse, corner panel) run in the agent, which owns the webcam.
     setGestureTransport(async (payload, timeout) =>
       room.localParticipant.performRpc({ destinationIdentity: agentIdentity(), method: GESTURE_RPC_METHOD, payload, responseTimeout: timeout }),
@@ -345,6 +350,7 @@ export function useLiveJarvis(): LiveJarvis {
       room.unregisterByteStreamHandler(CAMERA_TOPIC);
       room.unregisterByteStreamHandler(POINTER_TOPIC);
       setMemoryTransport(null);
+      setDiaryTransport(null);
       setGestureTransport(null);
       // Without the agent nobody reports the gestures: the panel goes back to "no reading".
       useHud.getState().setGestures(INITIAL_GESTURES);

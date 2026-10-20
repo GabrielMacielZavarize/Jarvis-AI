@@ -9,6 +9,7 @@ import { CardStage } from './components/cards/CardStage';
 import { ControlDock } from './components/ControlDock';
 import { DictationIndicator } from './components/DictationIndicator';
 import { GesturesPanel } from './components/GesturesPanel';
+import { HealthPanel } from './components/HealthPanel';
 import { ConversationPanel } from './components/ConversationPanel';
 import { LanPanel } from './components/LanPanel';
 import { PairingScreen } from './components/PairingScreen';
@@ -211,6 +212,8 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
     ),
     gestures: server?.gestures ? <GesturesPanel connected={live.connected && !demo.running} /> : null,
     log: <ActivityLog />,
+    // SAU-40: histórico local para calibrar o Jarvis.
+    health: server ? <HealthPanel local={local} /> : null,
   };
 
   // Global shortcuts: Space starts, M toggles the mic, Esc clears the projections.

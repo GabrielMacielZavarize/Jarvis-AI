@@ -13,13 +13,17 @@ In English: real-time voice assistant built on LiveKit Agents (Gemini Live or Op
 - Abre e fecha apps, sites e abas, controla mídia e volume, move janelas entre os monitores e salva layouts.
 - Clica, digita e rola a tela por você, e tem um modo ditado que escreve no campo em foco o que você fala.
 - Lê a tela e explica erros, código e páginas, com a correção pronta para copiar.
-- Guarda fatos entre conversas, roda rotinas ("bom dia, Jarvis", "modo foco") e avisa sozinho de lembretes, bateria, downloads e reuniões.
+- Fica de olho no terminal ou no PhpStorm e avisa quando aparece um erro novo, oferecendo a explicação.
+- Resume cada conversa num diário e responde "o que eu te pedi ontem?" e "onde paramos no projeto?".
+- Guarda fatos entre conversas, roda rotinas ("bom dia, Jarvis", "modo foco", também sozinhas quando você abre um app ou conecta o fone) e avisa sozinho de lembretes, bateria, downloads e reuniões.
 - Lê e mexe no Google Agenda, manda email e instala apps pelo winget. O que grava ou envia só acontece depois de um código falado.
 - Usa as ferramentas de servidores MCP (GitHub, Notion, Spotify...) com as mesmas travas: só o que você liberar, e o que escreve pede código.
 - Com muitas ferramentas ligadas, o modelo vê só as básicas e pede as de cada assunto quando precisa, para errar menos.
+- Controla a casa pelo Home Assistant: apaga a luz, liga o ar e diz se a porta está trancada. Destrancar porta, abrir portão e mexer em alarme ou câmera pedem código.
 - Olha pela webcam quando você pede, percebe quando você sai e volta e entende gestos das mãos para mexer nas janelas. Um painel no HUD mostra os gestos ao vivo e deixa trocar o que cada um faz.
 - Acorda quando você diz "Jarvis" (ou "Friday", que já abre a F.R.I.D.A.Y.) e também funciona pelo celular, na rede de casa.
 - Se o modelo gratuito do Google estoura a cota ou trava, a conversa continua em outro modelo sem cair.
+- Guarda um histórico de tempo de resposta, ativações e falhas, e sugere o que ajustar no `.env`.
 
 Quase tudo que mexe no PC vem desligado e liga por variável no `.env`. A lista completa está em [docs/protocolos.md](docs/protocolos.md).
 
@@ -71,15 +75,18 @@ Linux, macOS, OpenAI e as demais opções estão em [docs/instalacao.md](docs/in
 | Palavra de ativação, voz e persona | [voz.md](docs/voz.md) |
 | Apps, monitores, layouts, mídia e winget | [computador.md](docs/computador.md) |
 | Mouse, teclado e modo ditado | [mouse-e-ditado.md](docs/mouse-e-ditado.md) |
-| Assistente de tela | [assistente-de-tela.md](docs/assistente-de-tela.md) |
+| Assistente de tela e vigia de janela | [assistente-de-tela.md](docs/assistente-de-tela.md) |
 | Gestos das mãos | [gestos.md](docs/gestos.md) |
 | Câmera e presença | [camera-e-presenca.md](docs/camera-e-presenca.md) |
 | Memória e rotinas | [memoria-e-rotinas.md](docs/memoria-e-rotinas.md) |
+| Diário das conversas | [diario.md](docs/diario.md) |
 | Google Agenda | [agenda.md](docs/agenda.md) |
 | Integrações MCP (GitHub, Notion...) | [integracoes.md](docs/integracoes.md) |
 | Ferramentas sob demanda | [ferramentas-sob-demanda.md](docs/ferramentas-sob-demanda.md) |
+| Casa inteligente (Home Assistant) | [casa.md](docs/casa.md) |
 | Avisos e lembretes | [avisos.md](docs/avisos.md) |
 | Celular na rede de casa | [celular.md](docs/celular.md) |
+| Painel de saúde | [saude.md](docs/saude.md) |
 | Segurança | [seguranca.md](docs/seguranca.md) |
 | Arquitetura e arquivos | [arquitetura.md](docs/arquitetura.md) |
 | Testes automáticos | [testes.md](docs/testes.md) |

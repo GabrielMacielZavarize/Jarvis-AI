@@ -33,6 +33,24 @@ Cada ação abre o painel MOU-20 no HUD com o print, o alvo desenhado (caixa cia
 
 As travas (senhas, janelas proibidas, atalhos liberados, confirmação de cliques arriscados) estão em [seguranca.md](seguranca.md#mouse-e-teclado).
 
+### Clica aqui apontando
+
+Com os [gestos](gestos.md#apontar-e-falar) armados, aponte com o indicador e diga "Jarvis, clica aqui". O clique vai no ponto da mira, sem print e sem o modelo de visão procurar o alvo, então sai na hora. Vale o mesmo apontamento do "explica isso aqui": até 2,5 s depois de o dedo ficar parado.
+
+O nome do elemento embaixo do ponto vem por UI Automation e faz o papel do rótulo que o modelo de visão daria. Antes do clique, a mira fica parada no ponto com o aviso "CLICANDO AQUI" e o cursor desliza até lá, como no clique descrito. O painel MOU-20 mostra o print da tela com a mira laranja no ponto.
+
+| Fala | O que acontece |
+| --- | --- |
+| "Clica aqui", "clica ali", "clica aqui no play" | Clica no ponto apontado |
+| "Clica com o direito aqui" | Clique direito no ponto |
+| "Digita olá aqui", "escreve aqui: chego em 10 minutos" | Clica no campo apontado e digita nele |
+| "Clica no botão de play" (sem "aqui") | Clique descrito, pelo modelo de visão, mesmo apontando |
+| "Clica aqui" sem apontar | Como antes: o modelo de visão procura o alvo |
+
+Para digitar, o ponto precisa cair num campo de texto (caixa de edição, combo ou documento fora do navegador). A página inteira de um site não conta, porque digitar nela aciona os atalhos do site. Se o Jarvis acabou de clicar naquele mesmo ponto, ele não clica de novo antes de digitar.
+
+Quando a UI Automation não diz o que tem no ponto (jogos, vídeo em tela cheia, alguns apps), o clique pede "confirmar clique" e o código, e a digitação é recusada.
+
 ## Modo ditado
 
 Protocolo DIT-29. Vem junto com o mouse e teclado (`JARVIS_ENABLE_COMPUTER_USE=true`).

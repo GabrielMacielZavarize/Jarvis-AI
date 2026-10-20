@@ -44,6 +44,7 @@ from typing import Any, Literal
 from livekit.agents import RunContext, function_tool
 
 from confirmation import CONFIRMATION_POLL_SECONDS, CONFIRMATION_WAIT_SECONDS, NUMBER_WORDS, speech_tokens, strip_accents
+from health import report as report_health
 from hud import show_card, tool_status
 from settings import DEFAULT_MEMORY_EMBEDDING_MODEL, DEFAULT_MEMORY_MIN_SIMILARITY, DEFAULT_MEMORY_TOP_K
 
@@ -942,6 +943,13 @@ async def remember(
     return " ".join(parts)
 
 
+def _report_search(hits: list[Hit]) -> None:
+    """SAU-40: how the search by meaning went (best similarity), to calibrate JARVIS_MEMORY_MIN_SIMILARITY."""
+    similarities = [hit.similarity for hit in hits if hit.similarity is not None]
+    key = "nada" if not hits else "sentido" if any(hit.by_meaning for hit in hits) else "palavras"
+    report_health("memory_search", key, max(similarities) if similarities else None)
+
+
 @function_tool()
 async def recall(context: RunContext, query: str | None = None) -> str:
     """Look up what Jarvis remembers about the user (long-term memory), also shown on the HUD.
@@ -969,6 +977,8 @@ async def recall(context: RunContext, query: str | None = None) -> str:
     else:
         found = [hit.memory for hit in hits]
         items = [_hit_item(hit) for hit in hits]
+    if hits is not None:
+        _report_search(hits)
     search = None if not _words(query or "") else "semantic" if hits is not None else "words"
     await show_card(
         "memory",

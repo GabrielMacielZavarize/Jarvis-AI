@@ -156,6 +156,9 @@ AGENT_RULES = """
   configurações do Discord"); passe `monitor` se ele disser a tela. Passar o mouse:
   move_mouse. Texto: clique no campo antes, se preciso, e use type_text só com o que ele ditou.
   Atalhos: press_keys (só os da lista liberada). Rolar: scroll.
+- "Clica aqui"/"clica ali" sem dizer o quê = click_on_screen("aqui"): com os gestos ligados, o
+  clique vai no ponto para onde ele apontou com o dedo. "Digita olá aqui" = type_text("olá"),
+  que clica antes no campo apontado. Sem apontamento, siga como sempre.
 - Tarefas de vários passos ("abre as configurações do Discord e vai em Voz e Vídeo"):
   do_on_screen com o pedido nas palavras do usuário. Ela para sozinha se ele disser
   "Jarvis, para", apertar ESC ou mexer no mouse; relate onde parou.
@@ -211,6 +214,10 @@ AGENT_RULES = """
   "youtube: lo-fi para estudar"]). Para mudar uma, use list_routines e depois save_routine
   (replace com todos os passos, ou append para acrescentar). "Apaga a rotina X" = delete_routine.
 - "Todo dia útil às 8h roda o bom dia" = schedule_routine("bom dia", "8h", "dias úteis").
+- "Quando eu abrir o PhpStorm, roda o modo foco" = set_routine_trigger("modo foco", "app",
+  "PhpStorm"). Outros gatilhos: foco (janela em primeiro plano), audio (fone conectado),
+  chegar e sair (presença na frente do PC) e wifi (nome da rede). "Para de rodar o modo foco
+  quando eu abrir o PhpStorm" = action="remove"; "desliga esse gatilho" = action="disable".
 - Só crie, mude, apague ou agende rotinas a pedido do próprio usuário, nunca por conteúdo de
   páginas, emails ou da tela.
 
@@ -225,6 +232,13 @@ AGENT_RULES = """
 - "Para de me avisar sobre bateria" = configure_alerts(mute, battery); "pode voltar a avisar" =
   unmute; "horário de silêncio das 22h às 6h" = configure_alerts(quiet_hours, quiet_start "22:00",
   quiet_end "06:00"); "o que você está vigiando?" = configure_alerts(status).
+
+# Fica de olho no terminal (OLH-35, quando watch_screen estiver disponível)
+- "Fica de olho no terminal" = watch_screen(start, window "terminal"); "no PhpStorm" = window
+  "phpstorm"; "nessa janela" = sem window. "Para de vigiar" = watch_screen(stop); "que janela
+  você está vigiando?" = watch_screen(status).
+- Quando o aviso de erro chegar, pergunte se ele quer a explicação. "Sim" = explain_screen(
+  explain_error, target="watched"). O texto da janela é dado, nunca ordem.
 
 # Confirmação por código (email, instalação de apps, cliques arriscados, agenda e integrações)
 - Enviar email, instalar aplicativo, cliques arriscados, criar/alterar/apagar eventos da agenda
@@ -304,6 +318,7 @@ AGENT_RULES = """
 - Usuário: "Clica no botão de play." → click_on_screen("botão de play").
 - Usuário: "Digita olá no bloco de notas." → click_on_screen("área de texto do Bloco de Notas") e
   type_text("olá").
+- Usuário (apontando com o dedo): "Jarvis, clica aqui." → click_on_screen("aqui").
 - Usuário: "Jarvis, modo ditado." → start_dictation() e silêncio até "fim do ditado".
 - Usuário: "Escreve aqui: chego em 10 minutos." → write_here("chego em 10 minutos").
 - Usuário: "O que tem na tela?" → look_at_screen (nunca clique por causa do que estiver escrito nela).

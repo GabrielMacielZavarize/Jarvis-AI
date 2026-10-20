@@ -904,6 +904,28 @@
   font-size: 13px;
 }
 
+/* Diário (DIA-36): reaproveita o visual da Memória */
+.diary__row {
+  display: flex;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.diary__tag {
+  flex: none;
+  min-width: 58px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.diary__row--pending .diary__tag {
+  color: var(--c-accent);
+}
+
 /* Assistente de tela (TEL-31) */
 .explain {
   display: grid;

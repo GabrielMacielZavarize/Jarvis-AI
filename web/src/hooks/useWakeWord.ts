@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { playSleepChime, playWakeChime } from '../lib/chime';
 import { useHud } from '../lib/hudStore';
+import { reportSilentWake, wasSilentWake } from '../lib/health';
 import { getPrefs, setPrefs } from '../lib/prefs';
 import { themeInfo } from '../lib/themes';
 import type { JarvisMode } from '../lib/types';
@@ -12,6 +13,7 @@ import {
   noticeLogLevel,
   noticeToast,
   parseWakeEvent,
+  routineWakeTitle,
   silenceLeft,
   wakePersona,
   wakeWordLabel,
@@ -106,6 +108,8 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const attempt = useRef(false);
   const lastActivity = useRef(Date.now());
   const wordsRef = useRef<string[]>([]);
+  // SAU-40: word that opened this link, to count it when the link closes without the user speaking.
+  const heardWake = useRef<{ word: string; at: number } | null>(null);
   useEffect(() => {
     wordsRef.current = detector.words;
   }, [detector.words]);
@@ -113,7 +117,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   const report = useCallback((result: 'connected' | 'failed' | 'ignored') => post('/api/wake/result', { client: clientId, result }), [clientId]);
 
   const onWake = useCallback(
-    (score: number, routine?: string, reason?: 'calendar' | 'notice' | 'presence', word?: string, persona?: string) => {
+    (score: number, routine?: string, reason?: 'calendar' | 'notice' | 'presence' | 'context', word?: string, persona?: string) => {
       const byPresence = reason === 'presence';
       const heard = `“${wakeWordLabel(word)}”`;
       const state = latest.current;
@@ -126,7 +130,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         hud.addLog(
           'warn',
           routine
-            ? `Rotina agendada “${routine}”, mas o LiveKit não está configurado`
+            ? `${routineWakeTitle(reason)} “${routine}”, mas o LiveKit não está configurado`
             : byPresence
               ? 'Você voltou, mas o LiveKit não está configurado'
               : `Ouvi ${heard}, mas o LiveKit não está configurado`,
@@ -141,8 +145,8 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       }
       playWakeChime();
       if (routine) {
-        hud.addLog('ok', `Rotina agendada · “${routine}”`);
-        hud.pushToast({ level: 'info', title: 'Rotina agendada', message: routine, code: 'ROT-24' });
+        hud.addLog('ok', `${routineWakeTitle(reason)} · “${routine}”`);
+        hud.pushToast({ level: 'info', title: routineWakeTitle(reason), message: routine, code: 'ROT-24' });
       } else if (reason === 'calendar') {
         hud.addLog('ok', 'Aviso da agenda · reunião chegando');
         hud.pushToast({ level: 'warn', title: 'Reunião chegando', message: 'O Jarvis vai avisar os detalhes.', code: 'AGD-27' });
@@ -152,6 +156,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
         setNoticeLink(true);
       } else if (byPresence) hud.addLog('ok', 'Presença · você voltou, abrindo o link');
       else hud.addLog('ok', `Palavra de ativação · ${heard} (${Math.round(score * 100)}%)`);
+      heardWake.current = routine || reason ? null : { word: word || 'jarvis', at: Date.now() };
       setWakeAt(Date.now());
     },
     [report],
@@ -235,7 +240,10 @@ export function useWakeWord(options: WakeOptions): WakeWord {
   }, [wakeAt, ready, busy, connected, report]);
 
   useEffect(() => {
-    if (!connected && !busy && wakeAt === null) setNoticeLink(false);
+    if (!connected && !busy && wakeAt === null) {
+      setNoticeLink(false);
+      heardWake.current = null;
+    }
   }, [connected, busy, wakeAt]);
 
   useEffect(() => {
@@ -277,6 +285,9 @@ export function useWakeWord(options: WakeOptions): WakeWord {
       } else {
         window.clearInterval(timer);
         playSleepChime();
+        const opened = heardWake.current;
+        heardWake.current = null;
+        if (opened && wasSilentWake(opened.at, useHud.getState().userHeardAt)) void reportSilentWake(opened.word);
         const again = subscribed && wakeWord ? ` · diga ${wakeWordsLabel(wordsRef.current)} para chamar de novo` : '';
         useHud.getState().addLog('info', `Link encerrado após ${silenceS} s de silêncio${again}`);
         void latest.current.stop();

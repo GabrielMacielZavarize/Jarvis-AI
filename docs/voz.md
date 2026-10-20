@@ -31,6 +31,8 @@ Fone Bluetooth usado como microfone fica no modo viva-voz (áudio de ligação) 
 
 `python wake_word.py --test` mostra o pico de cada fala e se ela ativaria com o limiar atual (uma coluna por palavra, quando há mais de uma). Diga "Jarvis" e "hey Jarvis" algumas vezes e fale frases comuns para ver os falsos positivos. `python wake_word.py --list-mics` lista os microfones que o detector enxerga.
 
+No dia a dia, o painel Saúde conta as ativações de cada palavra, as que abriram o link sem você falar e as quase ativações (60% do limiar ou mais). Ele sugere subir ou descer o `JARVIS_WAKE_THRESHOLD_<PALAVRA>`. Veja [saude.md](saude.md).
+
 ### Uma palavra por persona
 
 Com o modelo da "Friday", cada persona atende pelo nome. "Friday" abre o link já como F.R.I.D.A.Y. (saudação de "chefe" e voz Kore), qualquer que seja a persona na tela. "Jarvis" com a F.R.I.D.A.Y. ativa volta para o J.A.R.V.I.S. Mark III e Stealth são o próprio Jarvis, então "Jarvis" não tira o HUD delas.

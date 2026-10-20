@@ -58,6 +58,12 @@ Pergunte "quais rotinas eu tenho?" para ver se ela aparece como agendada, e conf
 
 Se o navegador abriu mas o link não conectou, veja no registro de atividades do HUD a linha "Rotina agendada" e a mensagem do LiveKit. O pedido espera 3 minutos pelo link antes de ser descartado.
 
+## A rotina por contexto não rodou
+
+O vigia também roda dentro do `python jarvis.py` e só dispara na mudança: um app que já estava aberto quando o Jarvis ligou não conta. Feche e abra de novo.
+
+Confira `JARVIS_CONTEXT_TRIGGERS=true` e pergunte "quais rotinas eu tenho?": o gatilho aparece como "roda sozinha quando..." e não pode estar "(desligado)". Se a rotina rodou há menos de 30 minutos (`JARVIS_CONTEXT_COOLDOWN_MINUTES`), ou outra rotina por contexto rodou há menos de 90 segundos, o terminal mostra "Gatilho de ... ignorado". Os gatilhos `foco` e `audio` só funcionam no Windows, e `chegar` e `sair` precisam da presença ligada.
+
 ## O Spotify abre mas não começa a tocar
 
 O Jarvis confere o título da janela do Spotify. Quando ele não muda para "Artista - Música", o Jarvis diz que só abriu (ou que só abriu a busca) e pede para você apertar play. Isso acontece quando a pesquisa web não acha um link de faixa ou álbum, quando a versão do app não começa a tocar ao abrir links `spotify:` ou quando o Spotify fica escondido na bandeja sem janela. Garantir a reprodução exigiria a Spotify Web API (app no Spotify Developer Dashboard, login OAuth e conta Premium), que não está configurada.

@@ -22,7 +22,7 @@ flowchart LR
 2. O worker (`agent.py`) entra na mesma sala do LiveKit e conversa por voz.
 3. Quando uma ferramenta roda, o `hud.py` publica eventos JSON no tópico `jarvis.hud`, e o HUD transforma cada evento num painel.
 
-O servidor (`server.py`) fica de pé o tempo todo, mesmo sem link aberto. É ele que cuida da webcam, da palavra de ativação, dos avisos proativos, da presença, dos avisos da agenda e do celular. Quando precisa falar com você, ele acorda o HUD, que abre o link.
+O servidor (`server.py`) fica de pé o tempo todo, mesmo sem link aberto. É ele que cuida da webcam, da palavra de ativação, dos avisos proativos, da presença, dos avisos da agenda, das rotinas agendadas e por contexto e do celular. Quando precisa falar com você, ele acorda o HUD, que abre o link.
 
 As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), então o áudio não engasga durante uma pesquisa.
 
@@ -47,11 +47,14 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `installer.py` | Busca e instalação de apps pelo winget, com confirmação por código |
 | `computer_use.py` | Mouse e teclado (MOU-20): visão com `box_2d`, `SendInput`, `SetCursorPos` e as travas |
 | `screen_assist.py` | Assistente de tela (TEL-31): lê seleção, janela ou cursor por UI Automation e explica com o Gemini |
+| `screen_watch.py` | Vigia de janela (OLH-35): lê o texto da janela vigiada no servidor do HUD e avisa erros novos pelos avisos proativos |
 | `dictation.py` | Modo ditado (DIT-29): transcrições da fala, comandos falados e teclado do MOU-20 |
 | `confirmation.py` | A frase "confirmar <código>", tolerante à transcrição de voz |
 | `memory.py` | Memória entre conversas (`memoria.json`), busca pelo sentido, filtro de segredos e painel |
+| `diary.py` | Diário das conversas (DIA-36): resumo no fim do link pelo Gemini, `diario.json`, busca por data e pelo sentido e painel |
 | `voices.py` | Voz do Jarvis (VOZ-30): vozes do Gemini Live, `voz.json` (uma voz por persona) e a ferramenta `change_voice` |
 | `routines.py` | Rotinas (`rotinas.json`): passos, execução com falhas parciais, ferramentas e agendador |
+| `context_triggers.py` | Rotinas por contexto: gatilhos, sondas (processos, foco, áudio, Wi-Fi, presença) e o vigia no servidor |
 | `calendar_tools.py` | Google Agenda (AGD-27): login OAuth, datas em português, ferramentas e avisos de reunião |
 | `proactive.py` | Avisos proativos (PRO-28): `lembretes.json`, monitores, prioridade, silêncio e ferramentas |
 | `camera.py` | Dono único da webcam (`CameraHub`): captura, feed MJPEG e fotos |
@@ -67,8 +70,9 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `gesture_panel.py` | Painel de gestos no Windows: janela no canto, lista de janelas e miniaturas (PrintWindow) |
 | `wake_word.py` | Detector local da palavra "Jarvis" (openWakeWord), iniciado pelo `jarvis.py` |
 | `wake_hub.py` | Ponte entre o detector e o HUD: avisa a aba por SSE ou abre o navegador |
-| `mcp_client.py` | Integrações MCP (MCP-32): `mcp.json`, filtro do `permitir`, confirmação das que escrevem e o diagnóstico |
+| `mcp_client.py` | Integrações MCP (MCP-32): `mcp.json`, filtro do `permitir`, confirmação das que escrevem (e da casa: porta, portão, alarme) e o diagnóstico |
 | `tool_routing.py` | Ferramentas sob demanda (FER-33): núcleo, grupos, a ferramenta `use_tools` e a troca com `update_tools` depois da resposta |
+| `health.py` | Painel de saúde (SAU-40): `saude.db`, resumo, sugestões, rotas `/api/health` e o envio dos eventos |
 | `lan_access.py` | Celular na rede (LAN-26): pareamento, tokens por aparelho, bloqueio das rotas e certificados |
 | `generate_playground_token.py` | Token para o LiveKit Agents Playground |
 
@@ -84,7 +88,7 @@ E o HUD, em `web/src`:
 
 ## Arquivos locais
 
-Ficam na pasta do projeto, fora do git: `.env`, `memoria.json`, `memoria_vetores.json`, `rotinas.json`, `lembretes.json`, `layouts.json`, `telas.json`, `atalhos.json`, `gestos.json`, `gestos_calibracao.json`, `voz.json`, `persona.json`, `modelos.json`, `presenca_rosto.json`, `aparelhos.json`, `mcp.json`, `google_credentials.json`, `google_token.json` e a pasta `.jarvis-tls/`.
+Ficam na pasta do projeto, fora do git: `.env`, `memoria.json`, `memoria_vetores.json`, `diario.json`, `rotinas.json`, `lembretes.json`, `layouts.json`, `telas.json`, `atalhos.json`, `gestos.json`, `gestos_calibracao.json`, `voz.json`, `persona.json`, `modelos.json`, `presenca_rosto.json`, `aparelhos.json`, `mcp.json`, `saude.db`, `google_credentials.json`, `google_token.json` e a pasta `.jarvis-tls/`.
 
 ## Referências
 

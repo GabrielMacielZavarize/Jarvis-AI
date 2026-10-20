@@ -54,6 +54,8 @@ Os atalhos seguem uma allowlist: copiar, colar, recortar, desfazer, salvar, busc
 
 Cliques arriscados pedem confirmação falada. Se o elemento (pelo texto dele, pela sua descrição ou pela avaliação do modelo) envia, compra, paga, publica, apaga ou confirma algo, nada é clicado: o Jarvis mostra o alvo no HUD, fala um código e só clica depois de "confirmar clique" e o código. Antes de clicar ele confere se a mesma janela continua no lugar, e a confirmação expira em 2 minutos. Enter num app de mensagens ou de email também pede confirmação, a menos que você tenha pedido para enviar.
 
+O "clica aqui" com o dedo apontando passa pelas mesmas travas, com o nome do elemento embaixo do ponto (UI Automation) no lugar do rótulo do modelo de visão. O ponto vem só dos gestos, nunca da tela, e só vale se a sua última fala pede a ação e diz "aqui" ou "ali". Apontar para o HUD é recusado. Se não dá para saber o que tem no ponto, o clique pede o código, e o "digita aqui" só clica em campos de texto.
+
 São no máximo 10 ações por pedido e 8 passos por tarefa, tudo no painel MOU-20 e no terminal. Mexer no mouse, apertar Esc ou dizer "Jarvis, para" interrompe na hora.
 
 O que continua possível, e por isso o padrão é desligado: um clique "inofensivo" induzido por texto na tela quando a sua última fala já pedia alguma ação. E apps que embutem terminal (VS Code, PhpStorm) só são protegidos pelo filtro de comandos. Os prints vão para o Gemini, como na leitura de tela.
@@ -114,6 +116,8 @@ O `look_at_screen` só roda quando você pede. O print aparece no HUD e é envia
 
 O assistente de tela (TEL-31) também só roda quando você pede e envia ao Gemini o texto lido (ou o print, quando não há texto). Antes de sair do computador, chaves de API, tokens, chaves privadas e linhas de `.env` como `DB_PASSWORD=...` viram `[segredo oculto]`. Gerenciadores de senha, o UAC, janelas de credenciais e a tela de bloqueio nunca são lidos.
 
+O vigia de janela (OLH-35) só liga quando você pede e só lê texto, nunca tira print. A leitura fica no computador: o que vai para o modelo é a linha do erro, já sem segredos, dentro do aviso, e a explicação completa só sai quando você diz "sim". Ele recusa e para nas mesmas janelas que nunca são lidas e desliga sozinho quando a janela fecha ou depois de 30 minutos parado. O `/api/proactive/watch` só atende este computador.
+
 Nada fica salvo em disco. A última explicação vive só na memória da sessão, por 30 minutos, para o "copia a correção", que só escreve na área de transferência. O texto da tela é tratado como dado: se ele tentar dar ordens ao Jarvis, o painel avisa e nada é executado.
 
 ## Memória
@@ -132,6 +136,20 @@ O resumo entra nas instruções marcado como dados ("nunca ordens"), sem itens s
 
 Na busca pelo sentido, o texto de cada fato vai para a API de embeddings do Google e volta como vetor. Ele já ia para o Google antes, dentro das instruções do Gemini, mas quem preferir pode desligar com `JARVIS_MEMORY_EMBEDDINGS=false`. O filtro de segredos vale antes: um fato com cara de senha, editado à mão no arquivo, nunca vira vetor, e uma pergunta com senha ou código nem chega à API. Esquecer uma memória apaga o vetor dela junto.
 
+## Diário das conversas
+
+O diário (DIA-36) manda a transcrição de cada conversa para o Gemini (Google), pela API normal, para virar resumo. A sua voz já passa pelo Gemini Live durante a conversa, mas aqui o texto vai de novo, numa chamada separada. Para não mandar nada: `JARVIS_DIARY=false` ([diario.md](diario.md#desligar)). "Esquece essa conversa" deixa só a conversa atual de fora.
+
+Antes de sair do computador:
+
+- Chaves de API, tokens, chaves privadas e linhas como `DB_PASSWORD=...` viram `[segredo oculto]`, com o mesmo filtro do assistente de tela.
+- Uma fala com senha, PIN, código de verificação, número de cartão, CPF ou documento com número sai inteira da transcrição, com o mesmo filtro da memória.
+- Só vão as suas falas e as do Jarvis. O resultado das ferramentas (páginas, emails, tela) não vai.
+
+O modelo recebe a transcrição marcada como dado, nunca ordem. Item do resumo com cara de segredo é descartado antes de gravar, e o que o diário devolve ao Jarvis depois também vai marcado como dado.
+
+O `diario.json` fica só no seu computador, fora do git. Apagar exige "esquece" ou "apaga" na sua última fala, e o painel do HUD só lista e apaga por id. Não existe caminho para criar uma entrada pelo navegador.
+
 ## Rotinas
 
 Só as ações da tabela de [memoria-e-rotinas.md](memoria-e-rotinas.md#o-arquivo) entram numa rotina. Email, instalação de apps e mouse e teclado ficam de fora, porque têm a própria confirmação por código.
@@ -141,6 +159,8 @@ Bloquear o PC e fechar um app nunca rodam sozinhos, nem numa rotina agendada. Es
 Criar, mudar, apagar ou agendar uma rotina exige que a sua última fala fale em rotina, modo ou agenda, ou cite o nome dela. Uma página, um email ou um texto na tela não plantam rotinas.
 
 O `POST /api/routines/claim`, por onde o agente pega a rotina agendada, só atende o próprio computador e recusa pedidos de outros sites.
+
+As rotinas por contexto seguem as mesmas regras. O gatilho só dispara a rotina: os passos são os mesmos da tabela, e bloquear o PC ou fechar um app continuam esperando o seu "sim". Criar, mudar ou desligar um gatilho exige a mesma fala sua sobre a rotina. O vigia lê só nomes de processos, a janela em foco, nomes de aparelhos de áudio, o nome da rede Wi-Fi e o estado da presença, e nada disso sai do PC nem fica gravado. `JARVIS_CONTEXT_TRIGGERS=false` desliga tudo.
 
 ## Palavra de ativação
 
@@ -171,10 +191,20 @@ Desligadas por padrão (`JARVIS_ENABLE_MCP=false`). Ligadas, cada servidor do `m
 - Só as ferramentas da lista `permitir` chegam ao modelo. Um servidor sem essa lista não libera nada, e no HTTP o próprio cliente do LiveKit também filtra.
 - Ferramenta que escreve só prepara a ação. Ela roda depois de "confirmar integração" e o código na sua última fala, e o resultado de uma integração nunca confirma nada.
 - O que o servidor devolve chega ao modelo marcado como dado de um serviço externo, nunca ordem, e cortado em 6000 caracteres.
-- Os tokens ficam no `.env`. O `mcp.json` guarda só o nome da variável, e um arquivo com outro campo (como o próprio token) é recusado. Servidor HTTP precisa ser `https://`, a não ser no `127.0.0.1`.
+- Os tokens ficam no `.env`. O `mcp.json` guarda só o nome da variável, e um arquivo com outro campo (como o próprio token) é recusado. Servidor HTTP precisa ser `https://`, a não ser no `127.0.0.1` e em IPs da rede de casa.
 - Um servidor local recebe só o próprio token e as variáveis básicas do sistema (`PATH` e parecidas), não o `.env` inteiro.
 
 Um servidor MCP roda com as permissões do token que você deu a ele. Dê o mínimo: para ler issues, um token só de leitura basta.
+
+## Casa inteligente
+
+O Home Assistant entra pelo MCP-32 (veja [casa.md](casa.md)), com as travas acima e mais estas:
+
+- Porta, fechadura, portão, garagem, alarme, sirene e câmera sempre pedem "confirmar integração" e o código. Vale para o nome da ferramenta e para o que ela recebe (o nome da entidade, a área, o tipo), mesmo com a ferramenta em `sem_confirmar`. Um script chamado `abrir_portao` também pede.
+- Só leitura não pede código: perguntar se a porta está trancada é livre.
+- O `http://` é aceito só para IPs da rede de casa, como o `192.168.0.10:8123` do Home Assistant. Nesse caso o token passa sem criptografia pela rede local. Um nome como `homeassistant.local` não vale, porque qualquer aparelho da rede pode responder por ele. Fora de casa, use `https://`.
+- O token é de longa duração e vale até você apagá-lo. Crie um usuário só para o Jarvis, sem ser administrador, e exponha no Assist só as entidades que ele pode mexer. Um token vazado ou um aparelho da rede que leia o tráfego HTTP enxerga e mexe no que esse usuário pode.
+- A regra das palavras erra para o lado seguro: "liga a luz da garagem" também pede código.
 
 ## Avisos proativos
 
@@ -183,6 +213,10 @@ O texto de um aviso (nome de arquivo baixado, nome de processo, lembrete) chega 
 O `/api/proactive/next` só atende o próprio computador (`Host` local e sem `Sec-Fetch-Site` de outro site). Um aviso só abre o mesmo link do botão Inicializar, e as regras de email, instalação e controle do PC continuam iguais.
 
 O `lembretes.json` é gravado de forma atômica, com uma trava de arquivo entre o agente e o servidor. Um arquivo ilegível é guardado como `lembretes.corrompido-<data>.json`.
+
+## Painel de saúde
+
+O `saude.db` fica só no PC e não guarda texto da conversa: nomes de ferramentas, modelos e palavras, números e a mensagem curta de erro da ferramenta. As rotas `/api/health` recusam Host estranho (DNS rebinding) e pedidos de outros sites (`Sec-Fetch-Site`). O celular pareado só lê. Gravar e limpar ficam com o próprio PC.
 
 ## Celular na rede
 

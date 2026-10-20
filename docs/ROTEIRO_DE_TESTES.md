@@ -247,4 +247,84 @@ Detalhes em [ferramentas-sob-demanda.md](ferramentas-sob-demanda.md). Ligue tudo
 - [ ] "Quais issues abertas eu tenho no Jarvis-AI?": o GitHub conecta só agora (veja o terminal) e a lista aparece.
 - [ ] Peça a agenda e faça o Gemini cair (cota ou um modelo inválido no `GOOGLE_MODEL`): no modelo de reserva, "e amanhã?" responde sem pedir o grupo de novo.
 - [ ] Repita os pedidos com `JARVIS_TOOL_ROUTING=false`: nenhum "Um instante." e tudo funciona como antes. Compare quantas vezes ele escolheu a ferramenta errada nos dois modos.
-- [ ] Com o `.env` padrão (só memória e rotinas) e `auto`: nada muda em relação a antes.
+- [ ] Com o `.env` padrão (memória, diário e rotinas) e `auto`: nada muda em relação a antes.
+
+## 21. Casa inteligente
+
+Detalhes em [casa.md](casa.md). Precisa de `JARVIS_ENABLE_MCP=true`, da integração Model Context Protocol Server no Home Assistant, da entrada `home_assistant` no `mcp.json` e do `HOME_ASSISTANT_TOKEN` no `.env`.
+
+- [ ] `python mcp_client.py` mostra o Home Assistant conectado. `HassTurnOn` aparece com "pede código se mexer em porta, fechadura, portão, alarme ou câmera". Se algum nome do `permitir` não existir, acerte pelo que ele lista.
+- [ ] "Apaga a luz do escritório": a placa mostra "MCP-32 · Home Assistant · HassTurnOff" e a luz apaga sem código.
+- [ ] "Liga o ar da sala" e "deixa a luz da sala em 40%" rodam sem código.
+- [ ] "A porta da frente está trancada?": o Jarvis responde pelo `GetLiveContext`, sem código.
+- [ ] "Destranca a porta da frente": nada acontece antes de "confirmar integração" e o código. Teste também "cancela".
+- [ ] "Abre o portão da garagem" e "desliga o alarme" pedem código, mesmo com `HassTurnOn` e `HassTurnOff` em `sem_confirmar`.
+- [ ] Com a url em `http://homeassistant.local:8123/api/mcp`, o `python mcp_client.py` recusa o `mcp.json` e pede o IP ou `https://`.
+- [ ] Sem o token no `.env`, o link abre normal e o Jarvis diz que a integração do Home Assistant está indisponível.
+
+## 22. Fica de olho no terminal
+
+Detalhes em [assistente-de-tela.md](assistente-de-tela.md#fica-de-olho-numa-janela). Precisa de `JARVIS_ENABLE_PC_CONTROL=true`, `JARVIS_PROACTIVE=true` e da `GOOGLE_API_KEY`.
+
+- [ ] O painel Protocolos mostra o OLH-35. "Fica de olho no terminal" com o Windows Terminal aberto atrás do HUD: ele confirma e diz qual terminal.
+- [ ] Rode `python -c "1/0"` no terminal. Até uns 10 s depois o Jarvis diz que apareceu um erro e pergunta se quer a explicação. "Sim": o painel Assistente de tela explica o `ZeroDivisionError`, com o terminal ainda atrás do HUD.
+- [ ] Rode o mesmo comando de novo: nenhum aviso novo. Rode `python -c "import json; json.loads('{')"`: vem aviso do `JSONDecodeError`.
+- [ ] Um teste falhando (`pytest` ou `phpunit`) e um `npm run build` quebrado também avisam. Abrir um arquivo com `catch (Exception $e)` no PhpStorm vigiado não avisa nada.
+- [ ] "Fica de olho no PhpStorm" e depois "que janela você está vigiando?": ele diz o PhpStorm, os minutos e os erros avisados.
+- [ ] Encerre o link e provoque outro erro: aparece só o aviso no HUD, com o código OLH-35 e "sem voz".
+- [ ] "Para de me avisar dos erros" silencia o assunto: com o link aberto o próximo erro fica só no HUD. "Pode voltar a avisar dos erros" desfaz.
+- [ ] Imprima uma chave falsa no erro (`python -c "raise RuntimeError('AIzaSyA1234567890abcdefghijklmnopqrstu')"`): nem o aviso nem o painel mostram a chave.
+- [ ] Feche o terminal vigiado: aparece no HUD que o vigia parou porque a janela fechou. Deixe outro vigia 30 minutos parado: ele para sozinho.
+- [ ] "Fica de olho no KeePass" é recusado. "Para de vigiar" desliga, e o Gerenciador de Tarefas mostra o `jarvis.py` sem gasto de CPU perceptível enquanto vigia.
+
+## 23. Diário das conversas
+
+Detalhes em [diario.md](diario.md). Precisa da `GOOGLE_API_KEY` e de `JARVIS_DIARY=true` (o padrão).
+
+- [ ] Converse uns minutos sobre um assunto (um bug do Jarvis-AI, por exemplo), deixe algo para depois e encerre o link. O `diario.json` aparece ao lado do projeto, com a entrada de hoje, e não entra no `git status`.
+- [ ] Abra o link, pergunte só "que horas são?" e encerre: nenhuma entrada nova.
+- [ ] Abra de novo: "o que eu te pedi hoje?" responde com o pedido e o pendente, e o painel Diário mostra a conversa no dia.
+- [ ] "Onde paramos no projeto do Jarvis?" acha a conversa mesmo sem as mesmas palavras, com "pelo sentido" no painel.
+- [ ] Diga uma senha falsa na conversa ("minha senha do wifi é teste123") e encerre: ela não aparece no `diario.json`.
+- [ ] "Esquece essa conversa" e encerre: nenhuma entrada nova. "Apaga o diário de hoje": as de hoje somem. O × do painel apaga uma só, depois do "Apagar?".
+- [ ] Com `JARVIS_DIARY=false`, encerre uma conversa longa: nada é gravado e o painel Protocolos não mostra o DIA-36.
+
+## 24. Rotinas por contexto
+
+Detalhes em [memoria-e-rotinas.md](memoria-e-rotinas.md#por-contexto). Precisa de `JARVIS_ENABLE_PC_CONTROL=true`. Para chegar e sair, também da presença.
+
+- [ ] Com o PhpStorm fechado, "quando eu abrir o PhpStorm, roda o modo foco". Abra o PhpStorm sem aba do HUD: o navegador abre, o painel Rotina mostra "por contexto" e o Jarvis diz que rodou porque o PhpStorm abriu.
+- [ ] Com a conversa aberta, feche e abra o PhpStorm depois de 30 minutos: a rotina roda na conversa, sem abrir outro link. Antes disso, nada acontece.
+- [ ] Reinicie o `python jarvis.py` com o PhpStorm já aberto: nada dispara.
+- [ ] "Quando o Spotify ficar em foco, roda o lo-fi": trocar de janela para o Spotify dispara uma vez.
+- [ ] "Quando eu conectar o fone, roda o modo foco": ligue o fone Bluetooth e espere até 15 segundos.
+- [ ] Com a presença ligada, "quando eu sair, roda a boa noite": saia da frente da câmera; o Jarvis pergunta antes de bloquear e nada é bloqueado sem o seu "sim".
+- [ ] "Quando o PC entrar na rede (nome da sua rede), roda o bom dia": desconecte e reconecte o Wi-Fi.
+- [ ] "Desliga o gatilho do modo foco" e abra o PhpStorm: nada acontece. Com `JARVIS_CONTEXT_TRIGGERS=false`, nenhum gatilho dispara e o `/api/status` mostra 0 em `context_triggers`.
+- [ ] Uma rotina que abre a Steam não dispara uma segunda rotina presa à Steam (intervalo de 90 segundos).
+
+## 25. Clica aqui apontando
+
+Detalhes em [mouse-e-ditado.md](mouse-e-ditado.md#clica-aqui-apontando). Precisa de `JARVIS_ENABLE_COMPUTER_USE=true`, dos gestos armados e do link aberto.
+
+- [ ] Vídeo do YouTube pausado no monitor vertical, mouse parado no notebook. Aponte para o play e diga "Jarvis, clica aqui". A mira fica parada no play com "CLICANDO AQUI", o cursor desliza até ela e o vídeo toca. O terminal não mostra consulta ao modelo de visão.
+- [ ] O painel MOU-20 mostra o print da tela certa com a mira laranja em cima do play.
+- [ ] Baixe a mão logo depois de falar: o clique ainda sai no ponto e a mira continua até o clique.
+- [ ] Aponte para o botão Enviar de um email ou do WhatsApp e diga "clica aqui": nada é clicado, a mira fica com "CONFIRMAR CLIQUE AQUI?" e o Jarvis pede "confirmar clique" e o código. Com o código, o clique sai no mesmo ponto.
+- [ ] Aponte para o HUD, para uma janela do UAC ou do Gerenciador de Tarefas e diga "clica aqui": recusado, sem mexer no cursor.
+- [ ] Num jogo ou vídeo em tela cheia, "clica aqui" pede o código (o Jarvis diz que não conseguiu ler o ponto).
+- [ ] Aponte para a busca do YouTube e diga "digita lo-fi aqui": o Jarvis clica na busca e digita nela. Apontando para o meio da página, ele recusa e nada é digitado.
+- [ ] Aponte para a caixa de mensagem do WhatsApp e diga "escreve aqui: já vou". O texto cai na caixa apontada, mesmo com outra janela em foco antes, e nada é enviado.
+- [ ] Aponte para um campo de senha e diga "digita olá aqui": recusado.
+- [ ] Sem apontar, "clica no botão de play" e "digita olá" funcionam como antes.
+
+## 27. Painel de saúde
+
+Detalhes em [saude.md](saude.md).
+
+- [ ] Converse alguns turnos. O painel Saúde (SAU-40) mostra o tempo de resposta e o `saude.db` aparece na pasta do projeto, fora do `git status`.
+- [ ] Diga "Jarvis" e fique calado até o link fechar por silêncio, três vezes. Em Detalhes, a linha do Jarvis mostra 3 sem fala e a sugestão pede para subir `JARVIS_WAKE_THRESHOLD_JARVIS`.
+- [ ] Diga "Jarvis" baixinho, longe do microfone, algumas vezes sem ativar. As quase ativações sobem.
+- [ ] Peça o clima de uma cidade inventada até a ferramenta falhar. Ela aparece em Ferramentas com erro.
+- [ ] No celular pareado o painel aparece sem o botão Limpar. No PC, Limpar zera tudo.
+- [ ] Com `JARVIS_HEALTH=false` o painel mostra "desligado" e nada novo é gravado.

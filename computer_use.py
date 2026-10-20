@@ -157,6 +157,7 @@ RISK_LABELS = {
     "publish": "publicar",
     "delete": "apagar",
     "confirm": "confirmar",
+    "unknown": "disparar",  # clique no ponto apontado sem saber o que tem ali
 }
 RISK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("send", re.compile(r"\b(envi(ar|a|e|o)|send|submit|submeter|mandar|responder|reply|encaminhar|forward)\b")),
@@ -1559,7 +1560,7 @@ def _pending_reply(code: str, what: str, reason: str) -> str:
 @dataclass
 class Target:
     shot: Shot
-    box: Box
+    box: Box | None
     point: tuple[int, int]
     label: str
 
@@ -1824,6 +1825,186 @@ async def _find(context: RunContext, target: str, monitor: int | None) -> tuple[
     return shots, located
 
 
+# ───────────────────────── "clica aqui" com o dedo apontando ─────────────────────────
+# Com os gestos ligados, "aqui" é o ponto para onde o indicador apontou (gestures.SERVICE), e o
+# clique vai nele sem o modelo de visão procurar o alvo. As travas são as mesmas do clique
+# descrito; o nome do elemento embaixo do ponto (UI Automation) faz o papel do rótulo.
+
+POINT_MAX_AGE_S = 2.5  # a fala termina e a ferramenta chega depois do gesto
+POINT_PREVIEW_S = 0.6  # mira parada no ponto antes de o cursor sair para lá
+POINT_MARK_S = 2.5
+POINT_PENDING_MARK_S = 8.0
+POINT_FOCUS_REUSE_S = 8.0  # "clica aqui" e logo "digita": não clica no campo de novo
+HERE_WORDS = re.compile(r"\b(aqui|ali|ai|here|there|nesse ponto|neste ponto|onde (eu )?(to |estou )?apont\w*)\b")
+HERE_TARGETS = {
+    "aqui", "isso aqui", "ali", "ai", "isso", "esse", "este", "here", "this", "there", "nesse ponto",
+    "neste ponto", "onde eu apontei", "onde estou apontando", "onde o usuario apontou", "ponto apontado",
+}
+POINTED_LABEL = "onde o senhor apontou"
+UIA_COMBOBOX = 50003
+UIA_EDIT = 50004
+UIA_DOCUMENT = 50030
+BROWSER_PROCESSES = {"chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "vivaldi.exe"}
+
+# Fonte do ponto apontado e da mira (gestures.SERVICE), ligadas pelo build_tools.
+POINTER: Any = None
+MARKER: Any = None
+
+
+def set_pointer(source: Any, marker: Any = None) -> None:
+    global POINTER, MARKER
+    POINTER, MARKER = source, marker
+
+
+def pointed_point() -> tuple[int, int] | None:
+    """Where the index finger pointed in the last POINT_MAX_AGE_S seconds (physical pixels)."""
+    if POINTER is None:
+        return None
+    try:
+        return POINTER(POINT_MAX_AGE_S)
+    except Exception:
+        logger.debug("Falha ao ler o ponto apontado.", exc_info=True)
+        return None
+
+
+def refers_here(heard: str | None, target: str = "") -> bool:
+    """The user said "aqui"/"ali" (or the model passed that as the target)."""
+    return HERE_WORDS.search(norm(heard)) is not None or norm(target) in HERE_TARGETS
+
+
+def _mark(point: tuple[int, int], seconds: float, title: str) -> None:
+    if MARKER is None:
+        return
+    try:
+        MARKER(point, seconds, title)
+    except Exception:
+        logger.debug("Falha ao mostrar a mira no ponto.", exc_info=True)
+
+
+@dataclass(frozen=True)
+class PointedElement:
+    name: str = ""
+    kind: int = 0  # ControlTypeId da UI Automation
+    is_password: bool = False
+
+
+def _uia_element_at(point: tuple[int, int]) -> PointedElement:
+    import comtypes
+    import comtypes.client
+
+    comtypes.CoInitialize()
+    try:
+
+        def read() -> PointedElement:
+            comtypes.client.GetModule("UIAutomationCore.dll")
+            from comtypes.gen import UIAutomationClient as uia  # type: ignore[import-not-found]
+
+            automation = comtypes.client.CreateObject(uia.CUIAutomation, interface=uia.IUIAutomation)
+            with win_desktop.physical_pixels():
+                element = automation.ElementFromPoint(uia.tagPOINT(int(point[0]), int(point[1])))
+            return PointedElement(
+                name=str(element.CurrentName or ""),
+                kind=int(element.CurrentControlType or 0),
+                is_password=bool(element.CurrentIsPassword),
+            )
+
+        return read()
+    finally:
+        comtypes.CoUninitialize()
+
+
+def element_at(point: tuple[int, int]) -> PointedElement | None:
+    """Element under the pointed spot; None when UI Automation can't tell."""
+    try:
+        return _uia_element_at(point)
+    except Exception:
+        logger.debug("UI Automation indisponível para ler o ponto apontado.", exc_info=True)
+        return None
+
+
+def is_text_field(element: PointedElement | None, window: WindowInfo | None) -> bool:
+    if element is None:
+        return False
+    if element.kind in (UIA_EDIT, UIA_COMBOBOX):
+        return True
+    # No navegador a página inteira é um Document: digitar ali aciona os atalhos do site.
+    return element.kind == UIA_DOCUMENT and (window is None or window.process not in BROWSER_PROCESSES)
+
+
+def _shot_at(point: tuple[int, int]) -> Shot:
+    for screen in win_desktop.monitors():
+        if screen.left <= point[0] < screen.right and screen.top <= point[1] < screen.bottom:
+            return Shot(win_desktop.grab_monitor(screen), region_of(screen), f"tela {screen.number}")
+    raise ComputerUseError("O ponto apontado ficou fora das telas; aponte de novo e peça outra vez.")
+
+
+def _inspect_point(point: tuple[int, int]) -> tuple[WindowInfo | None, PointedElement | None]:
+    window = window_at(*point)
+    if is_hud(window):
+        raise ComputerUseError("Recusado: o senhor apontou para o HUD do Jarvis; aponte para a janela onde quer que eu mexa.")
+    return window, element_at(point)
+
+
+def _remember_focus(context: RunContext, point: tuple[int, int]) -> None:
+    _state(context)["pointed_focus"] = (point, time.monotonic())
+
+
+async def _click_pointed(context: RunContext, point: tuple[int, int], description: str, button: str, double: bool) -> str:
+    """Click where the user pointed, with the MOU-20 guards and a visible crosshair first."""
+    if norm(description) in HERE_TARGETS:
+        description = POINTED_LABEL
+    _window, element = await asyncio.to_thread(_inspect_point, point)
+    shot = await asyncio.to_thread(_shot_at, point)
+    label = _truncate(element.name, 60) if element and element.name else ""
+    target = Target(shot=shot, box=None, point=point, label=label)
+    password = bool(element and element.is_password)
+    await asyncio.to_thread(_check_click, target, description, password)
+    model_risk = "none" if label else "unknown"
+    risky = risk_of(label, description) is not None or model_risk != "none"
+    _mark(point, POINT_PENDING_MARK_S if risky else POINT_MARK_S, "CONFIRMAR CLIQUE AQUI?" if risky else "CLICANDO AQUI")
+    if not risky:
+        await asyncio.sleep(POINT_PREVIEW_S)
+    result = await _click_target(
+        context, target, description=description, button=button, double=double,
+        password_field=password, model_risk=model_risk,
+    )
+    pending = session_state(context).get(PENDING_KEY)
+    if result.startswith("PRECISA CONFIRMAÇÃO") and pending:
+        pending["pointed"] = True
+        if not label:
+            result += " Não consegui ler o que tem nesse ponto, por isso peço o código antes de clicar."
+        return result
+    _remember_focus(context, point)
+    return result + " O lugar veio do ponto que o usuário apontou com o dedo."
+
+
+async def focus_pointed(context: RunContext, point: tuple[int, int]) -> str | None:
+    """"Digita aqui": click the text field the user pointed at, so the typing lands there.
+
+    Returns the field name, or None when a pointed click just focused that spot.
+    """
+    last = _state(context).get("pointed_focus")
+    if last and _distance(last[0], point) <= TAKEOVER_TOLERANCE_PX and time.monotonic() - last[1] < POINT_FOCUS_REUSE_S:
+        return None
+    window, element = await asyncio.to_thread(_inspect_point, point)
+    reason = blocked_reason(window, typing=True)
+    if reason:
+        raise ComputerUseError(f"Recusado: não digito em {reason}.")
+    if element is not None and (element.is_password or is_sensitive_target(element.name)):
+        raise ComputerUseError("Recusado: o campo apontado é de senha ou dado sensível. Digite essa parte o senhor mesmo.")
+    if element is None:
+        raise ComputerUseError("Não consegui ver se o senhor apontou para um campo de texto. Clique no campo e peça de novo; nada foi digitado.")
+    if not is_text_field(element, window):
+        raise ComputerUseError("Onde o senhor apontou não é um campo de texto. Aponte para o campo e peça de novo; nada foi digitado.")
+    _mark(point, POINT_MARK_S, "DIGITANDO AQUI")
+    await asyncio.sleep(POINT_PREVIEW_S)
+    await asyncio.to_thread(_do_click, point, "left", False)
+    _remember_focus(context, point)
+    name = element.name or "campo de texto"
+    _log(context, f"Cliquei no campo '{_truncate(name, 40)}' onde o senhor apontou, para digitar ali.")
+    return name
+
+
 # ───────────────────────── ferramentas ─────────────────────────
 
 
@@ -1843,16 +2024,22 @@ async def click_on_screen(
 
     Args:
         target: What to click, as specific as possible, in the user's words
-            ("botão de play do YouTube", "engrenagem de configurações do Discord").
+            ("botão de play do YouTube", "engrenagem de configurações do Discord"). For
+            "clica aqui" pass "aqui": with gestures on it clicks where the user pointed.
         monitor: Monitor number (tela 1, 2, 3) when the user says where; omit to search all.
         button: left (default), right (context menu) or middle.
         double: True for a double click (e.g. open a desktop icon).
     """
     action = _click_action(button, double)
+    pointed = pointed_point()
     try:
         description = _clean_target(target)
-        await _authorize(context)
+        heard = await _authorize(context)
         await tool_status("click_on_screen", "running", description)
+        if pointed is not None and refers_here(heard, description):
+            result = await _click_pointed(context, pointed, description, button, double)
+            await tool_status("click_on_screen", "done", description)
+            return result
         shots, located = await _find(context, description, monitor)
         if not located.found or located.box is None:
             where = f"na tela {monitor}" if monitor else "em nenhuma tela"
@@ -1903,16 +2090,21 @@ async def move_mouse(context: RunContext, target: str, monitor: int | None = Non
 async def type_text(context: RunContext, text: str) -> str:
     """Type text with the keyboard into the field that has focus right now.
 
-    Click the field first (click_on_screen) if needed. Refuses passwords, card numbers,
+    Click the field first (click_on_screen) if needed; for "digita aqui" with the finger
+    pointing it clicks the pointed field itself. Refuses passwords, card numbers,
     documents, keys, terminal commands, password fields and system windows.
 
     Args:
         text: Exactly what the user dictated (up to 500 characters). Line breaks press Enter.
     """
+    pointed = pointed_point()
     try:
         heard = await _authorize(context)
         await tool_status("type_text", "running", f"{len(text)} caracteres")
+        field_name = await focus_pointed(context, pointed) if pointed is not None and refers_here(heard) else None
         result = await _type(context, text, heard)
+        if field_name:
+            result += f" Antes cliquei no campo '{_truncate(field_name, 40)}' onde o usuário apontou com o dedo."
         await tool_status("type_text", "done", f"{len(text)} caracteres")
         return result
     except Exception as exc:
@@ -2132,6 +2324,9 @@ async def confirm_screen_action(context: RunContext, code: str) -> str:
         await tool_status("confirm_screen_action", "running", pending.get("label") or pending.get("value"))
         await asyncio.to_thread(_check_pending_window, pending)
         if kind == "click":
+            if pending.get("pointed"):
+                _mark(tuple(pending["point"]), POINT_MARK_S, "CLICANDO AQUI")
+                await asyncio.sleep(POINT_PREVIEW_S)
             await asyncio.to_thread(_do_click, tuple(pending["point"]), pending["button"], pending["double"])
             action = _click_action(pending["button"], pending["double"])
             message = f"Confirmado: {ACTION_NAMES[action]} em '{pending['label'] or pending['description']}' na {pending['screen']}."
