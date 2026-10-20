@@ -29,7 +29,28 @@ Fone Bluetooth usado como microfone fica no modo viva-voz (áudio de ligação) 
 
 ### Calibrando
 
-`python wake_word.py --test` mostra o pico de cada fala e se ela ativaria com o limiar atual. Diga "Jarvis" e "hey Jarvis" algumas vezes e fale frases comuns para ver os falsos positivos. `python wake_word.py --list-mics` lista os microfones que o detector enxerga.
+`python wake_word.py --test` mostra o pico de cada fala e se ela ativaria com o limiar atual (uma coluna por palavra, quando há mais de uma). Diga "Jarvis" e "hey Jarvis" algumas vezes e fale frases comuns para ver os falsos positivos. `python wake_word.py --list-mics` lista os microfones que o detector enxerga.
+
+### Uma palavra por persona
+
+Com o modelo da "Friday", cada persona atende pelo nome. "Friday" abre o link já como F.R.I.D.A.Y. (saudação de "chefe" e voz Kore), qualquer que seja a persona na tela. "Jarvis" com a F.R.I.D.A.Y. ativa volta para o J.A.R.V.I.S. Mark III e Stealth são o próprio Jarvis, então "Jarvis" não tira o HUD delas.
+
+```env
+JARVIS_WAKE_WORDS=jarvis,friday
+JARVIS_WAKE_THRESHOLD_FRIDAY=0.7   # mais alto que o do Jarvis: "Friday" aparece muito em música e TV
+```
+
+Os dois modelos rodam juntos no mesmo detector, e vale a palavra com a maior pontuação acima do próprio limiar. O detector avisa o servidor qual nome ouviu, o servidor grava a persona no `persona.json` antes de avisar o HUD e só então o link abre. Assim o agente já começa a conversa com a persona e a voz certas. O painel Sistema mostra "Aguardando “Jarvis” ou “Friday”".
+
+O openWakeWord não traz um modelo pronto para "Friday", então ele precisa ser treinado uma vez. O README do openWakeWord tem um notebook do Google Colab que gera as amostras por TTS, treina e exporta o `.onnx` em menos de uma hora. Algumas dicas para o português:
+
+- Além de "friday" e "hey friday", inclua grafias que soem como a pronúncia daqui ("fraidei", "fráidei"), porque as vozes de TTS do treino são em inglês.
+- Use como negativas palavras parecidas e frases comuns em português: "sexta-feira", "fraude", "Fred", "frade", "três", "Friburgo".
+- Salve o arquivo como `.cache/models/friday.onnx` na pasta do projeto (a `.cache/` fica fora do git).
+
+Sem esse arquivo, nada muda: o detector avisa no terminal que a "Friday" ficou de fora e segue só com o "Jarvis", que continua acordando qualquer persona. O `python doctor.py` mostra o mesmo aviso.
+
+Antes de usar no dia a dia, deixe música e TV em inglês tocando por uns 10 minutos com o `python wake_word.py --test` aberto e anote quantas vezes a "Friday" ativaria. Se passar de uma ou duas, suba o `JARVIS_WAKE_THRESHOLD_FRIDAY`.
 
 ### Limitações
 

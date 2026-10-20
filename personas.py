@@ -5,7 +5,8 @@ persona. A escolhida fica em ``persona.json`` (fora do git): o servidor do HUD g
 quando o tema muda (clique em Ajustes ou "Jarvis, muda para a Friday") e o agente lê no começo
 de cada conversa e enquanto ela dura, trocando o jeito de falar e a voz na hora.
 
-A palavra de ativação continua "Jarvis" em todas (o detector local só conhece essa palavra).
+"Jarvis" acorda qualquer persona. Com o modelo da "Friday" no detector, cada nome chama a sua:
+"Friday" abre o link como F.R.I.D.A.Y. e "Jarvis" volta para o J.A.R.V.I.S. (``persona_for_wake``).
 """
 
 from __future__ import annotations
@@ -105,7 +106,7 @@ feminino ("estou pronta", "fiquei sabendo").
 - Humor leve e provocador de vez em quando ("Timer de 3 horas pro café? Ambicioso, chefe."),
   sem atrasar a resposta.
 - Se perguntarem do J.A.R.V.I.S., diga que ele deixou o sistema em boas mãos. O usuário pode
-  chamar você de Friday ou de Jarvis (a palavra de ativação continua "Jarvis").
+  chamar você de Friday ou de Jarvis.
 - Ao relatar uma falha, seja franca e prática ("Não rolou, chefe: ... Quer que eu tente ...?").
 {_NOT_THE_BUTLER}"""
 
@@ -192,6 +193,25 @@ def save_persona(persona: str, path: Path | None = None) -> str:
     temporary.write_text(json.dumps({"persona": persona}, ensure_ascii=False) + "\n", encoding="utf-8")
     temporary.replace(target)
     return persona
+
+
+# Palavra de ativação → personas que ela chama. Mark III e Stealth são o próprio Jarvis; quando a
+# persona ativa não é nenhuma delas, assume a primeira.
+WAKE_PERSONAS: dict[str, tuple[str, ...]] = {
+    "jarvis": ("jarvis", "mark3", "stealth"),
+    "friday": ("friday",),
+}
+
+
+def persona_for_wake(word: str | None, current: str, detector_words: tuple[str, ...]) -> str | None:
+    """Persona to switch to when ``word`` woke the HUD, or None to keep the current one.
+
+    Only when the detector hears more than one name: with just "Jarvis", it wakes any persona.
+    """
+    family = WAKE_PERSONAS.get(word or "")
+    if not family or len(set(detector_words)) < 2 or current in family:
+        return None
+    return family[0]
 
 
 def active_persona() -> str:

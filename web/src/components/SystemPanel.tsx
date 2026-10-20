@@ -7,6 +7,7 @@ import { BACKEND_LABELS, MODE_LABELS } from '../lib/catalog';
 import { useHud } from '../lib/hudStore';
 import { formatSeconds, latencyTone } from '../lib/latency';
 import type { JarvisMode } from '../lib/types';
+import { wakeWordsLabel } from '../lib/wake';
 import type { WakeWord } from '../hooks/useWakeWord';
 import { Panel } from './Panel';
 import { HudSettings } from './HudSettings';
@@ -117,7 +118,7 @@ interface SystemPanelProps {
 function wakeLabel(wake: WakeWord, connected: boolean): { text: string; ok: boolean } {
   if (!wake.detector) return { text: 'Detector offline · veja o terminal', ok: false };
   if (wake.listening && wake.micSilent) return { text: 'Sem sinal no microfone · mudo no Windows?', ok: false };
-  if (wake.listening) return { text: 'Aguardando “Jarvis”', ok: true };
+  if (wake.listening) return { text: `Aguardando ${wakeWordsLabel(wake.words)}`, ok: true };
   return { text: connected ? 'Pausada durante o link' : 'Retomando escuta…', ok: false };
 }
 

@@ -3,11 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from personas import save_persona, saved_persona
 from server import create_app
 from settings import load_settings
 from wake_hub import PENDING_BROWSER_S, PENDING_WAKE_S, WakeHub, hud_events
@@ -140,6 +143,20 @@ class HudEventsTests(unittest.TestCase):
 
         self.assertTrue(hub.status()["mic_silent"])
 
+    def test_status_lists_the_words_the_detector_hears(self) -> None:
+        hub = WakeHub()
+        hub.detector_state(words=("jarvis", "friday"))
+
+        self.assertEqual(hub.status()["words"], ["jarvis", "friday"])
+
+    def test_the_word_and_persona_reach_the_tab_the_browser_opens(self) -> None:
+        hub = WakeHub()
+
+        hub.trigger(0.8, word="friday", persona="friday")
+        hub.connect(TAB)
+
+        self.assertEqual(queued(hub, TAB), [{"type": "wake", "score": 0.8, "word": "friday", "persona": "friday"}])
+
 
 class WakeEndpointTests(unittest.TestCase):
     def client(self, env: dict[str, str]) -> tuple[TestClient, MagicMock]:
@@ -196,6 +213,75 @@ class WakeEndpointTests(unittest.TestCase):
         client, _ = self.client(WAKE_ENV)
 
         self.assertEqual(client.post("/api/wake/hud", json={"client": "../x"}).status_code, 422)
+
+    def detector_hears(self, client: TestClient, words: str) -> None:
+        client.get(f"/api/wake/detector?words={words}", headers=DETECTOR)
+
+    def use_persona_file(self) -> Path:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = Path(folder.name) / "persona.json"
+        patcher = patch("personas.PERSONA_FILE", path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return path
+
+    def test_friday_switches_the_persona_before_the_hud_hears_about_it(self) -> None:
+        self.use_persona_file()
+        client, _ = self.client(WAKE_ENV)
+        hub = client.app.state.wake_hub
+        hub.connect(TAB)
+        self.detector_hears(client, "jarvis,friday,ultron")
+        self.assertEqual(hub.detector_words, ("jarvis", "friday"))
+
+        client.post("/api/wake/trigger", json={"score": 0.84, "word": "friday"}, headers=DETECTOR)
+
+        self.assertEqual(saved_persona(), "friday")
+        self.assertEqual(queued(hub, TAB), [{"type": "wake", "score": 0.84, "word": "friday", "persona": "friday"}])
+
+    def test_jarvis_brings_back_jarvis_but_keeps_mark3(self) -> None:
+        self.use_persona_file()
+        client, _ = self.client(WAKE_ENV)
+        hub = client.app.state.wake_hub
+        hub.connect(TAB)
+        self.detector_hears(client, "jarvis,friday")
+
+        save_persona("friday")
+        client.post("/api/wake/trigger", json={"score": 0.9, "word": "jarvis"}, headers=DETECTOR)
+        self.assertEqual(saved_persona(), "jarvis")
+        self.assertEqual(queued(hub, TAB)[0]["persona"], "jarvis")
+
+        hub.wake_handled()
+        save_persona("mark3")
+        client.post("/api/wake/trigger", json={"score": 0.9, "word": "jarvis"}, headers=DETECTOR)
+        self.assertEqual(saved_persona(), "mark3")
+        self.assertEqual(queued(hub, TAB), [{"type": "wake", "score": 0.9, "word": "jarvis"}])
+
+    def test_with_jarvis_alone_nothing_changes(self) -> None:
+        self.use_persona_file()
+        client, _ = self.client(WAKE_ENV)
+        hub = client.app.state.wake_hub
+        hub.connect(TAB)
+        self.detector_hears(client, "jarvis")
+        save_persona("friday")
+
+        client.post("/api/wake/trigger", json={"score": 0.9, "word": "jarvis"}, headers=DETECTOR)
+
+        self.assertEqual(saved_persona(), "friday")
+        self.assertNotIn("persona", queued(hub, TAB)[0])
+
+    def test_a_wake_that_is_not_accepted_keeps_the_persona(self) -> None:
+        path = self.use_persona_file()
+        client, _ = self.client(WAKE_ENV)
+        hub = client.app.state.wake_hub
+        hub.connect(TAB)
+        self.detector_hears(client, "jarvis,friday")
+        client.post("/api/wake/hud", json={"client": TAB, "session_active": True})
+
+        body = client.post("/api/wake/trigger", json={"score": 0.9, "word": "friday"}, headers=DETECTOR).json()
+
+        self.assertFalse(body["accepted"])
+        self.assertFalse(path.exists())
 
     def test_disabled_wake_word_never_listens(self) -> None:
         client, browser = self.client({**LIVEKIT_ENV, "JARVIS_WAKE_SECRET": "s3cret"})

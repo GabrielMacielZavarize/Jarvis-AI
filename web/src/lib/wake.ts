@@ -1,3 +1,4 @@
+import { isTheme, type ThemeId } from './themes';
 import type { HudCard, JarvisMode, LogLevel, NoteData, Toast } from './types';
 
 export type NoticePriority = 'low' | 'normal' | 'high' | 'critical';
@@ -27,13 +28,22 @@ export type WakeEvent =
       /** PRS-25: the webcam opens the link when the user sits back down. */
       presence?: boolean;
     }
-  | { type: 'status'; detector: boolean; listening: boolean; mic_silent?: boolean }
+  /** words: the names the detector hears ("jarvis", "friday"); missing on older servers. */
+  | { type: 'status'; detector: boolean; listening: boolean; mic_silent?: boolean; words?: string[] }
   /**
    * routine: a scheduled routine (ROT-24) opened the link; reason: why it woke instead of a heard
    * "Jarvis" (calendar = AGD-27 meeting reminder, notice = PRO-28 proactive notice, presence =
-   * PRS-25: the webcam saw the user sit back down).
+   * PRS-25: the webcam saw the user sit back down). word: the name heard ("friday"); persona: the
+   * persona that name calls, already saved on the server, when the HUD must switch to it.
    */
-  | { type: 'wake'; score: number; routine?: string; reason?: 'calendar' | 'notice' | 'presence' }
+  | {
+      type: 'wake';
+      score: number;
+      routine?: string;
+      reason?: 'calendar' | 'notice' | 'presence';
+      word?: string;
+      persona?: string;
+    }
   | NoticeEvent;
 
 export function parseWakeEvent(raw: string): WakeEvent | null {
@@ -47,6 +57,25 @@ export function parseWakeEvent(raw: string): WakeEvent | null {
     // A malformed line is ignored; the stream keeps going.
   }
   return null;
+}
+
+const WORD_LABELS: Record<string, string> = { jarvis: 'Jarvis', friday: 'Friday' };
+
+/** "friday" → "Friday"; no word (an older detector) is "Jarvis". */
+export function wakeWordLabel(word?: string | null): string {
+  if (!word) return 'Jarvis';
+  return WORD_LABELS[word] ?? word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+/** ['jarvis', 'friday'] → '“Jarvis” ou “Friday”'. */
+export function wakeWordsLabel(words?: string[] | null): string {
+  const names = words?.length ? words : ['jarvis'];
+  return names.map((word) => `“${wakeWordLabel(word)}”`).join(' ou ');
+}
+
+/** The persona a wake word called, when it is not the one on screen ("Friday" with J.A.R.V.I.S.). */
+export function wakePersona(persona: string | undefined, current: ThemeId): ThemeId | null {
+  return isTheme(persona) && persona !== current ? persona : null;
 }
 
 const VIRTUAL_IDS = new Set(['default', 'communications']);

@@ -102,7 +102,14 @@ def main() -> int:
         f"{'ativada' if settings.wake_word_enabled else 'desativada'}"
     )
     if settings.wake_word_enabled:
-        print(f"Limiar: {settings.wake_threshold:.2f}")
+        from wake_word import WORD_MODELS, available_words, word_label
+
+        print("Palavras e limiares: " + ", ".join(f"{word_label(word)} {limit:.2f}" for word, limit in settings.wake_thresholds))
+        for word in available_words(settings.wake_words)[1]:
+            print(
+                f"Aviso: modelo de “{word_label(word)}” não encontrado em {WORD_MODELS[word]}; "
+                "o detector segue só com as outras palavras. Veja docs/voz.md."
+            )
         missing = [name for name in ("openwakeword", "sounddevice") if importlib.util.find_spec(name) is None]
         if missing:
             problems.append(f"Palavra de ativação ligada, mas falta instalar: pip install {' '.join(missing)}")
