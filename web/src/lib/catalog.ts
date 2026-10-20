@@ -108,7 +108,7 @@ export const TOOL_LABELS: Record<string, string> = {
   cancel_calendar_change: 'Mudança cancelada',
 };
 
-/** Protocol code of every agent tool, as in the README table. */
+/** Protocol code of every agent tool, as in docs/protocolos.md. */
 const PROTOCOL_TOOLS: Record<string, string[]> = {
   'WX-01': ['get_weather'],
   'NET-02': ['search_web'],
