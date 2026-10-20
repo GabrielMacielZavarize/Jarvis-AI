@@ -58,6 +58,12 @@ describe('parseWakeEvent', () => {
     });
   });
 
+  it('reads the tray icon opening and closing the link (BAN-41)', () => {
+    expect(parseWakeEvent('{"type":"wake","score":1,"reason":"tray"}')).toEqual({ type: 'wake', score: 1, reason: 'tray' });
+    expect(parseWakeEvent('{"type":"sleep","reason":"tray"}')).toEqual({ type: 'sleep', reason: 'tray' });
+    expect(parseWakeEvent('{"type":"config","enabled":false,"tray":true,"silence_s":0}')).toMatchObject({ tray: true });
+  });
+
   it('ignores anything else', () => {
     expect(parseWakeEvent('not json')).toBeNull();
     expect(parseWakeEvent('{"type":"other"}')).toBeNull();

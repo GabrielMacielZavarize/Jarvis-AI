@@ -78,6 +78,10 @@ Esse modo é `pipeline-first` e funciona no melhor esforço. Confirme se o endpo
 
 `python mcp_client.py` mostra o motivo de cada servidor. Os mais comuns: o token não está no `.env` com o nome do `token_env`, o `permitir` está vazio, o `npx` não está instalado (precisa do Node.js) ou o servidor demorou mais que `JARVIS_MCP_TIMEOUT` para subir. Na primeira vez o `npx` baixa o pacote do servidor, o que pode passar dos 8 segundos; rode `python mcp_client.py` uma vez antes ou aumente o tempo. Detalhes em [integracoes.md](integracoes.md).
 
+## O ícone da bandeja não aparece
+
+Confira o fim do `logs/jarvis.log`. Se lá diz que a porta já está em uso, outro Jarvis ficou aberto: feche pelo ícone dele ou pelo Gerenciador de Tarefas (processos `pythonw.exe`). O Windows às vezes esconde ícones novos na seta ao lado do relógio; arraste o do Jarvis para a barra. Se o item Iniciar com o Windows está marcado mas o Jarvis não abre no login, veja se ele não foi desativado em Configurações, Aplicativos, Inicialização. Detalhes em [bandeja.md](bandeja.md).
+
 ## Câmera em uso
 
 Os gestos ainda abrem a webcam por conta própria, fora do hub do servidor. Com presença e gestos ligados ao mesmo tempo, o Windows pode recusar a segunda abertura. Use um dos dois por vez se a sua webcam não aguentar.

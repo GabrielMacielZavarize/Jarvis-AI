@@ -578,6 +578,8 @@ export interface ServerStatus {
   home?: { name: string; latitude: number; longitude: number } | null;
   /** WAK-22: "Jarvis" opens the link; silence_s of quiet closes it (0 = never). */
   wake_word?: { enabled: boolean; silence_s: number };
+  /** BAN-41: the Windows tray icon can open and close the link through the wake stream. */
+  tray?: boolean;
   /** ROT-24: with routines on, the HUD listens for the wake of a scheduled one; scheduled = how many. */
   routines?: { enabled: boolean; scheduled: number };
   /** PRO-28: reminders and background monitors speak up on their own. */

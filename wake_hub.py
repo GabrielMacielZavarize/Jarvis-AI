@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import secrets
 import time
@@ -42,6 +43,8 @@ logger = logging.getLogger("jarvis-wake")
 # jarvis.py shares a random secret with the detector, so only it can say "Jarvis" was heard.
 SECRET_ENV = "JARVIS_WAKE_SECRET"
 SECRET_HEADER = "X-Jarvis-Wake"
+# O mesmo vale para o ícone da bandeja (tray.py), com um segredo próprio.
+TRAY_SECRET_ENV = "JARVIS_TRAY_SECRET"
 # HUD aberto: tempo para ele conectar o link antes de o detector voltar a ouvir.
 PENDING_WAKE_S = 20.0
 # Navegador recém-aberto: boot do HUD + permissão de microfone + conexão.
@@ -211,6 +214,16 @@ class WakeHub:
         for client in self.clients.values():
             client.queue.put_nowait(event)
 
+    def sleep(self, reason: str = "tray") -> int:
+        """Ask every tab with a link open to close it (BAN-41: the tray icon). Returns how many."""
+        open_tabs = [client for client in self.clients.values() if client.session_active]
+        for client in open_tabs:
+            client.queue.put_nowait({"type": "sleep", "reason": reason})
+        return len(open_tabs)
+
+    def link_open(self) -> bool:
+        return any(client.session_active for client in self.clients.values())
+
     def status(self) -> dict[str, Any]:
         listening = self.detector_online() and self.listening()
         status: dict[str, Any] = {
@@ -303,6 +316,9 @@ def _config_event(settings: Settings) -> dict[str, Any]:
             wake_word=settings.wake_word_enabled,
             silence_s=settings.wake_silence_seconds if settings.wake_word_enabled else 0,
         )
+    if os.environ.get(TRAY_SECRET_ENV):
+        # BAN-41: o ícone da bandeja abre e fecha o link por este canal.
+        config["tray"] = True
     return config
 
 

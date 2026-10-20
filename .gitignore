@@ -60,3 +60,6 @@ modelos.tmp
 
 # Servidores MCP (MCP-32). Os tokens ficam no .env; o mcp.example.json é o modelo
 mcp.json
+
+# Logs do Jarvis rodando pela bandeja ou pelo pythonw (BAN-41), com rotação
+logs/

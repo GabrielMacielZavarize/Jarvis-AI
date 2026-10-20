@@ -6,6 +6,7 @@ Uso:
     python jarvis.py --gestures      # liga também o controle de janelas por gestos (webcam)
     python jarvis.py --port 8080 --no-browser
     python jarvis.py --lan           # também atende o celular em https://<ip-do-pc>:8000 (LAN-26)
+    pythonw jarvis.py --tray         # ícone na bandeja do Windows, sem console e com logs em logs/ (BAN-41)
 
 Com JARVIS_WAKE_WORD=true também sobe o detector local da palavra "Jarvis" (wake_word.py).
 """
@@ -23,10 +24,13 @@ import threading
 import webbrowser
 from pathlib import Path
 
+import tray
 from settings import SettingsError, load_settings
 
 ROOT = Path(__file__).resolve().parent
 WEB_DIR = ROOT / "web"
+# Com os logs em arquivo (bandeja/pythonw), a saída do agente e do detector passa por este processo.
+CHILD_OUTPUT: dict[str, object] = {}
 
 
 def _print_banner() -> None:
@@ -97,7 +101,7 @@ def _start_agent(mode: str, hud_url: str) -> subprocess.Popen[bytes] | None:
     print(f"[AGENTE] Iniciando worker LiveKit ({mode}) com backend {settings.backend}...")
     # O worker é outro processo: pede a webcam e os avisos (donos: o servidor do HUD) por HTTP.
     env = {**os.environ, "JARVIS_HUD_URL": hud_url}
-    return subprocess.Popen([sys.executable, str(ROOT / "agent.py"), mode], cwd=ROOT, env=env)
+    return subprocess.Popen([sys.executable, str(ROOT / "agent.py"), mode], cwd=ROOT, env=env, **CHILD_OUTPUT)
 
 
 def _lan_from_env() -> bool:
@@ -121,7 +125,7 @@ def _start_wake_word(url: str) -> subprocess.Popen[bytes] | None:
 
     os.environ[SECRET_ENV] = secrets.token_urlsafe(24)
     print("[ATIVAÇÃO] Iniciando o detector local da palavra “Jarvis” (o áudio não sai do PC)...")
-    return subprocess.Popen([sys.executable, str(ROOT / "wake_word.py"), "--server", url], cwd=ROOT)
+    return subprocess.Popen([sys.executable, str(ROOT / "wake_word.py"), "--server", url], cwd=ROOT, **CHILD_OUTPUT)
 
 
 def main() -> int:
@@ -147,7 +151,20 @@ def main() -> int:
         default="dev",
         help="Modo do worker: dev (hot reload) ou start (produção).",
     )
+    parser.add_argument(
+        "--tray",
+        action="store_true",
+        help="Ícone na bandeja do Windows, com os logs em logs/jarvis.log (ou JARVIS_TRAY=true).",
+    )
     args = parser.parse_args()
+
+    tray_on = tray.wanted(args.tray)
+    if tray_on or sys.stdout is None:
+        # pythonw não tem console: sem o arquivo, tudo o que o Jarvis escreve se perde.
+        tray.setup_file_logging()
+        CHILD_OUTPUT.update(tray.child_output())
+    if tray_on:
+        tray.new_secret()
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
@@ -178,6 +195,9 @@ def main() -> int:
         print(f"[GESTOS] {SERVICE.start()}")
 
     wake_process = _start_wake_word(url)
+    for process, name in ((agent_process, "agente"), (wake_process, "ativacao")):
+        if process is not None and CHILD_OUTPUT:
+            tray.pump_output(process, name)
     print(f"[HUD] Interface disponível em {url}")
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
@@ -193,11 +213,22 @@ def main() -> int:
         for lan in app.state.lan_urls:
             print(f"[LAN] Celular: {lan}  (pareie pelo painel CELULAR do HUD no PC)")
 
+    controller = None
+    icon = None
+    if tray_on:
+        controller = _tray_controller(app, url, args, agent_process)
+        icon = tray.start_icon(controller)
+        print("[BANDEJA] Ícone na bandeja ativo. Logs em logs/jarvis.log.")
+
     try:
         serve(app, host=args.host, port=args.port, log_level="warning", lan_ips=lan_ips)
     except KeyboardInterrupt:
         pass
     finally:
+        if icon is not None:
+            icon.stop()
+        if controller is not None:
+            controller.shutdown()
         if gestures_here:
             from gestures import SERVICE
 
@@ -207,7 +238,41 @@ def main() -> int:
         if agent_process is not None:
             _stop_agent(agent_process)
 
+    if controller is not None and controller.restart_requested:
+        print("[BANDEJA] Reiniciando o Jarvis...")
+        tray.relaunch()
     return 0
+
+
+def _tray_controller(
+    app: object, url: str, args: argparse.Namespace, agent_process: subprocess.Popen[bytes] | None
+) -> tray.TrayController:
+    def agent_alive() -> bool | None:
+        if args.no_agent:
+            return None
+        return agent_process is not None and agent_process.poll() is None
+
+    def gesture_service() -> object:
+        from gestures import SERVICE
+
+        return SERVICE
+
+    try:
+        gestures_on = args.gestures or load_settings().gestures_enabled
+    except SettingsError:
+        gestures_on = args.gestures
+
+    autostart = tray.Autostart()
+    if autostart.refresh():
+        print("[BANDEJA] Atualizei o início com o Windows para esta pasta.")
+    return tray.TrayController(
+        hud_url=url,
+        secret=os.environ[tray.SECRET_ENV],
+        agent=agent_alive,
+        gestures=gesture_service if gestures_on else None,
+        autostart=autostart,
+        stop_server=lambda: tray.stop_server(app),
+    )
 
 
 def _stop_wake_word(process: subprocess.Popen[bytes]) -> None:

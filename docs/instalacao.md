@@ -127,6 +127,7 @@ Compila o HUD na primeira execução, sobe o worker do agente (`agent.py dev`) e
 | `python jarvis.py --rebuild` | Recompila o HUD |
 | `python jarvis.py --lan` | Atende também o celular na rede de casa, com HTTPS e pareamento ([celular.md](celular.md)) |
 | `python jarvis.py --gestures` | Liga também os gestos das mãos ([gestos.md](gestos.md)) |
+| `pythonw jarvis.py --tray` | Só o ícone na bandeja do Windows, sem console e com os logs em `logs/jarvis.log` ([bandeja.md](bandeja.md)) |
 | `python gestures.py --preview` | Só os gestos, com a imagem da webcam para testar |
 | `python gestures.py --calibrate` | Calibra os gestos para a sua mão |
 

@@ -150,6 +150,12 @@ A ativação só conecta o mesmo link do botão Inicializar. As regras de email,
 
 O detector analisa o som no próprio PC e só manda ao servidor local a palavra ouvida e a pontuação. Nada é gravado, e nenhum áudio vai para o Gemini ou o LiveKit antes de o link abrir. A palavra só pode trocar a persona por uma das conhecidas, e só quando o aviso foi aceito (sem link aberto).
 
+## Ícone na bandeja
+
+As rotas `/api/tray/state` e `/api/tray/link` só respondem a quem manda o segredo aleatório que o `jarvis.py --tray` gera a cada execução, e recusam pedidos de outros sites (`Sec-Fetch-Site`). Sem o ícone ligado elas recusam tudo. Pelo ícone dá para abrir e fechar o link, nada além do que o botão do HUD já faz.
+
+O item Iniciar com o Windows só grava a entrada `Jarvis` na chave Run do seu usuário, sem pedir administrador, e o mesmo item a apaga. O `logs/jarvis.log` guarda o que o terminal mostraria, inclusive as transcrições que o agente escreve; ele fica fora do git, mas apague a pasta `logs` se for emprestar o PC.
+
 ## Personas
 
 A troca de persona do HUD (`POST /api/persona`) só grava um dos quatro nomes conhecidos no `persona.json` e tem a mesma proteção do painel Gestos: só o próprio computador ou um celular pareado, nunca outro site aberto no navegador. A persona muda o jeito de falar e a voz, nunca as travas: códigos de confirmação, recusas e permissões são as mesmas em todas.

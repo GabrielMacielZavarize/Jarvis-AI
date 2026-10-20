@@ -154,7 +154,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   const wake = useWakeWord({
     // Scheduled routines (ROT-24) and meeting reminders (AGD-27) open the link through the same
     // stream, even without the wake word.
-    enabled: Boolean(server?.wake_word?.enabled || server?.routines?.enabled || server?.calendar?.reminders),
+    enabled: Boolean(server?.wake_word?.enabled || server?.routines?.enabled || server?.calendar?.reminders || server?.tray),
     proactive: server?.proactive ?? false,
     presence: server?.presence ?? false,
     canConnect,
