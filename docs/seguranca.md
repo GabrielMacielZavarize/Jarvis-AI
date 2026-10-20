@@ -15,7 +15,7 @@ O Jarvis não tem terminal nem execução de comandos livres. Em vez disso, exis
 
 ## Confirmação por voz
 
-Enviar email, instalar app, mexer na agenda e cliques arriscados do mouse usam o mesmo código de 6 dígitos, que aparece no HUD e o Jarvis fala dígito por dígito. A fala é normalizada antes da comparação, então tudo isto vale para o código 482913:
+Enviar email, instalar app, mexer na agenda, cliques arriscados do mouse e ferramentas MCP que escrevem usam o mesmo código de 6 dígitos, que aparece no HUD e o Jarvis fala dígito por dígito. A fala é normalizada antes da comparação, então tudo isto vale para o código 482913:
 
 - "Confirmar 482 913."
 - "Jarvis, confirma 4-8-2-9-1-3."
@@ -24,7 +24,7 @@ Enviar email, instalar app, mexer na agenda e cliques arriscados do mouse usam o
 
 Não valem "pode ir", "manda", "sim", "não confirmar 482913", "confirmar 482913 e ..." (qualquer palavra fora da frase) e frases que não sejam a sua última fala.
 
-Cada tipo pede a sua palavra: "instalação" para instalar, "clique" para o mouse ("confirmar clique 482913") e "agenda" ou "evento" para a agenda ("confirmar agenda 482913"). Uma frase não serve para a outra. Se a transcrição da sua fala chegar um instante atrasada, o Jarvis espera até 3 segundos por ela.
+Cada tipo pede a sua palavra: "instalação" para instalar, "clique" para o mouse ("confirmar clique 482913"), "agenda" ou "evento" para a agenda ("confirmar agenda 482913") e "integração" para as ferramentas MCP que escrevem ("confirmar integração 482913"). Uma frase não serve para a outra. Se a transcrição da sua fala chegar um instante atrasada, o Jarvis espera até 3 segundos por ela.
 
 ## Instalação de aplicativos
 
@@ -161,6 +161,18 @@ O login é OAuth de app para computador, com a permissão mínima `calendar.even
 Ler é livre. Criar, alterar e apagar só acontecem com "confirmar agenda" e o código na sua última fala. Texto de eventos, emails ou páginas nunca confirma nada.
 
 A fila de avisos (`/api/calendar/reminders/claim`) só atende o próprio computador e recusa pedidos de outros sites. Ela guarda só título, horário, local e link dos eventos que vão começar, e cada aviso sai uma vez.
+
+## Integrações MCP
+
+Desligadas por padrão (`JARVIS_ENABLE_MCP=false`). Ligadas, cada servidor do `mcp.json` passa pelas mesmas travas:
+
+- Só as ferramentas da lista `permitir` chegam ao modelo. Um servidor sem essa lista não libera nada, e no HTTP o próprio cliente do LiveKit também filtra.
+- Ferramenta que escreve só prepara a ação. Ela roda depois de "confirmar integração" e o código na sua última fala, e o resultado de uma integração nunca confirma nada.
+- O que o servidor devolve chega ao modelo marcado como dado de um serviço externo, nunca ordem, e cortado em 6000 caracteres.
+- Os tokens ficam no `.env`. O `mcp.json` guarda só o nome da variável, e um arquivo com outro campo (como o próprio token) é recusado. Servidor HTTP precisa ser `https://`, a não ser no `127.0.0.1`.
+- Um servidor local recebe só o próprio token e as variáveis básicas do sistema (`PATH` e parecidas), não o `.env` inteiro.
+
+Um servidor MCP roda com as permissões do token que você deu a ele. Dê o mínimo: para ler issues, um token só de leitura basta.
 
 ## Avisos proativos
 

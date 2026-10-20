@@ -67,6 +67,7 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `gesture_panel.py` | Painel de gestos no Windows: janela no canto, lista de janelas e miniaturas (PrintWindow) |
 | `wake_word.py` | Detector local da palavra "Jarvis" (openWakeWord), iniciado pelo `jarvis.py` |
 | `wake_hub.py` | Ponte entre o detector e o HUD: avisa a aba por SSE ou abre o navegador |
+| `mcp_client.py` | Integrações MCP (MCP-32): `mcp.json`, filtro do `permitir`, confirmação das que escrevem e o diagnóstico |
 | `lan_access.py` | Celular na rede (LAN-26): pareamento, tokens por aparelho, bloqueio das rotas e certificados |
 | `generate_playground_token.py` | Token para o LiveKit Agents Playground |
 
@@ -82,7 +83,7 @@ E o HUD, em `web/src`:
 
 ## Arquivos locais
 
-Ficam na pasta do projeto, fora do git: `.env`, `memoria.json`, `memoria_vetores.json`, `rotinas.json`, `lembretes.json`, `layouts.json`, `telas.json`, `atalhos.json`, `gestos.json`, `gestos_calibracao.json`, `voz.json`, `persona.json`, `modelos.json`, `presenca_rosto.json`, `aparelhos.json`, `google_credentials.json`, `google_token.json` e a pasta `.jarvis-tls/`.
+Ficam na pasta do projeto, fora do git: `.env`, `memoria.json`, `memoria_vetores.json`, `rotinas.json`, `lembretes.json`, `layouts.json`, `telas.json`, `atalhos.json`, `gestos.json`, `gestos_calibracao.json`, `voz.json`, `persona.json`, `modelos.json`, `presenca_rosto.json`, `aparelhos.json`, `mcp.json`, `google_credentials.json`, `google_token.json` e a pasta `.jarvis-tls/`.
 
 ## Referências
 

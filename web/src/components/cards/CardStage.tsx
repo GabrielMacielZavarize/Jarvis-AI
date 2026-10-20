@@ -100,7 +100,7 @@ function ExpandedCard({ card }: { card: HudCard }) {
   );
 }
 
-export function CardStage({ enabledTools }: { enabledTools: string[] | null }) {
+export function CardStage({ enabledTools, hints }: { enabledTools: string[] | null; hints?: Record<string, string | null> }) {
   const cards = useHud((s) => s.cards);
   const expandedId = useHud((s) => s.expandedId);
   const dismiss = useHud((s) => s.dismissCard);
@@ -113,7 +113,7 @@ export function CardStage({ enabledTools }: { enabledTools: string[] | null }) {
       <AnimatePresence mode="popLayout" initial={false}>
         {cards.length === 0 ? (
           <motion.div key="protocols" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <ProtocolsPanel enabled={enabledTools} />
+            <ProtocolsPanel enabled={enabledTools} hints={hints} />
           </motion.div>
         ) : (
           docked.map((card) => {

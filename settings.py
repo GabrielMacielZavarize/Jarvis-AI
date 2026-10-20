@@ -51,6 +51,8 @@ DEFAULT_CALENDAR_REMINDER_MINUTES = 10
 DEFAULT_QUIET_HOURS = "23:00-07:00"
 CLOCK_RANGE = re.compile(r"^\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*(?:-|a|as|às|até|ate)\s*(\d{1,2})(?:[:h](\d{2}))?h?\s*$", re.IGNORECASE)
 DEFAULT_PRESENCE_AWAY_MINUTES = 5
+# Integrações MCP (MCP-32): quanto esperar cada servidor conectar quando o link abre.
+DEFAULT_MCP_TIMEOUT = 8.0
 # Busca pelo sentido da memória (MEM-23): modelo de embeddings da API Gemini e quanto a pergunta
 # precisa parecer com o fato para ele entrar no recall (cosseno de -1 a 1).
 DEFAULT_MEMORY_EMBEDDING_MODEL = "gemini-embedding-001"
@@ -277,6 +279,8 @@ class Settings:
     presence_away_minutes: float = DEFAULT_PRESENCE_AWAY_MINUTES
     presence_lock: bool = False
     lan_enabled: bool = False
+    mcp_enabled: bool = False
+    mcp_timeout: float = DEFAULT_MCP_TIMEOUT
     allowed_emails: tuple[str, ...] = ()
     gmail_user: str | None = None
     gmail_app_password: str | None = None
@@ -423,6 +427,10 @@ class Settings:
             ),
             presence_lock=_parse_bool(env_map.get("JARVIS_PRESENCE_LOCK"), "JARVIS_PRESENCE_LOCK", default=False),
             lan_enabled=_parse_bool(env_map.get("JARVIS_LAN"), "JARVIS_LAN", default=False),
+            mcp_enabled=_parse_bool(env_map.get("JARVIS_ENABLE_MCP"), "JARVIS_ENABLE_MCP", default=False),
+            mcp_timeout=_parse_number(
+                env_map.get("JARVIS_MCP_TIMEOUT"), "JARVIS_MCP_TIMEOUT", DEFAULT_MCP_TIMEOUT, 2, 60
+            ),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),
             livekit_url=_clean_optional(env_map.get("LIVEKIT_URL")),

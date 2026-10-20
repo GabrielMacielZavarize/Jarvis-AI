@@ -57,3 +57,6 @@ aparelhos.json.tmp
 # Modelos do Gemini em pausa (cota, sobrecarga) e de quem é a vez no rodízio
 modelos.json
 modelos.tmp
+
+# Servidores MCP (MCP-32). Os tokens ficam no .env; o mcp.example.json é o modelo
+mcp.json

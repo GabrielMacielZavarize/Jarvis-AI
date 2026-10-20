@@ -1,4 +1,4 @@
-import type { JarvisMode } from './types';
+import type { JarvisMode, McpStatus } from './types';
 
 export interface ProtocolInfo {
   id: string;
@@ -34,6 +34,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'remember', code: 'MEM-23', label: 'Memória', hint: '“Lembra que eu prefiro lo-fi.” · “O que você sabe sobre mim?”' },
   { id: 'run_routine', code: 'ROT-24', label: 'Rotinas', hint: '“Bom dia, Jarvis.” · “Modo foco.” · “Todo dia útil às 8h roda o bom dia.”' },
   { id: 'get_agenda', code: 'AGD-27', label: 'Google Agenda', hint: '“O que eu tenho hoje?” · “Marca dentista sexta às 15h.”' },
+  { id: 'mcp_status', code: 'MCP-32', label: 'Integrações MCP', hint: '“Quais issues abertas eu tenho?” · “Anota isso no Notion.”' },
 ];
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -106,6 +107,11 @@ export const TOOL_LABELS: Record<string, string> = {
   prepare_calendar_delete: 'Preparando exclusão',
   confirm_calendar_change: 'Gravando na agenda',
   cancel_calendar_change: 'Mudança cancelada',
+  // Every call to an MCP server tool reports as "mcp", with "GitHub · list_issues" as the detail.
+  mcp: 'Integração MCP',
+  mcp_status: 'Integrações MCP',
+  confirm_mcp_action: 'Ação confirmada',
+  cancel_mcp_action: 'Ação cancelada',
 };
 
 /** Protocol code of every agent tool, as in docs/protocolos.md. */
@@ -156,6 +162,7 @@ const PROTOCOL_TOOLS: Record<string, string[]> = {
   'DIT-29': ['start_dictation', 'write_here'],
   'VOZ-30': ['change_voice'],
   'TEL-31': ['explain_screen', 'copy_fix'],
+  'MCP-32': ['mcp_status', 'mcp', 'confirm_mcp_action', 'cancel_mcp_action'],
 };
 
 const TOOL_CODES = new Map(
@@ -165,6 +172,16 @@ const TOOL_CODES = new Map(
 /** "get_weather" → "WX-01"; unknown tools get a generic code. */
 export function toolCode(name: string): string {
   return TOOL_CODES.get(name) ?? 'PRT';
+}
+
+/** MCP-32 line of the Protocolos panel: each server with its tools, or why it is out. */
+export function mcpHint(mcp: McpStatus | null | undefined): string | null {
+  if (!mcp) return null;
+  if (mcp.error) return mcp.error;
+  if (mcp.servers.length === 0) return 'Nenhum servidor no mcp.json';
+  return mcp.servers
+    .map((server) => `${server.label}: ${server.problems.length ? server.problems.join('; ') : server.tools.join(', ')}`)
+    .join(' · ');
 }
 
 export const MODE_LABELS: Record<JarvisMode, string> = {
