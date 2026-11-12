@@ -568,12 +568,18 @@ kbd + kbd {
     flex-direction: column;
     justify-content: center;
     gap: 4px;
+    min-width: 0;
     height: var(--bar);
     margin: 0;
     padding: 0 2px;
     border: 0;
     font-size: 11px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
+  }
+  .nav--bar .nav__tab span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .nav--bar .nav__tab svg {
     width: 22px;
@@ -626,5 +632,295 @@ kbd + kbd {
 @media (max-width: 420px) {
   .briefing__tiles {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ───────────────────────── Olho de Deus (ODD-42) ───────────────────────── */
+
+.eye__form {
+  display: flex;
+  gap: 8px;
+}
+.eye__input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  background: rgb(var(--c-primary-rgb) / 0.06);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text);
+  outline: none;
+}
+.eye__input::placeholder {
+  font-family: var(--font-ui);
+  color: var(--text-faint);
+}
+.eye__input:focus {
+  border-color: var(--c-primary);
+  box-shadow: var(--glow);
+}
+.eye__input:disabled {
+  opacity: 0.5;
+}
+.eye__go {
+  flex: none;
+  padding: 0 16px;
+}
+.eye__kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.chip-btn--on {
+  border-color: var(--line-strong);
+  background: rgb(var(--c-primary-rgb) / 0.14);
+  color: var(--c-primary);
+}
+.eye__hint {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+.eye__about {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14.5px;
+}
+.eye__about li {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+  color: var(--text-dim);
+}
+.eye__about b {
+  font-weight: 600;
+  color: var(--text);
+}
+.eye__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.stage__empty-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+/* O resultado: igual no painel do Olho de Deus e na projeção que o Jarvis abre por voz. */
+.osint {
+  display: grid;
+  gap: 12px;
+}
+.osint__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.osint__id {
+  flex: 1;
+  min-width: 0;
+}
+.osint__kind,
+.osint__heading {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.osint__heading {
+  margin-bottom: 4px;
+  color: var(--c-accent);
+}
+.osint__heading span {
+  margin-left: 4px;
+  color: var(--text-faint);
+}
+.osint__title {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  line-height: 1.15;
+  color: var(--text);
+  text-shadow: var(--glow);
+}
+.osint__summary {
+  margin-top: 4px;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+.osint__verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border: 1px solid rgb(var(--verdict) / 0.55);
+  background: rgb(var(--verdict) / 0.1);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: rgb(var(--verdict));
+}
+.osint__verdict b {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgb(var(--verdict));
+  font-size: 12px;
+  color: #02060b;
+}
+.osint__verdict--ok {
+  --verdict: 82 255 176;
+}
+.osint__verdict--warn {
+  --verdict: 255 193 94;
+}
+.osint__verdict--danger {
+  --verdict: 255 110 110;
+}
+.osint__globe {
+  flex: none;
+  margin: 0;
+  text-align: center;
+}
+.osint__globe figcaption {
+  max-width: 110px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+.osint__section {
+  margin: 0;
+}
+.osint__row {
+  display: grid;
+  grid-template-columns: minmax(96px, 32%) minmax(0, 1fr);
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px dashed rgb(var(--c-primary-rgb) / 0.12);
+  font-size: 14.5px;
+}
+.osint__row:last-child {
+  border-bottom: 0;
+}
+.osint__row dt {
+  color: var(--text-dim);
+}
+.osint__row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+  color: var(--text);
+}
+.osint__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.osint__items li {
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+.osint__items a {
+  text-decoration-color: rgb(var(--c-primary-rgb) / 0.5);
+  text-underline-offset: 3px;
+}
+.osint__signals {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14.5px;
+}
+.osint__signals li {
+  padding: 4px 10px;
+  border-left: 2px solid var(--line-strong);
+  background: rgb(var(--c-primary-rgb) / 0.05);
+  color: var(--text);
+}
+.osint__signals li[data-level='warn'] {
+  border-left-color: rgb(255 193 94);
+  background: rgb(255 193 94 / 0.08);
+}
+.osint__signals li[data-level='danger'] {
+  border-left-color: rgb(255 110 110);
+  background: rgb(255 110 110 / 0.1);
+}
+.osint__more,
+.osint__sources {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.osint__note {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+.panel__body > .osint__note,
+.panel__body > .osint__verdict {
+  margin-top: 10px;
+}
+:root[data-theme='friday'] :is(.eye__input, .osint__verdict, .osint__items li) {
+  border-radius: 10px;
+}
+@media (max-width: 1080px) {
+  /* Numa coluna só, o resultado vem logo abaixo do campo; senha e explicação descem. */
+  .workspace[data-view='eye'] .workspace__col {
+    display: contents;
+  }
+  .workspace[data-view='eye'] .workspace__col--wide > * {
+    order: 2;
+  }
+  .eye__extra {
+    order: 3;
+  }
+}
+@media (max-width: 560px) {
+  .eye__form {
+    flex-direction: column;
+  }
+  .eye__input {
+    flex: none;
+    width: 100%;
+  }
+  .eye__go {
+    width: 100%;
+  }
+  .osint__top {
+    flex-direction: column;
   }
 }

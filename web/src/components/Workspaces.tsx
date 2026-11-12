@@ -65,7 +65,7 @@ export function SystemView({ mode, status, demo, connected, micEnabled, wake, pr
 const SHORTCUTS: { keys: string[]; what: string }[] = [
   { keys: ['Espaço'], what: 'Inicia o link (ou diga “Jarvis”)' },
   { keys: ['Ctrl', 'K'], what: 'Paleta de comandos' },
-  { keys: ['1', '2', '3'], what: 'Painel, Sistema e Ajustes' },
+  { keys: ['1', '2', '3', '4'], what: 'Painel, Olho de Deus, Sistema e Ajustes' },
   { keys: ['M'], what: 'Silencia ou ativa o microfone' },
   { keys: ['/'], what: 'Vai para a linha de comando de texto' },
   { keys: ['F'], what: 'Modo cinema' },

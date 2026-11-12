@@ -118,6 +118,12 @@ GROUPS: tuple[ToolGroup, ...] = (
         ("diary_lookup", "forget_diary"),
     ),
     ToolGroup("apps", "Instalar apps", "procurar e instalar aplicativos", ("search_apps", "prepare_app_install")),
+    ToolGroup(
+        "olho",
+        "Olho de Deus",
+        "consultas em fontes públicas: localizar IP, investigar domínio, link suspeito, CNPJ, CEP, DDD, email em vazamentos, usuário em sites, minha rede",
+        ("osint_lookup",),
+    ),
 )
 
 

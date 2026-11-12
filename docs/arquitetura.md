@@ -52,6 +52,7 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `confirmation.py` | A frase "confirmar <código>", tolerante à transcrição de voz |
 | `memory.py` | Memória entre conversas (`memoria.json`), busca pelo sentido, filtro de segredos e painel |
 | `diary.py` | Diário das conversas (DIA-36): resumo no fim do link pelo Gemini, `diario.json`, busca por data e pelo sentido e painel |
+| `osint.py` | Olho de Deus (ODD-42): consultas em fontes públicas (IP, domínio, link, CNPJ, CEP, DDD, email, usuário, rede), a trava contra SSRF, a ferramenta `osint_lookup` e as rotas `/api/osint` |
 | `voices.py` | Voz do Jarvis (VOZ-30): vozes do Gemini Live, `voz.json` (uma voz por persona) e a ferramenta `change_voice` |
 | `routines.py` | Rotinas (`rotinas.json`): passos, execução com falhas parciais, ferramentas e agendador |
 | `context_triggers.py` | Rotinas por contexto: gatilhos, sondas (processos, foco, áudio, Wi-Fi, presença) e o vigia no servidor |

@@ -11,6 +11,7 @@ import { DictationIndicator } from './components/DictationIndicator';
 import { BriefingPanel } from './components/BriefingPanel';
 import { CommandPalette } from './components/CommandPalette';
 import { ConversationPanel } from './components/ConversationPanel';
+import { EyeView } from './components/EyeView';
 import { NavTabs } from './components/NavTabs';
 import { PairingScreen } from './components/PairingScreen';
 import { Toasts } from './components/Toasts';
@@ -315,6 +316,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
         {drag.target && view === 'home' && (
           <i className="drop-line" style={{ top: drag.target.top, left: drag.target.left, width: drag.target.width }} aria-hidden />
         )}
+        {view === 'eye' && <EyeView server={server} />}
         {view === 'system' && (
           <SystemView
             mode={mode}
@@ -354,7 +356,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
       </div>
       {booted && <NavTabs variant="bar" />}
       <AmbientMode active={ambient} wakeWord={wake.enabled} />
-      <CommandPalette context={paletteContext} />
+      <CommandPalette context={paletteContext} osint={server?.osint?.enabled ?? false} />
       <Toasts />
     </main>
   );

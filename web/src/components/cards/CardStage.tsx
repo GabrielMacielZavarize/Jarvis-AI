@@ -26,6 +26,7 @@ import {
   WeatherBody,
 } from './Cards';
 import { HoloCard } from './HoloCard';
+import { OsintBody } from './OsintCard';
 
 function panelBody(card: HudCard, expanded: boolean): ReactNode {
   switch (card.kind) {
@@ -65,6 +66,8 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <CalendarBody data={card.data} />;
     case 'diary':
       return <DiaryBody id={card.id} data={card.data} />;
+    case 'osint':
+      return <OsintBody data={card.data} />;
   }
 }
 

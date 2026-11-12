@@ -1,4 +1,5 @@
 import { useAgent, useLocalParticipant, useSessionContext, useSessionMessages } from '@livekit/components-react';
+import { OSINT_LINK_MS } from '../lib/osint';
 import type { ReceivedMessage } from '@livekit/components-core';
 import {
   ConnectionState,
@@ -189,6 +190,10 @@ function handleHudEvent(event: HudEvent) {
     if (event.kind === 'pointer') {
       hud.pushCard('pointer', withPointerImage(event.data, pointerImages));
       return;
+    }
+    // ODD-42: o alvo de uma consulta com lugar conhecido ganha um arco no globo.
+    if (event.kind === 'osint' && event.data.point) {
+      hud.addGeoLinks([{ ...event.data.point, host: event.data.title }], 'source', OSINT_LINK_MS);
     }
     hud.pushCard(event.kind, event.data as never);
   }

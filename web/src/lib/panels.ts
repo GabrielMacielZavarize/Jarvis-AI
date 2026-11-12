@@ -26,6 +26,7 @@ export const PANEL_META: Record<CardKind, { code: string; title: string; aliases
   routine: { code: 'ROT-24', title: 'Rotina', aliases: ['rotinas', 'modo', 'passos', 'sequencia'] },
   calendar: { code: 'AGD-27', title: 'Agenda', aliases: ['calendario', 'compromissos', 'reuniao', 'reunioes', 'eventos'] },
   diary: { code: 'DIA-36', title: 'Diário', aliases: ['diario', 'conversas', 'historico', 'resumos', 'pendencias'] },
+  osint: { code: 'ODD-42', title: 'Olho de Deus', aliases: ['olho', 'consulta', 'osint', 'ip', 'dominio', 'link', 'cnpj', 'cep', 'vazamento', 'rede'] },
 };
 
 const PANEL_ACTIONS: HudPanelAction[] = ['list', 'close', 'close_all', 'expand', 'collapse'];
@@ -92,6 +93,8 @@ export function panelDetail(card: HudCard, now = Date.now()): string {
       return calendarDetail(card.data);
     case 'diary':
       return diaryDetail(card.data);
+    case 'osint':
+      return [card.data.label, card.data.title].filter(Boolean).join(' · ');
   }
 }
 

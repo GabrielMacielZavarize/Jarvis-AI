@@ -2,7 +2,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useHud } from '../lib/hudStore';
-import { buildCommands, freeTextCommand, type PaletteCommand, type PaletteContext, searchCommands } from '../lib/palette';
+import { buildCommands, freeTextCommand, osintCommand, type PaletteCommand, type PaletteContext, searchCommands } from '../lib/palette';
+import { openEyeWith } from './EyeView';
 
 /** Quantos comandos a lista mostra de cada vez (a busca estreita o resto). */
 const MAX_SHOWN = 60;
@@ -10,10 +11,12 @@ const MAX_SHOWN = 60;
 interface CommandPaletteProps {
   /** Tudo o que os comandos precisam para rodar; montado pelo HUD a cada abertura. */
   context: Omit<PaletteContext, 'view' | 'cinema' | 'hasCards' | 'setView' | 'setCinema' | 'clearCards'>;
+  /** ODD-42 ligado no servidor: um IP, domínio ou link digitado vira uma consulta. */
+  osint: boolean;
 }
 
 /** Ctrl+K: busca em tudo o que o HUD faz e manda texto ao Jarvis sem tirar a mão do teclado. */
-export function CommandPalette({ context }: CommandPaletteProps) {
+export function CommandPalette({ context, osint }: CommandPaletteProps) {
   const open = useHud((s) => s.palette);
   const setPalette = useHud((s) => s.setPalette);
   const view = useHud((s) => s.view);
@@ -44,8 +47,10 @@ export function CommandPalette({ context }: CommandPaletteProps) {
     // Com o link aberto, o texto digitado vai primeiro: é o que a pessoa quer na maioria das vezes
     // que nada casa de cara. Sem link ele fica no fim, só explicando por que não vai.
     const ordered = free ? (free.disabled ? [...found, free] : found.length > 0 && !found[0].disabled ? [...found, free] : [free, ...found]) : found;
-    return ordered.slice(0, MAX_SHOWN);
-  }, [open, full, query]);
+    // Um IP, domínio ou link digitado é quase sempre para consultar: vai em primeiro.
+    const lookup = osintCommand(query, osint, openEyeWith);
+    return (lookup ? [lookup, ...ordered] : ordered).slice(0, MAX_SHOWN);
+  }, [open, full, query, osint]);
 
   // O foco vai para o campo antes da próxima tecla: quem aperta Ctrl+K e já sai digitando não perde letra.
   useLayoutEffect(() => {

@@ -354,3 +354,36 @@ Detalhes em [bandeja.md](bandeja.md). Só no Windows.
 - [ ] Reinicie o Explorer pelo Gerenciador de Tarefas: o ícone volta sozinho.
 - [ ] Sair: o ícone some e não sobra nenhum `pythonw.exe` do Jarvis no Gerenciador de Tarefas. A webcam e o microfone ficam livres.
 - [ ] Com 125% ou 150% de escala no Windows, o ícone fica nítido.
+
+## 29. HUD novo: áreas, paleta e briefing
+
+Detalhes em [hud.md](hud.md).
+
+- [ ] As abas no topo trocam entre Painel, Olho de Deus, Sistema e Ajustes; as teclas `1` a `4` fazem o mesmo e `Esc` volta ao Painel.
+- [ ] `Ctrl+K` abre a paleta. Digite "mark" e Enter: a persona troca. Com o link aberto, digite uma pergunta e Enter: ela vai por texto ao Jarvis.
+- [ ] O Briefing mostra a saudação, o clima da `JARVIS_HOME_CITY` e a próxima reunião. Peça o clima por voz: o Briefing encolhe para uma linha e a projeção aparece logo abaixo.
+- [ ] Peça três ou quatro coisas seguidas (clima, diagnóstico, um timer, uma pesquisa): a coluna da esquerda rola e nenhum painel fica cortado.
+- [ ] Diminua a janela do navegador até virar uma coluna só: as abas descem para a barra de baixo e nada rola de lado.
+- [ ] No celular pareado: o botão Inicializar aparece inteiro, a barra de baixo troca de área e a conversa fica logo abaixo do núcleo.
+- [ ] Com as quatro personas, confira que as abas, a paleta e o Briefing seguem as cores e as formas de cada uma.
+
+## 30. Olho de Deus
+
+Detalhes em [olho-de-deus.md](olho-de-deus.md). Os testes automáticos usam respostas falsas das fontes: é aqui que se confere contra os serviços de verdade.
+
+- [ ] Área Olho de Deus (tecla `2`), digite `8.8.8.8`: o aviso diz "Reconhecido como IP" e o resultado traz Estados Unidos, Google e um globo pequeno. No Painel, o globo 3D desenha um arco até lá.
+- [ ] Campo vazio com o tipo IP escolhido: aparece o seu IP público e o seu provedor.
+- [ ] `github.com`: registro (criado em 2007), DNS, SPF e DMARC, certificado válido e uma lista de subdomínios. Se o crt.sh estiver lento, o resto aparece sem os subdomínios.
+- [ ] Um link encurtado (`bit.ly/...`) de um site conhecido: "Caminho do link" mostra o redirecionamento e o veredito é verde ou de atenção.
+- [ ] `http://192.168.0.1` e `http://localhost:8000`: o resultado diz que não conecta na rede local, e nada chega ao roteador nem ao próprio HUD.
+- [ ] O CNPJ `00.000.000/0001-91`: Banco do Brasil, situação ativa. Um CNPJ com um dígito trocado é recusado na hora, sem ir à rede.
+- [ ] O CEP `01310-100` (Avenida Paulista) e o DDD `48`.
+- [ ] O seu email: a lista de vazamentos, ou "não apareceu em vazamentos conhecidos".
+- [ ] Em "Senha vazada?", digite `password`: aparece que vazou milhões de vezes e o campo esvazia. Na aba Rede das ferramentas do navegador, o pedido é `/api/osint/pwned/5BAA6`, só com 5 caracteres.
+- [ ] O seu nome de usuário do GitHub: aparece em "Perfis encontrados", com link.
+- [ ] Um CPF (`123.456.789-09`) e um telefone com DDD: o botão Consultar desliga e o aviso explica que dados pessoais não são consultados.
+- [ ] Por voz: "Jarvis, de onde é o IP 1.1.1.1?" projeta o painel Olho de Deus e ele fala o resumo. "Consulta o CPF tal" é recusado.
+- [ ] "Minha rede" aparece apagado. Com `JARVIS_OSINT_NETWORK=true` e o Jarvis reiniciado, o botão mostra o IP público, as portas abertas (a 8000 do HUD entre elas) e os aparelhos do Wi-Fi.
+- [ ] `Ctrl+K`, digite um domínio: a primeira opção é "Consultar Domínio", e Enter abre a área com o resultado.
+- [ ] Com `JARVIS_ENABLE_OSINT=false`, a área mostra "Olho de Deus desligado" e o Jarvis não tem a ferramenta.
+

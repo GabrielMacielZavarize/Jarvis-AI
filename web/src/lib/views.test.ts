@@ -22,5 +22,6 @@ describe('áreas de trabalho', () => {
     expect(isView('cozinha')).toBe(false);
     expect(isView(null)).toBe(false);
     expect(viewInfo('system').label).toBe('Sistema');
+    expect(viewForKey('2')).toBe('eye');
   });
 });

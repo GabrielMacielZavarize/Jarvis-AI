@@ -224,6 +224,10 @@ O `lembretes.json` é gravado de forma atômica, com uma trava de arquivo entre 
 
 O `saude.db` fica só no PC e não guarda texto da conversa: nomes de ferramentas, modelos e palavras, números e a mensagem curta de erro da ferramenta. As rotas `/api/health` recusam Host estranho (DNS rebinding) e pedidos de outros sites (`Sec-Fetch-Site`). O celular pareado só lê. Gravar e limpar ficam com o próprio PC.
 
+## Olho de Deus
+
+As consultas do ODD-42 só usam fontes públicas e recusam CPF, telefone e outros dados pessoais de terceiros. O que vai a um endereço escolhido por você (um link, o certificado de um domínio) só conecta em IP público, no IP que foi conferido e nas portas 80, 443, 8080 e 8443, e nunca lê o corpo da página: a consulta não serve para alcançar o roteador nem outro serviço da sua rede. A senha é conferida sem sair do navegador (só os 5 primeiros caracteres do SHA-1 vão ao servidor). A consulta da rede local vem desligada e só lê o que o sistema já sabe. Detalhes em [olho-de-deus.md](olho-de-deus.md#cuidados-de-segurança).
+
 ## Celular na rede
 
 Do próprio PC (conexão vinda de `127.0.0.1`) tudo funciona como sempre. De qualquer outro endereço, nenhuma rota responde sem um aparelho pareado (`401`): token do LiveKit, status, câmera (foto e feed), prints, eventos da palavra de ativação, a documentação da API e qualquer rota que vier a existir. O bloqueio é um middleware que nega por padrão. Sem token, o celular só recebe os arquivos do HUD compilado (que não têm dados), a pergunta "estou pareado?", o envio do código e o certificado público da CA.

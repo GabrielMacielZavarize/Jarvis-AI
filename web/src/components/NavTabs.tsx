@@ -11,6 +11,12 @@ function ViewIcon({ id }: { id: ViewId }) {
         <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" />
       </>
     ),
+    eye: (
+      <>
+        <path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" />
+        <circle cx="12" cy="12" r="3" />
+      </>
+    ),
     system: <path d="M2 12h4l2.5-6 4 12 2.5-6h7" />,
     settings: (
       <>
@@ -54,10 +60,11 @@ export function NavTabs({ variant }: { variant: 'top' | 'bar' }) {
           className={`nav__tab ${view === item.id ? 'nav__tab--on' : ''}`}
           aria-current={view === item.id ? 'page' : undefined}
           title={`${item.hint} (${item.key})`}
+          aria-label={item.label}
           onClick={() => setView(item.id)}
         >
           <ViewIcon id={item.id} />
-          <span>{item.label}</span>
+          <span>{variant === 'bar' ? (item.short ?? item.label) : item.label}</span>
         </button>
       ))}
       <button

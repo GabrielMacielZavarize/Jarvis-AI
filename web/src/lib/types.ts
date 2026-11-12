@@ -25,7 +25,8 @@ export type CardKind =
   | 'explain'
   | 'routine'
   | 'calendar'
-  | 'diary';
+  | 'diary'
+  | 'osint';
 
 export interface WeatherDay {
   date: string;
@@ -430,6 +431,41 @@ export interface MicReport {
   available: string[];
 }
 
+/** ODD-42: tipos de consulta do Olho de Deus (osint.py → KINDS). */
+export type OsintKind = 'ip' | 'domain' | 'url' | 'cnpj' | 'cep' | 'ddd' | 'email' | 'username' | 'network';
+
+export interface OsintVerdict {
+  level: 'ok' | 'warn' | 'danger';
+  label: string;
+}
+
+export interface OsintList {
+  title: string;
+  items: string[];
+  total: number;
+  /** Um nível por item (sinais de um link): info, warn ou danger. */
+  levels?: string[];
+  /** Um endereço por item (perfis encontrados). */
+  links?: string[];
+}
+
+/** Resultado de uma consulta em fontes públicas (osint.py → _result). */
+export interface OsintData {
+  kind: OsintKind;
+  label: string;
+  target: string;
+  title: string;
+  summary: string;
+  verdict: OsintVerdict | null;
+  sections: { title: string; rows: [string, string][] }[];
+  lists: OsintList[];
+  /** Onde o alvo fica, para o globo. */
+  point: { name: string; lat: number; lon: number } | null;
+  notes: string[];
+  sources: string[];
+  ts: number;
+}
+
 export interface CardDataMap {
   weather: WeatherData;
   search: SearchData;
@@ -449,6 +485,7 @@ export interface CardDataMap {
   routine: RoutineData;
   calendar: CalendarData;
   diary: DiaryData;
+  osint: OsintData;
 }
 
 export type HudCard = {
@@ -621,6 +658,8 @@ export interface ServerStatus {
   presence?: boolean;
   /** LAN-26: the server also answers paired phones on the home network (--lan). */
   lan?: boolean;
+  /** ODD-42: consultas em fontes públicas; network libera a consulta da rede do próprio PC. */
+  osint?: { enabled: boolean; network: boolean };
   /** MCP-32: null when JARVIS_ENABLE_MCP=false. */
   mcp?: McpStatus | null;
   errors: string[];

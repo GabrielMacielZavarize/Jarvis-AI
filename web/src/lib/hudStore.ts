@@ -62,6 +62,8 @@ export function trimCards<T extends HudCard>(cards: T[], now = Date.now()): T[] 
 function cardKey(kind: CardKind, data: CardDataMap[CardKind]): string {
   if (kind === 'timer') return `timer:${(data as CardDataMap['timer']).id}`;
   if (kind === 'note') return `note:${(data as CardDataMap['note']).title}`;
+  // Cada consulta do Olho de Deus fica no seu painel; repetir a mesma atualiza o que já está na tela.
+  if (kind === 'osint') return `osint:${(data as CardDataMap['osint']).kind}:${(data as CardDataMap['osint']).target}`;
   return kind;
 }
 
@@ -110,6 +112,8 @@ interface HudState {
   resetVoice: () => void;
   setHome: (home: GeoPoint) => void;
   addLinks: (hosts: string[], kind: LinkKind) => void;
+  /** Arcos até lugares com coordenada conhecida (o alvo de uma consulta do Olho de Deus). */
+  addGeoLinks: (points: (GeoPoint & { host: string })[], kind: LinkKind, ttl?: number) => void;
   pruneLinks: () => void;
   closeCards: (kinds: CardKind[]) => void;
   pushCard: <K extends CardKind>(kind: K, data: CardDataMap[K]) => void;
@@ -189,6 +193,22 @@ export const useHud = create<HudState>((set, get) => ({
           ttl: LINK_TTL[kind],
         };
       });
+      const alive = s.links.filter((link) => now - link.createdAt < link.ttl + 1500);
+      return { links: [...alive, ...fresh].slice(-MAX_LINKS) };
+    }),
+  addGeoLinks: (points, kind, ttl) =>
+    set((s) => {
+      const now = Date.now();
+      const fresh = points.map((point, index) => ({
+        id: nextId('link'),
+        host: point.host,
+        label: point.name,
+        lat: point.lat,
+        lon: point.lon,
+        kind,
+        createdAt: now + index * 140,
+        ttl: ttl ?? LINK_TTL[kind],
+      }));
       const alive = s.links.filter((link) => now - link.createdAt < link.ttl + 1500);
       return { links: [...alive, ...fresh].slice(-MAX_LINKS) };
     }),

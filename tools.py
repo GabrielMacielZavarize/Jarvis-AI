@@ -792,6 +792,7 @@ HUD_PANEL_KINDS = {
     "routine": "Rotina",
     "calendar": "Agenda",
     "diary": "Diário",
+    "osint": "Olho de Deus",
 }
 LAST_PANEL = "last"
 MAX_PANEL_TARGETS = 6
@@ -1409,6 +1410,10 @@ def build_tools(settings: Settings) -> list[Any]:
 
         diary.configure(settings)
         tools.extend(diary.build_diary_tools())
+    if settings.osint_enabled:
+        from osint import build_osint_tools
+
+        tools.extend(build_osint_tools(settings.osint_network_enabled))
     if settings.routines_enabled:
         from routines import build_routine_tools
 

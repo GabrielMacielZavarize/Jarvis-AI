@@ -98,7 +98,7 @@ test('a simulação passa pelos estados sem piscar e projeta os painéis', async
   expect(errors).toEqual([]);
 });
 
-test('as abas trocam de área e o Painel volta com 1 ou Esc', async ({ page }) => {
+test('as abas trocam de área e o Painel volta com Esc', async ({ page }) => {
   const errors = await openHud(page, 'jarvis');
   const app = page.locator('main.app');
   const tabs = page.getByRole('navigation', { name: 'Áreas do HUD' });
@@ -111,7 +111,7 @@ test('as abas trocam de área e o Painel volta com 1 ou Esc', async ({ page }) =
   // O dock continua à mão em qualquer área.
   await expect(page.getByRole('button', { name: 'Simulação' })).toBeVisible();
 
-  await page.keyboard.press('3');
+  await page.keyboard.press('4');
   await expect(app).toHaveAttribute('data-view', 'settings');
   for (const panel of ['Aparência', 'Áudio', 'Atalhos']) await expect(page.getByRole('region', { name: panel })).toBeVisible();
 
@@ -182,4 +182,92 @@ test('no celular o botão principal aparece inteiro e as áreas ficam na barra d
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(errors).toEqual([]);
   await context.close();
+});
+
+
+const IP_RESULT = {
+  kind: 'ip',
+  label: 'IP',
+  target: '8.8.8.8',
+  title: '8.8.8.8',
+  summary: 'Mountain View, Califórnia, Estados Unidos · Google LLC',
+  verdict: null,
+  sections: [{ title: 'Rede', rows: [['Provedor', 'Google LLC'], ['ASN', 'AS15169']] }],
+  lists: [],
+  point: { name: 'Mountain View', lat: 37.386, lon: -122.0838 },
+  notes: ['A localização de um IP é a do provedor, não a de uma pessoa.'],
+  sources: ['ipwho.is'],
+  ts: 1_800_000_000,
+};
+
+test('o Olho de Deus reconhece o que foi digitado, consulta e recusa dados pessoais', async ({ page }) => {
+  const errors = await openHud(page, 'jarvis');
+  const asked: unknown[] = [];
+  await page.route('**/api/osint', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    asked.push(route.request().postDataJSON());
+    await route.fulfill({ json: IP_RESULT });
+  });
+
+  await page.keyboard.press('2');
+  await expect(page.locator('main.app')).toHaveAttribute('data-view', 'eye');
+  const field = page.getByRole('textbox', { name: 'O que consultar' });
+  await expect(field).toBeFocused();
+  const go = page.getByRole('button', { name: 'Consultar' });
+
+  // CPF: o botão nem liga e o aviso explica por quê.
+  await field.fill('123.456.789-09');
+  await expect(page.locator('.eye__hint')).toContainText('não consulta dados pessoais');
+  await expect(go).toBeDisabled();
+
+  await field.fill('8.8.8.8');
+  await expect(page.locator('.eye__hint')).toContainText('Reconhecido como IP');
+  await go.click();
+  const result = page.getByRole('region', { name: 'IP', exact: true });
+  await expect(result).toContainText('Mountain View');
+  await expect(result).toContainText('AS15169');
+  await expect(result.locator('canvas')).toBeVisible();
+  expect(asked).toEqual([{ kind: null, target: '8.8.8.8' }]);
+
+  // A rede do PC vem desligada no .env de fábrica.
+  await expect(page.getByRole('button', { name: 'Minha rede' })).toBeDisabled();
+  expect(errors).toEqual([]);
+});
+
+test('a senha é conferida sem sair do navegador', async ({ page }) => {
+  const errors = await openHud(page, 'jarvis');
+  const requested: string[] = [];
+  await page.route('**/api/osint/pwned/*', async (route) => {
+    requested.push(new URL(route.request().url()).pathname);
+    await route.fulfill({ json: { prefix: '5BAA6', suffixes: [['1E4C9B93F3F0682250B6CF8331B7EE68FD8', 9545824]] } });
+  });
+
+  await page.keyboard.press('2');
+  const field = page.getByLabel('Senha para conferir em vazamentos');
+  await field.fill('password');
+  await page.getByRole('button', { name: 'Conferir' }).click();
+  await expect(page.locator('.osint__verdict--danger')).toContainText('9.545.824');
+  // Só os 5 primeiros caracteres do SHA-1 foram ao servidor, e o campo esvaziou.
+  expect(requested).toEqual(['/api/osint/pwned/5BAA6']);
+  await expect(field).toHaveValue('');
+
+  await field.fill('uma senha que ninguém usou 8f3k!');
+  await page.getByRole('button', { name: 'Conferir' }).click();
+  await expect(page.locator('.osint__verdict--ok')).toBeVisible();
+  expect(requested.every((path) => /^\/api\/osint\/pwned\/[0-9A-F]{5}$/.test(path))).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('a paleta consulta um domínio digitado', async ({ page }) => {
+  await openHud(page, 'jarvis');
+  await page.route('**/api/osint', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    await route.fulfill({ json: { ...IP_RESULT, kind: 'domain', label: 'Domínio', target: 'github.com', title: 'github.com', point: null } });
+  });
+  await page.keyboard.press('Control+k');
+  await page.keyboard.type('github.com');
+  await expect(page.getByRole('option').first()).toContainText('Consultar Domínio: github.com');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('main.app')).toHaveAttribute('data-view', 'eye');
+  await expect(page.getByRole('region', { name: 'Domínio', exact: true })).toContainText('github.com');
 });

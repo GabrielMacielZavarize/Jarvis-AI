@@ -3,6 +3,7 @@
  * microfone, personas, ajustes) e os protocolos do Jarvis, com um exemplo que vai por texto.
  */
 import { PROTOCOLS } from './catalog';
+import { guessKind, kindLabel } from './osint';
 import type { HudPrefs, QualityPref } from './prefs';
 import { QUALITY_LABELS } from './prefs';
 import { THEMES, type ThemeId } from './themes';
@@ -226,6 +227,21 @@ export function searchCommands(commands: PaletteCommand[], query: string): Palet
     .filter((item) => item.value > 0)
     .sort((a, b) => Number(Boolean(a.command.disabled)) - Number(Boolean(b.command.disabled)) || b.value - a.value || a.index - b.index)
     .map((item) => item.command);
+}
+
+/** "Consultar no Olho de Deus" quando o texto tem cara de IP, domínio, link, CNPJ, CEP ou email. */
+export function osintCommand(query: string, enabled: boolean, consult: (target: string) => void): PaletteCommand | null {
+  const text = query.trim();
+  const kind = guessKind(text);
+  // Um nome solto (usuário) ou dois dígitos (DDD) casam com quase tudo que se digita: ficam para a área.
+  if (!enabled || !kind || kind === 'username' || kind === 'ddd') return null;
+  return {
+    id: 'osint:lookup',
+    group: 'Olho de Deus',
+    label: `Consultar ${kindLabel(kind)}: ${text.length > 48 ? `${text.slice(0, 47)}…` : text}`,
+    hint: 'Fontes públicas',
+    run: () => consult(text),
+  };
 }
 
 /** "Enviar ao Jarvis" com o texto digitado, quando há um link aberto para recebê-lo. */

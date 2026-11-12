@@ -15,8 +15,9 @@ As abas no topo (no celular, a barra de baixo) trocam o que o HUD mostra. O dock
 | Área | Tecla | O que tem |
 | --- | --- | --- |
 | Painel | `1` | O núcleo no centro, o Briefing e as Projeções à esquerda, a Transcrição e o Registro à direita |
-| Sistema | `2` | Estado do link e do modelo, tempo de resposta, voz, ativação por voz, presença, o painel de Saúde, o do Celular, os Gestos e a lista de Protocolos com o que está ligado no `.env` |
-| Ajustes | `3` | Aparência (persona, qualidade da cena, legenda, modo ambiente, som do reator), Áudio (microfone, medidores e sons da interface) e a lista de atalhos |
+| Olho de Deus | `2` | Consultas em fontes públicas: um campo que reconhece IP, domínio, link, CNPJ, CEP, DDD, email ou usuário, a checagem de senha vazada e os resultados da sessão ([olho-de-deus.md](olho-de-deus.md)) |
+| Sistema | `3` | Estado do link e do modelo, tempo de resposta, voz, ativação por voz, presença, o painel de Saúde, o do Celular, os Gestos e a lista de Protocolos com o que está ligado no `.env` |
+| Ajustes | `4` | Aparência (persona, qualidade da cena, legenda, modo ambiente, som do reator), Áudio (microfone, medidores e sons da interface) e a lista de atalhos |
 
 Fora do Painel o núcleo recua para o fundo e os painéis da área ocupam a tela. `Esc` volta ao Painel.
 
@@ -36,11 +37,11 @@ Também tem a transcrição ao vivo da conversa (com hora), a linha de comando p
 
 ### Paleta de comandos
 
-`Ctrl+K` (ou a lupa nas abas e no dock) abre uma busca com tudo o que o HUD faz por clique: ir para uma área, iniciar e encerrar o link, microfone, simulação, as quatro personas, modo cinema, legenda, modo ambiente, qualidade da cena e restaurar os painéis. Os protocolos ligados também aparecem, cada um com uma frase de exemplo que vai por texto ao Jarvis. Com o link aberto, o que você digitar e não for um comando vira "Enviar ao Jarvis". Setas navegam, `Enter` executa e `Esc` fecha. A busca ignora acentos.
+`Ctrl+K` (ou a lupa nas abas e no dock) abre uma busca com tudo o que o HUD faz por clique: ir para uma área, iniciar e encerrar o link, microfone, simulação, as quatro personas, modo cinema, legenda, modo ambiente, qualidade da cena e restaurar os painéis. Os protocolos ligados também aparecem, cada um com uma frase de exemplo que vai por texto ao Jarvis. Digitar um IP, domínio, link, CNPJ, CEP ou email oferece a consulta no Olho de Deus como primeira opção. Com o link aberto, o que você digitar e não for um comando vira "Enviar ao Jarvis". Setas navegam, `Enter` executa e `Esc` fecha. A busca ignora acentos.
 
 ## Ajustes
 
-É a terceira área (tecla `3`, ou o botão Ajustes do painel Sistema). Tudo que você muda ali é salvo no navegador.
+É a última área (tecla `4`, ou o botão Ajustes do painel Sistema). Tudo que você muda ali é salvo no navegador.
 
 ### Personas
 
@@ -92,7 +93,7 @@ O seletor de microfone e os medidores de voz ficam no painel Áudio. Se o microf
 | --- | --- |
 | `Espaço` | Inicia o link (ou diga "Jarvis", com a [palavra de ativação](voz.md#palavra-de-ativação)) |
 | `Ctrl+K` | Paleta de comandos |
-| `1` `2` `3` | Painel, Sistema e Ajustes |
+| `1` `2` `3` `4` | Painel, Olho de Deus, Sistema e Ajustes |
 | `M` | Silencia ou ativa o microfone |
 | `/` | Vai para a linha de comando de texto |
 | `F` | Modo cinema (de novo para voltar) |

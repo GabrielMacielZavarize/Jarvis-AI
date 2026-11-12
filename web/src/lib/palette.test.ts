@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildCommands, examplePhrase, freeTextCommand, normalizeText, type PaletteContext, searchCommands } from './palette';
+import { buildCommands, examplePhrase, freeTextCommand, normalizeText, osintCommand, type PaletteContext, searchCommands } from './palette';
 import { DEFAULT_PREFS } from './prefs';
 import { VIEWS } from './views';
 
@@ -121,6 +121,28 @@ describe('texto livre', () => {
   it('fica apagado sem link e some com texto curto demais', () => {
     expect(freeTextCommand(context(), 'oi jarvis')?.disabled).toBeTruthy();
     expect(freeTextCommand(context({ connected: true }), 'a')).toBeNull();
+  });
+});
+
+describe('consulta pelo Olho de Deus', () => {
+  it('oferece consultar o que tem formato de IP, domínio, link, CNPJ, CEP ou email', () => {
+    const consult = vi.fn();
+    const command = osintCommand(' 8.8.8.8 ', true, consult);
+    expect(command?.label).toBe('Consultar IP: 8.8.8.8');
+    command?.run();
+    expect(consult).toHaveBeenCalledWith('8.8.8.8');
+    expect(osintCommand('github.com', true, consult)?.label).toContain('Domínio');
+    expect(osintCommand('https://bit.ly/x', true, consult)?.label).toContain('Link');
+    expect(osintCommand('00.000.000/0001-91', true, consult)?.label).toContain('CNPJ');
+  });
+
+  it('não atrapalha a busca de comandos nem aparece com o protocolo desligado', () => {
+    const consult = vi.fn();
+    // Uma palavra solta seria "usuário" e dois dígitos, "DDD": comuns demais na paleta.
+    expect(osintCommand('ajustes', true, consult)).toBeNull();
+    expect(osintCommand('48', true, consult)).toBeNull();
+    expect(osintCommand('123.456.789-09', true, consult)).toBeNull();
+    expect(osintCommand('8.8.8.8', false, consult)).toBeNull();
   });
 });
 

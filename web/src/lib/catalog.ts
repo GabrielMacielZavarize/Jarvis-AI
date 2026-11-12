@@ -35,6 +35,7 @@ export const PROTOCOLS: ProtocolInfo[] = [
   { id: 'run_routine', code: 'ROT-24', label: 'Rotinas', hint: '“Bom dia, Jarvis.” · “Modo foco.” · “Todo dia útil às 8h roda o bom dia.”' },
   { id: 'get_agenda', code: 'AGD-27', label: 'Google Agenda', hint: '“O que eu tenho hoje?” · “Marca dentista sexta às 15h.”' },
   { id: 'diary_lookup', code: 'DIA-36', label: 'Diário das conversas', hint: '“O que eu te pedi ontem?” · “Onde paramos no projeto do Jarvis?”' },
+  { id: 'osint_lookup', code: 'ODD-42', label: 'Olho de Deus', hint: '“De onde é o IP 8.8.8.8?” · “Esse link é golpe?” · “Consulta esse CNPJ.”' },
   { id: 'mcp_status', code: 'MCP-32', label: 'Integrações MCP', hint: '“Quais issues abertas eu tenho?” · “Anota isso no Notion.”' },
   { id: 'watch_screen', code: 'OLH-35', label: 'Vigia de janela', hint: '“Fica de olho no terminal.” · “Para de vigiar.”' },
 ];
@@ -58,6 +59,7 @@ export const TOOL_LABELS: Record<string, string> = {
   recall: 'Consulta de memória',
   forget: 'Apagando memória',
   diary_lookup: 'Consulta ao diário',
+  osint_lookup: 'Consulta em fontes públicas',
   forget_diary: 'Apagando do diário',
   list_routines: 'Rotinas salvas',
   run_routine: 'Executando rotina',
@@ -174,6 +176,7 @@ const PROTOCOL_TOOLS: Record<string, string[]> = {
   'FER-33': ['use_tools'],
   'OLH-35': ['watch_screen'],
   'DIA-36': ['diary_lookup', 'forget_diary'],
+  'ODD-42': ['osint_lookup'],
 };
 
 const TOOL_CODES = new Map(

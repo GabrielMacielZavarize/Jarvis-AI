@@ -36,6 +36,7 @@ from gesture_engine import CALIBRATION_FILE as GESTURE_CALIBRATION_FILE
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
 from health import HealthStore, build_health_router
+from osint import build_osint_router
 from routines import RoutineScheduler
 from context_triggers import ContextWatcher
 from proactive import ProactiveEngine, build_proactive_router
@@ -98,6 +99,7 @@ PC_TOOL_NAMES = [
 ]
 MEMORY_TOOL_NAMES = ["remember", "recall", "forget"]
 DIARY_TOOL_NAMES = ["diary_lookup", "forget_diary"]
+OSINT_TOOL_NAMES = ["osint_lookup"]
 ROUTINE_TOOL_NAMES = [
     "list_routines",
     "run_routine",
@@ -525,6 +527,7 @@ def create_app(
             TOOL_NAMES
             + (MEMORY_TOOL_NAMES if settings.memory_enabled else [])
             + (DIARY_TOOL_NAMES if settings.diary_enabled else [])
+            + (OSINT_TOOL_NAMES if settings.osint_enabled else [])
             + (ROUTINE_TOOL_NAMES if settings.routines_enabled else [])
             + (PC_TOOL_NAMES if settings.pc_control_enabled else [])
             + (GESTURE_TOOL_NAMES if settings.gestures_enabled else [])
@@ -554,6 +557,7 @@ def create_app(
             "computer_use": settings.computer_use_enabled,
             "memory": settings.memory_enabled,
             "diary": settings.diary_enabled,
+            "osint": {"enabled": settings.osint_enabled, "network": settings.osint_network_enabled},
             "voice": _active_voice(settings),
             "routines": {
                 "enabled": settings.routines_enabled,
@@ -770,6 +774,8 @@ def create_app(
             pass
 
     app.include_router(build_health_router(health, current_settings, _require_local))
+    # ODD-42: o painel Olho de Deus do HUD consulta por aqui (o agente chama o osint.py direto).
+    app.include_router(build_osint_router(current_settings, _require_local))
     app.state.base_url = None
     app.state.proactive = None
     app.include_router(build_proactive_router(lambda: app.state.proactive))

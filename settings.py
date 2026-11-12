@@ -297,6 +297,9 @@ class Settings:
     mcp_enabled: bool = False
     mcp_timeout: float = DEFAULT_MCP_TIMEOUT
     diary_enabled: bool = True
+    # ODD-42: consultas em fontes públicas (IP, domínio, link, CNPJ...) e, à parte, a rede do próprio PC.
+    osint_enabled: bool = True
+    osint_network_enabled: bool = False
     # Painel de saúde (SAU-40): histórico local em saude.db.
     health_enabled: bool = True
     allowed_emails: tuple[str, ...] = ()
@@ -462,6 +465,8 @@ class Settings:
                 env_map.get("JARVIS_MCP_TIMEOUT"), "JARVIS_MCP_TIMEOUT", DEFAULT_MCP_TIMEOUT, 2, 60
             ),
             diary_enabled=_parse_bool(env_map.get("JARVIS_DIARY"), "JARVIS_DIARY", default=True),
+            osint_enabled=_parse_bool(env_map.get("JARVIS_ENABLE_OSINT"), "JARVIS_ENABLE_OSINT", default=True),
+            osint_network_enabled=_parse_bool(env_map.get("JARVIS_OSINT_NETWORK"), "JARVIS_OSINT_NETWORK", default=False),
             health_enabled=_parse_bool(env_map.get("JARVIS_HEALTH"), "JARVIS_HEALTH", default=True),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),

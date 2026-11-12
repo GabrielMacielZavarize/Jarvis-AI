@@ -41,6 +41,7 @@ Cada ferramenta do Jarvis tem um código de protocolo, que aparece no HUD (na pl
 
 | MCP-32 | `mcp_status`, `confirm_mcp_action`, `cancel_mcp_action` e as ferramentas liberadas no `mcp.json` (`github_list_issues`...) | Usa ferramentas de servidores MCP (GitHub, Notion, Spotify...). Só as do `permitir` chegam ao modelo, e as que escrevem pedem código | "Quais issues abertas eu tenho no Jarvis-AI?", "Procura a página da reunião no Notion.", "Quais integrações você tem?" |
 | FER-33 | `use_tools` | Ferramentas sob demanda: o modelo pede um grupo (agenda, janelas, mouse, cada integração MCP...) quando o assunto chega. Quem chama é o próprio modelo | "O que eu tenho hoje?" com a agenda fora do núcleo: "Um instante." e a resposta |
+| ODD-42 | `osint_lookup` | Olho de Deus: consultas em fontes públicas. IP, domínio, link suspeito, CNPJ, CEP, DDD, email em vazamentos, usuário em sites e a rede do próprio PC. Não consulta dados pessoais de terceiros ([olho-de-deus.md](olho-de-deus.md)) | "De onde é o IP 8.8.8.8?", "Esse link é golpe?", "Consulta esse CNPJ.", "Meu email apareceu em algum vazamento?" |
 | SAU-40 | Nenhuma (painel do HUD) | Histórico local de tempo de resposta, ativações, falhas e modelos, com sugestões de ajuste do `.env` | Abra o painel Saúde no HUD |
 
 A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm ferramenta de voz. Estão em [voz.md](voz.md#palavra-de-ativação) e [celular.md](celular.md).
@@ -60,6 +61,7 @@ A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm 
 | PRO | `JARVIS_PROACTIVE=true` |
 | MEM | Vem ligado. `JARVIS_ENABLE_MEMORY=false` desliga |
 | DIA | Vem ligado. `JARVIS_DIARY=false` desliga. O resumo precisa da `GOOGLE_API_KEY` (veja [diario.md](diario.md)) |
+| ODD | Vem ligado. `JARVIS_ENABLE_OSINT=false` desliga. A consulta da rede do PC precisa de `JARVIS_OSINT_NETWORK=true` |
 | ROT | Vem ligado. `JARVIS_ENABLE_ROUTINES=false` desliga. Os passos que mexem no PC precisam de `JARVIS_ENABLE_PC_CONTROL=true`. `JARVIS_CONTEXT_TRIGGERS=false` desliga só os gatilhos por contexto |
 | WAK-22 | `JARVIS_WAKE_WORD=true` |
 | LAN-26 | `python jarvis.py --lan` ou `JARVIS_LAN=true` |

@@ -23,6 +23,7 @@ BASE_TOOLS = [
     "forget",
     "diary_lookup",
     "forget_diary",
+    "osint_lookup",
     "list_routines",
     "run_routine",
     "confirm_routine_step",
