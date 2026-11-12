@@ -20,11 +20,12 @@ import hashlib
 import io
 import ipaddress
 import json
+import os
 import secrets
 import socket
 import threading
 import time
-from collections.abc import Awaitable, Callable, MutableMapping
+from collections.abc import Awaitable, Callable, Mapping, MutableMapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,15 @@ TEST_PEER = "testclient"
 # Rotas que um aparelho sem token pode chamar: saber se está pareado, parear e baixar o certificado.
 PUBLIC_API = {("GET", "/api/lan/me"), ("POST", "/api/lan/pair"), ("GET", "/api/lan/ca.crt")}
 UNPAIRED = "Aparelho não pareado. Abra o HUD no PC e use o código de pareamento."
+# Nomes pelos quais o próprio PC chama o HUD. Qualquer outro nome chegando pelo loopback é uma
+# página de outro site apontando o DNS para 127.0.0.1 (DNS rebinding).
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+# Host falso do TestClient do Starlette; só vale junto com o peer falso dele.
+TEST_HOST = "testserver"
+# Nomes a mais aceitos no Host (CSV), para quem põe um proxy ou túnel na frente do HUD.
+ALLOWED_HOSTS_ENV = "JARVIS_ALLOWED_HOSTS"
+UNKNOWN_HOST = "Host desconhecido: o HUD do Jarvis só atende pelo endereço do próprio PC."
+CROSS_SITE = "Pedido de outro site bloqueado."
 
 Scope = MutableMapping[str, Any]
 Message = MutableMapping[str, Any]
@@ -222,6 +232,37 @@ def _header(scope: Scope, name: bytes) -> str | None:
     return None
 
 
+def host_of(scope: Scope) -> str:
+    """Nome do cabeçalho Host, sem porta e sem os colchetes do IPv6 ("" quando não veio)."""
+    raw = (_header(scope, b"host") or "").strip().lower()
+    if raw.startswith("["):
+        return raw[1:].partition("]")[0]
+    return raw.rpartition(":")[0] if raw.count(":") == 1 else raw
+
+
+def extra_hosts(env: Mapping[str, str] | None = None) -> set[str]:
+    raw = (os.environ if env is None else env).get(ALLOWED_HOSTS_ENV, "")
+    return {name.strip().strip("[]").lower() for name in raw.split(",") if name.strip()}
+
+
+def _is_ip(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host.split("%")[0])
+    except ValueError:
+        return False
+    return True
+
+
+def host_allowed(host: str, peer: str | None) -> bool:
+    """O Host é um nome que o Jarvis conhece? Quem chega pelo loopback usa 127.0.0.1/localhost; o
+    celular usa o IP do PC ou um nome .local. Um domínio de internet nunca é nenhum dos dois."""
+    if host in extra_hosts():
+        return True
+    if is_loopback_peer(peer):
+        return host in LOCAL_HOSTS or (peer == TEST_PEER and host == TEST_HOST)
+    return _is_ip(host) or host.endswith(".local")
+
+
 def _token_from(scope: Scope) -> str | None:
     auth = _header(scope, b"authorization")
     if auth and auth.lower().startswith("bearer "):
@@ -269,18 +310,30 @@ class LanGuard:
             await self.app(scope, receive, send)
             return
         client = scope.get("client")
-        if is_loopback_peer(client[0] if client else None):
-            await self.app(scope, receive, send)
+        peer = client[0] if client else None
+        websocket = scope["type"] == "websocket"
+        # DNS rebinding: o navegador manda o nome do site atacante no Host mesmo quando o DNS dele
+        # aponta para este PC. Sem isto, /api/token entregava um token do LiveKit a qualquer página.
+        if not host_allowed(host_of(scope), peer):
+            await (send({"type": "websocket.close", "code": 1008}) if websocket else _deny(send, 403, UNKNOWN_HOST))
             return
-        if scope["type"] == "websocket":
+        site = _header(scope, b"sec-fetch-site")
+        if is_loopback_peer(peer):
+            # Outra página aberta no navegador não chama a API do HUD (abrir o HUD por um link pode).
+            if not websocket and scope["path"].startswith("/api/") and site not in (None, "same-origin", "none"):
+                await _deny(send, 403, CROSS_SITE)
+                return
+            await self.app(scope, receive, _with_security_headers(send))
+            return
+        if websocket:
             await send({"type": "websocket.close", "code": 1008})
             return
 
         method, path = scope["method"], scope["path"]
-        site = _header(scope, b"sec-fetch-site")
         if site not in (None, "same-origin", "none"):
-            await _deny(send, 403, "Pedido de outro site bloqueado.")
+            await _deny(send, 403, CROSS_SITE)
             return
+        send = _with_security_headers(send)
         device = self.registry().authenticate(_token_from(scope))
         if device is None:
             public = (method, path) in PUBLIC_API or (method in ("GET", "HEAD") and _is_static(path, self.web_dist))
@@ -321,6 +374,48 @@ def _caused_by_revocation(exc: BaseException) -> bool:
     return exc.__cause__ is not None and _caused_by_revocation(exc.__cause__)
 
 
+# O HUD só carrega o próprio código e não entra em iframe de ninguém. O LiveKit (sinalização e
+# regiões) fala por https/wss; estilos em linha são do React e das animações.
+CONTENT_SECURITY_POLICY = "; ".join(
+    (
+        "default-src 'self'",
+        "script-src 'self' 'wasm-unsafe-eval'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob: https:",
+        "font-src 'self' data:",
+        "media-src 'self' blob: mediastream:",
+        "worker-src 'self' blob:",
+        "connect-src 'self' https: wss: ws:",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    )
+)
+SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
+    (b"content-security-policy", CONTENT_SECURITY_POLICY.encode()),
+    (b"x-content-type-options", b"nosniff"),
+    (b"x-frame-options", b"DENY"),
+    (b"referrer-policy", b"no-referrer"),
+    (b"cross-origin-opener-policy", b"same-origin"),
+    (b"permissions-policy", b"geolocation=(), payment=(), usb=(), bluetooth=()"),
+)
+
+
+def _with_security_headers(send: Send) -> Send:
+    """Põe os cabeçalhos de segurança em toda resposta (sem trocar os que a rota já definiu)."""
+
+    async def wrapped(message: Message) -> None:
+        if message["type"] == "http.response.start":
+            headers = list(message.get("headers") or [])
+            present = {key.lower() for key, _ in headers}
+            headers.extend(item for item in SECURITY_HEADERS if item[0] not in present)
+            message = {**message, "headers": headers}
+        await send(message)
+
+    return wrapped
+
+
 async def _deny(send: Send, status: int, detail: str) -> None:
     body = json.dumps({"detail": detail}, ensure_ascii=False).encode()
     await send(
@@ -339,9 +434,6 @@ async def _deny(send: Send, status: int, detail: str) -> None:
 class PairRequest(BaseModel):
     code: str = Field(min_length=1, max_length=12)
     name: str | None = Field(default=None, max_length=80)
-
-
-LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 def _require_pc(request: Request) -> None:

@@ -246,6 +246,14 @@ O servidor do HUD escuta apenas em `127.0.0.1` por padrão. Para usar o celular,
 
 O `.env` nunca vai para o navegador. O `/api/status` só informa se cada item está configurado.
 
+### Só o HUD fala com o servidor
+
+Toda rota passa por três checagens antes de responder (`lan_access.py`):
+
+- **Host conhecido.** Quem chega pelo próprio PC precisa usar `127.0.0.1` ou `localhost`; o celular, o IP do PC ou um nome `.local`. Um site que aponta o DNS dele para `127.0.0.1` (DNS rebinding) chega com o próprio nome no `Host` e recebe 403 em tudo, inclusive no `/api/token`, que antes entregava a ele um token do LiveKit para falar com o Jarvis no seu lugar. Com um proxy ou túnel na frente do HUD, ponha o nome dele em `JARVIS_ALLOWED_HOSTS` (separados por vírgula).
+- **Nada de outro site.** Uma página de outro site aberta no navegador não chama nenhuma rota `/api/` (`Sec-Fetch-Site`). Abrir o HUD por um link continua valendo.
+- **Cabeçalhos de segurança.** As respostas levam uma `Content-Security-Policy` (o HUD só roda o próprio código, sem `eval` e sem script em linha), `X-Frame-Options: DENY` e `frame-ancestors 'none'` (ninguém põe o HUD num iframe para roubar um clique), `X-Content-Type-Options: nosniff` e `Referrer-Policy: no-referrer`.
+
 ## Email
 
 O email vem desligado. Para ligar:

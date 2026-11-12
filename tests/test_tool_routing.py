@@ -334,7 +334,7 @@ class PromptAndRuntimeTests(unittest.TestCase):
         self.assertEqual(names(session.updated[0].tools), ["get_current_time"])
 
 
-# ───────────── livekit-agents 1.8.8: o que o update_tools faz com o Gemini Live ─────────────
+# ───────────── livekit-agents 1.8.11: o que o update_tools faz com o Gemini Live ─────────────
 
 
 class FakeLiveConnection:
@@ -440,9 +440,10 @@ class GeminiUpdateToolsTests(unittest.IsolatedAsyncioTestCase):
         config, second = self.client.connections[1]
         self.assertTrue(first.closed.is_set())
         self.assertEqual(declared(config), ["get_weather", "set_timer"])
-        self.assertEqual(config.session_resumption.handle, "handle-1")
-        # O histórico volta pelo handle; só o que veio depois dele é reenviado.
-        self.assertEqual(second.sent[0], ["Marca dentista sexta."])
+        # Uma sessão retomada pelo handle ficaria com as ferramentas antigas: desde o 1.8.11 o plugin
+        # abre uma sessão nova de verdade e reenvia a conversa inteira em texto.
+        self.assertIsNone(config.session_resumption.handle)
+        self.assertEqual(second.sent[0], ["Que horas são?", "São dez horas.", "Marca dentista sexta."])
         self.assertLess(elapsed, 1.0)  # custo local; o real é o handshake com o Google
 
     async def test_reply_asked_right_after_update_tools_goes_to_the_new_session(self) -> None:

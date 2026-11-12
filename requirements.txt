@@ -1,8 +1,9 @@
 # [mcp]: integrações por servidores MCP (MCP-32), ligadas com JARVIS_ENABLE_MCP=true
-livekit-agents[mcp]
+# 1.8.11 ou mais novo: antes disso a troca de ferramentas (FER-33) retomava a sessão do Gemini com as antigas
+livekit-agents[mcp]>=1.8.11
 livekit-plugins-openai
 livekit-plugins-silero
-livekit-plugins-google
+livekit-plugins-google>=1.8.11
 livekit-plugins-noise-cancellation
 ddgs
 requests

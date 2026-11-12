@@ -268,6 +268,52 @@ class LanServerTests(unittest.TestCase):
         self.assertEqual(rebinding.post("/api/lan/pairing").status_code, 403)
         self.assertEqual(rebinding.get("/api/lan/info").status_code, 403)
 
+    def test_dns_rebinding_gets_nothing_from_the_pc(self) -> None:
+        """Um site com o DNS apontado para 127.0.0.1 chega pelo loopback com o próprio nome no Host:
+        nem o token do LiveKit, nem o status, nem os arquivos do HUD."""
+        rebinding = TestClient(self.app, base_url="http://evil.example:8000")
+        for method, path in (("POST", "/api/token"), ("GET", "/api/status"), ("GET", "/api/persona"), ("GET", "/")):
+            response = rebinding.request(method, path)
+            self.assertEqual(response.status_code, 403, path)
+            self.assertIn("Host desconhecido", response.json()["detail"])
+        for base in (LOCAL, "http://localhost:8000", "http://[::1]:8000"):
+            self.assertEqual(TestClient(self.app, base_url=base).get("/api/status").status_code, 200, base)
+
+    def test_allowed_hosts_env_adds_a_proxy_name(self) -> None:
+        proxied = TestClient(self.app, base_url="http://jarvis.tailnet.example")
+        self.assertEqual(proxied.get("/api/status").status_code, 403)
+        with patch.dict(os.environ, {"JARVIS_ALLOWED_HOSTS": "outro.example, Jarvis.Tailnet.Example"}):
+            self.assertEqual(proxied.get("/api/status").status_code, 200)
+
+    def test_other_sites_cannot_call_the_api_of_the_pc(self) -> None:
+        """Uma página de outro site aberta no navegador não pede token nem lê o status."""
+        for site in ("cross-site", "same-site"):
+            headers = {"Sec-Fetch-Site": site}
+            self.assertEqual(self.pc.post("/api/token", headers=headers).status_code, 403, site)
+            self.assertEqual(self.pc.get("/api/status", headers=headers).status_code, 403, site)
+        self.assertEqual(self.pc.get("/api/status", headers={"Sec-Fetch-Site": "same-origin"}).status_code, 200)
+        # Abrir o HUD por um link de outro site continua valendo (é só a página, sem dados).
+        self.assertNotEqual(self.pc.get("/", headers={"Sec-Fetch-Site": "cross-site"}).status_code, 403)
+
+    def test_phone_host_must_be_an_address_of_the_house(self) -> None:
+        phone = self.pair_phone()
+        self.assertEqual(phone.get("/api/status").status_code, 200)
+        named = TestClient(self.app, base_url="https://jarvis-pc.local:8000", client=PHONE_PEER)
+        self.assertEqual(named.get("/api/lan/me").status_code, 200)
+        rebinding = TestClient(self.app, base_url="https://evil.example:8000", client=PHONE_PEER)
+        self.assertEqual(rebinding.get("/api/lan/me").status_code, 403)
+
+    def test_security_headers_on_every_answer(self) -> None:
+        for client, path in ((self.pc, "/api/status"), (self.pc, "/"), (self.phone(), "/api/lan/me")):
+            headers = client.get(path).headers
+            self.assertEqual(headers["x-content-type-options"], "nosniff", path)
+            self.assertEqual(headers["x-frame-options"], "DENY", path)
+            self.assertEqual(headers["referrer-policy"], "no-referrer", path)
+            policy = headers["content-security-policy"]
+            self.assertIn("script-src 'self'", policy)
+            self.assertIn("frame-ancestors 'none'", policy)
+            self.assertNotIn("'unsafe-eval'", policy)
+
     def test_pairing_needs_lan_mode(self) -> None:
         self.app.state.lan_urls = []
         self.assertEqual(self.pc.post("/api/lan/pairing").status_code, 409)

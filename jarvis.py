@@ -74,6 +74,10 @@ def _dependencies_stale(web_dir: Path | None = None) -> bool:
 
 def _port_is_free(host: str, port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        if os.name != "nt":
+            # Como o uvicorn: uma porta ainda em TIME_WAIT (Jarvis recém-fechado) não conta como
+            # ocupada. No Windows a opção deixaria tomar a porta de outro programa, então fica fora.
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             probe.bind((host, port))
         except OSError:

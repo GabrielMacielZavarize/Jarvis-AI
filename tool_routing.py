@@ -9,8 +9,9 @@ com as integrações MCP, de 100. Com tantas o modelo escolhe pior. Aqui elas vi
 - grupos (agenda, email, tela, janelas, mídia, mouse, gestos, câmera, rotinas, avisos, apps e um
   por servidor MCP) que entram quando o modelo chama ``use_tools(["agenda"])``.
 
-No Gemini Live, ``Agent.update_tools`` reabre a conexão (livekit-agents 1.8.8 marca a sessão para
-reiniciar e reconecta com o handle de retomada). Reabrir no meio de uma resposta descarta o que
+No Gemini Live, ``Agent.update_tools`` reabre a conexão (livekit-agents 1.8.11 marca a sessão para
+reiniciar, abre uma sessão nova com as ferramentas novas e reenvia a conversa em texto; antes
+disso ele retomava pelo handle, e a sessão retomada ficava com as ferramentas antigas). Reabrir no meio de uma resposta descarta o que
 estava na fila e a resposta da ferramenta em andamento, então a troca espera a frase curta do
 modelo terminar ("Um instante.") e só depois atualiza as ferramentas e pede a continuação do
 pedido com ``generate_reply``. A transcrição final da fala do usuário só chega quando a resposta

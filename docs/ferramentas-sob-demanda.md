@@ -57,12 +57,12 @@ Feitas no container com tudo ligado, contando o JSON das declarações que vão 
 | Grupo médio | 2 a 5 | 300 a 1.100 |
 | `.env` padrão (memória, diário e rotinas) | 25 | fica tudo junto no `auto` |
 
-O que o `update_tools` faz no Gemini Live, conferido no livekit-agents 1.8.8 com um cliente falso (`tests/test_tool_routing.py`):
+O que o `update_tools` faz no Gemini Live, conferido no livekit-agents 1.8.11 com um cliente falso (`tests/test_tool_routing.py`):
 
 | Pergunta | Resposta |
 | --- | --- |
 | Reabre a sessão? | Sim. O plugin não troca ferramentas numa sessão aberta (`mutable_tools=False`): fecha o websocket e abre outro com as ferramentas novas |
-| Perde contexto? | Não. A sessão nova volta pelo handle de retomada e o plugin reenvia só o que veio depois dele |
+| Perde contexto? | Não. O plugin abre uma sessão nova e reenvia a conversa inteira em texto. Até o 1.8.10 ele retomava pelo handle, e a sessão retomada continuava com as ferramentas antigas; por isso o `requirements.txt` pede o 1.8.11 ou mais novo |
 | Quanto atrasa? | No agente, uns milissegundos. O resto é abrir a conexão com o Google, que não deu para medir aqui (sem chave) |
 | O que dá errado no meio de uma resposta? | A fila de mensagens é descartada e a resposta em andamento se perde, inclusive a da própria ferramenta. Por isso a troca espera o "Um instante." terminar |
 
