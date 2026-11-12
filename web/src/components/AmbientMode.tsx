@@ -1,35 +1,12 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useAmbientInfo } from '../hooks/useAmbientInfo';
 import { useClock } from '../hooks/useClock';
-import { AMBIENT_REFRESH_MS, type AmbientInfo, burnInOffset, parseAmbient, untilEvent } from '../lib/ambient';
+import { burnInOffset, untilEvent } from '../lib/ambient';
 import { useHud } from '../lib/hudStore';
 import { WeatherGlyph } from './cards/WeatherGlyph';
 
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-
-/** Asks the server for the weather of JARVIS_HOME_CITY and the next meeting while the screen is idle. */
-function useAmbientInfo(active: boolean): AmbientInfo | null {
-  const [info, setInfo] = useState<AmbientInfo | null>(null);
-  useEffect(() => {
-    if (!active) return;
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const response = await fetch('/api/ambient', { cache: 'no-store' });
-        if (response.ok && !cancelled) setInfo(parseAmbient(await response.json()));
-      } catch {
-        // Server off: the clock alone is still useful.
-      }
-    };
-    void load();
-    const timer = window.setInterval(() => void load(), AMBIENT_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [active]);
-  return info;
-}
 
 /** After a few idle minutes without a link: big clock, weather and the next meeting, core at low power. */
 export function AmbientMode({ active, wakeWord }: { active: boolean; wakeWord: boolean }) {

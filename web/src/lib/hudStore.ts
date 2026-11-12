@@ -3,6 +3,7 @@ import { DEFAULT_HOME, locateHost } from './geo';
 import { addLatency, type LatencyStats } from './latency';
 import { INITIAL_GESTURES } from './gestures';
 import { describePanel, matchPanels } from './panels';
+import { DEFAULT_VIEW, type ViewId } from './views';
 import type {
   CameraState,
   DictationState,
@@ -94,6 +95,10 @@ interface HudState {
   cinema: boolean;
   /** Ambient mode: idle screen with the big clock, core at low power. */
   ambient: boolean;
+  /** Área de trabalho aberta (abas do topo). */
+  view: ViewId;
+  /** Paleta de comandos (Ctrl+K) aberta. */
+  palette: boolean;
   /** Quality the 3D scene is rendering at and the frame rate measured. */
   sceneQuality: { level: SceneLevel; fps: number | null };
   toasts: Toast[];
@@ -127,6 +132,8 @@ interface HudState {
   recordLatency: (seconds: number) => void;
   setCinema: (cinema: boolean) => void;
   setAmbient: (ambient: boolean) => void;
+  setView: (view: ViewId) => void;
+  setPalette: (open: boolean) => void;
   setSceneQuality: (level: SceneLevel, fps: number | null) => void;
   /** Holographic notification on the right edge; returns its id. */
   pushToast: (toast: Omit<Toast, 'id' | 'createdAt' | 'ttl'>) => string;
@@ -154,6 +161,8 @@ export const useHud = create<HudState>((set, get) => ({
   latency: null,
   cinema: false,
   ambient: false,
+  view: DEFAULT_VIEW,
+  palette: false,
   sceneQuality: { level: 'high', fps: null },
   toasts: [],
   setMode: (mode) => set((s) => (s.mode === mode ? s : { mode })),
@@ -257,6 +266,9 @@ export const useHud = create<HudState>((set, get) => ({
   recordLatency: (seconds) => set((s) => ({ latency: addLatency(s.latency, seconds) })),
   setCinema: (cinema) => set({ cinema }),
   setAmbient: (ambient) => set((s) => (s.ambient === ambient ? s : { ambient })),
+  // Trocar de área tira o modo cinema: ele esconde justamente os painéis que a área mostra.
+  setView: (view) => set((s) => (s.view === view ? s : { view, cinema: view === 'home' ? s.cinema : false })),
+  setPalette: (palette) => set((s) => (s.palette === palette ? s : { palette })),
   setSceneQuality: (level, fps) =>
     set((s) => (s.sceneQuality.level === level && s.sceneQuality.fps === fps ? s : { sceneQuality: { level, fps } })),
   pushToast: (toast) => {

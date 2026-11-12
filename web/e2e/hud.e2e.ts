@@ -38,7 +38,7 @@ for (const theme of THEMES) {
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme.id);
     await expect(page.locator('.brand__name')).toHaveText(theme.brand);
     await expect(page.locator('main.app canvas')).toBeVisible();
-    for (const panel of ['Sistema', 'Protocolos', 'Transcrição', 'Registro']) {
+    for (const panel of ['Briefing', 'Projeções', 'Transcrição', 'Registro']) {
       await expect(page.getByRole('region', { name: panel })).toBeVisible();
     }
     expect(errors).toEqual([]);
@@ -94,6 +94,92 @@ test('a simulação passa pelos estados sem piscar e projeta os painéis', async
 
   await page.getByRole('button', { name: 'Sair da simulação' }).click();
   await expect(page.locator('.chip--demo')).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Protocolos' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Projeções' })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('as abas trocam de área e o Painel volta com 1 ou Esc', async ({ page }) => {
+  const errors = await openHud(page, 'jarvis');
+  const app = page.locator('main.app');
+  const tabs = page.getByRole('navigation', { name: 'Áreas do HUD' });
+
+  await expect(app).toHaveAttribute('data-view', 'home');
+  await tabs.getByRole('button', { name: 'Sistema' }).click();
+  await expect(app).toHaveAttribute('data-view', 'system');
+  for (const panel of ['Sistema', 'Protocolos']) await expect(page.getByRole('region', { name: panel }).first()).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Transcrição' })).toHaveCount(0);
+  // O dock continua à mão em qualquer área.
+  await expect(page.getByRole('button', { name: 'Simulação' })).toBeVisible();
+
+  await page.keyboard.press('3');
+  await expect(app).toHaveAttribute('data-view', 'settings');
+  for (const panel of ['Aparência', 'Áudio', 'Atalhos']) await expect(page.getByRole('region', { name: panel })).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(app).toHaveAttribute('data-view', 'home');
+  await expect(page.getByRole('region', { name: 'Briefing' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('a paleta de comandos abre com Ctrl+K, busca e executa', async ({ page }) => {
+  const errors = await openHud(page, 'jarvis');
+  const palette = page.getByRole('dialog', { name: 'Paleta de comandos' });
+
+  await page.keyboard.press('Control+k');
+  await expect(palette).toBeVisible();
+  await page.keyboard.type('ajustes');
+  await expect(palette.getByRole('option').first()).toContainText('Ajustes');
+  await page.keyboard.press('Enter');
+  await expect(palette).toHaveCount(0);
+  await expect(page.locator('main.app')).toHaveAttribute('data-view', 'settings');
+
+  // A persona troca pela paleta e o Esc fecha sem mexer na área aberta.
+  await page.keyboard.press('Control+k');
+  await page.keyboard.type('mark');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'mark3');
+  await page.keyboard.press('Control+k');
+  await expect(palette).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(palette).toHaveCount(0);
+  await expect(page.locator('main.app')).toHaveAttribute('data-view', 'settings');
+  expect(errors).toEqual([]);
+});
+
+test('as colunas do Painel rolam em vez de cortar os painéis', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 620 });
+  await openHud(page, 'jarvis');
+  for (const side of ['left', 'right']) {
+    const column = page.locator(`.hud__${side}`);
+    await expect(column).toHaveCSS('overflow-y', 'auto');
+    // Nenhum painel é espremido: a coluna toda cabe na própria rolagem.
+    const fits = await column.evaluate((element) =>
+      [...element.querySelectorAll(':scope > .slot > *')].every((panel) => panel.scrollHeight <= panel.clientHeight + 1),
+    );
+    expect(fits, `coluna ${side}`).toBe(true);
+  }
+});
+
+test('no celular o botão principal aparece inteiro e as áreas ficam na barra de baixo', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  const errors = await openHud(page, 'jarvis');
+
+  const primary = page.locator('.dock .btn--primary');
+  await expect(primary).toBeVisible();
+  expect(await primary.evaluate((button) => button.scrollWidth <= button.clientWidth)).toBe(true);
+  const box = await primary.boundingBox();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+
+  const bar = page.locator('.nav--bar');
+  await expect(bar).toBeVisible();
+  await expect(page.locator('.nav--top')).toBeHidden();
+  await bar.getByRole('button', { name: 'Sistema' }).tap();
+  await expect(page.locator('main.app')).toHaveAttribute('data-view', 'system');
+  await expect(page.getByRole('region', { name: 'Sistema' }).first()).toBeVisible();
+  // A página não rola de lado.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+  await context.close();
 });

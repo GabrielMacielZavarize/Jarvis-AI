@@ -6,7 +6,8 @@ import { useSyncExternalStore } from 'react';
 import { DEFAULT_THEME, isTheme, type ThemeId, themeInfo } from './themes';
 
 export type QualityPref = 'auto' | 'high' | 'medium' | 'low';
-export type PanelId = 'system' | 'lan' | 'cards' | 'conversation' | 'gestures' | 'log' | 'health';
+/** Painéis das colunas do Painel (a área inicial); os de Sistema e Ajustes têm lugar fixo. */
+export type PanelId = 'briefing' | 'cards' | 'conversation' | 'log';
 export type Column = 'left' | 'right';
 export type PanelLayout = Record<Column, PanelId[]>;
 
@@ -29,9 +30,8 @@ export const QUALITY_LABELS: Record<QualityPref, string> = {
   low: 'Economia',
 };
 
-export const PANEL_IDS: PanelId[] = ['system', 'lan', 'cards', 'conversation', 'gestures', 'log', 'health'];
-// The Gestos panel (GST-18) only shows when the server has the gestures on.
-export const DEFAULT_LAYOUT: PanelLayout = { left: ['system', 'lan', 'cards'], right: ['conversation', 'gestures', 'log', 'health'] };
+export const PANEL_IDS: PanelId[] = ['briefing', 'cards', 'conversation', 'log'];
+export const DEFAULT_LAYOUT: PanelLayout = { left: ['briefing', 'cards'], right: ['conversation', 'log'] };
 
 export const DEFAULT_PREFS: HudPrefs = {
   theme: DEFAULT_THEME,

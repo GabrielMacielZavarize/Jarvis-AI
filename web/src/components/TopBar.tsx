@@ -4,6 +4,7 @@ import { formatDuration } from '../lib/format';
 import { usePrefs } from '../lib/prefs';
 import { type ThemeId, themeInfo } from '../lib/themes';
 import type { JarvisMode, ServerStatus } from '../lib/types';
+import { NavTabs } from './NavTabs';
 
 interface TopBarProps {
   mode: JarvisMode;
@@ -87,6 +88,8 @@ export function TopBar({ mode, status, connected, micEnabled, demo, sessionStart
         </div>
       </div>
 
+      <div className="topbar__center">
+        <NavTabs variant="top" />
       <div className="chips">
         {demo && <div className="chip chip--demo">Simulação</div>}
         <div className="chip">
@@ -102,6 +105,7 @@ export function TopBar({ mode, status, connected, micEnabled, demo, sessionStart
         <div className="chip">
           Sessão <b>{sessionStart ? formatDuration((now - sessionStart) / 1000) : '00:00'}</b>
         </div>
+      </div>
       </div>
 
       <div className="clock">

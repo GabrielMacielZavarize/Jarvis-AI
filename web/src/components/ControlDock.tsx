@@ -60,6 +60,7 @@ export function ControlDock(props: ControlDockProps) {
   const active = connected || demo;
   const cinema = useHud((s) => s.cinema);
   const setCinema = useHud((s) => s.setCinema);
+  const setPalette = useHud((s) => s.setPalette);
 
   return (
     <div className="dock">
@@ -109,13 +110,25 @@ export function ControlDock(props: ControlDockProps) {
         >
           <CinemaIcon on={cinema} />
         </button>
+        <button
+          type="button"
+          className="btn btn--round btn--ghost dock__palette"
+          onClick={() => setPalette(true)}
+          aria-label="Paleta de comandos"
+          title="Paleta de comandos (Ctrl+K)"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="M16 16l5 5" />
+          </svg>
+        </button>
       </div>
       <div className="dock__hint">
         {active && !demo && closingIn ? (
           <>Encerrando por silêncio em {closingIn} s · fale para continuar</>
         ) : active ? (
           <>
-            Fale naturalmente · <kbd>M</kbd> microfone · <kbd>/</kbd> digitar · <kbd>F</kbd> cinema · <kbd>Esc</kbd> limpar painéis
+            Fale naturalmente · <kbd>M</kbd> microfone · <kbd>/</kbd> digitar · <kbd>Ctrl</kbd> <kbd>K</kbd> comandos · <kbd>F</kbd> cinema
           </>
         ) : canConnect && wakeListening ? (
           <>

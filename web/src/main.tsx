@@ -11,6 +11,7 @@ import '@fontsource/exo-2/latin-400.css';
 import '@fontsource/exo-2/latin-600.css';
 import './styles/global.css';
 import './styles/hud.css';
+import './styles/shell.css';
 import './styles/cards.css';
 import './styles/boot.css';
 import './styles/mobile.css';

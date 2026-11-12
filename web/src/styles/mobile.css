@@ -176,6 +176,18 @@
     gap: 14px;
     padding: max(12px, env(safe-area-inset-top)) 12px max(20px, env(safe-area-inset-bottom));
   }
+  /* O status cabe numa linha só, que rola de lado se precisar. */
+  .chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .chips::before {
+    display: none;
+  }
+  .chip {
+    flex: none;
+  }
   /* O núcleo vira o botão de falar: grande e em cima do núcleo 3D (centro da tela). */
   .core-trigger {
     width: min(56vw, 260px);
@@ -189,44 +201,57 @@
     text-align: center;
   }
   .hud__dock {
-    margin-top: 58vh;
+    margin-top: 50vh;
     position: sticky;
-    bottom: max(10px, env(safe-area-inset-bottom));
+    bottom: calc(var(--bar) + 8px + env(safe-area-inset-bottom));
     z-index: 5;
   }
   .dock {
     padding: 10px 0;
     background: linear-gradient(180deg, transparent, rgb(1 4 9 / 0.85) 30%);
   }
+  /* O botão principal ocupa a linha inteira (com o microfone ao lado, durante o link); o resto
+     desce para a linha de baixo. Nada mais é espremido até cortar o texto. */
   .dock__controls {
     width: 100%;
+    flex-wrap: wrap;
     justify-content: center;
-    gap: 12px;
+    gap: 10px 12px;
   }
   .btn {
     height: 52px;
     font-size: 13px;
   }
   .btn--primary {
-    flex: 1;
-    max-width: 320px;
-    height: 64px;
+    order: -1;
+    flex: 1 1 60%;
+    min-width: 0;
+    height: 60px;
+    padding: 0 14px;
     font-size: 14px;
+    letter-spacing: 0.18em;
+  }
+  .dock__controls .btn--round:first-child {
+    order: -2;
   }
   .btn--round {
-    width: 64px;
-    height: 64px;
+    width: 60px;
+    height: 60px;
     flex: none;
   }
   .btn--round svg {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
+  }
+  /* A barra de baixo já tem a busca. */
+  .dock__palette {
+    display: none;
   }
   .hud__left,
   .hud__right {
     gap: 12px;
   }
-  .conversation {
+  .slot > .conversation {
     min-height: 260px;
     max-height: 55vh;
   }

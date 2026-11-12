@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useHud } from '../../lib/hudStore';
 import { PANEL_META, panelTitle } from '../../lib/panels';
 import type { HudCard } from '../../lib/types';
-import { ProtocolsPanel } from '../ProtocolsPanel';
+import { Panel } from '../Panel';
 import { CalendarBody } from './CalendarCard';
 import { CameraBody } from './CameraFeed';
 import { DiaryBody } from './DiaryCard';
@@ -103,7 +103,23 @@ function ExpandedCard({ card }: { card: HudCard }) {
   );
 }
 
-export function CardStage({ enabledTools, hints }: { enabledTools: string[] | null; hints?: Record<string, string | null> }) {
+/** Enquanto nada foi projetado: diz o que aparece aqui e onde ficam os protocolos. */
+function EmptyStage() {
+  const setView = useHud((s) => s.setView);
+  return (
+    <Panel code="PRJ-00" title="Projeções" className="card stage__empty">
+      <p>
+        Clima, pesquisas, agenda, timers e o que mais o Jarvis buscar aparecem aqui, um painel por resultado. Diga “amplia” para ver um deles
+        no centro e <kbd>Esc</kbd> para limpar tudo.
+      </p>
+      <button type="button" className="link-btn" onClick={() => setView('system')}>
+        Ver o que ele sabe fazer
+      </button>
+    </Panel>
+  );
+}
+
+export function CardStage() {
   const cards = useHud((s) => s.cards);
   const expandedId = useHud((s) => s.expandedId);
   const dismiss = useHud((s) => s.dismissCard);
@@ -115,8 +131,8 @@ export function CardStage({ enabledTools, hints }: { enabledTools: string[] | nu
     <div className="stage">
       <AnimatePresence mode="popLayout" initial={false}>
         {cards.length === 0 ? (
-          <motion.div key="protocols" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <ProtocolsPanel enabled={enabledTools} hints={hints} />
+          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <EmptyStage />
           </motion.div>
         ) : (
           docked.map((card) => {

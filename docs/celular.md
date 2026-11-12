@@ -14,7 +14,7 @@ O HTTPS é obrigatório porque o navegador só libera o microfone em página seg
 
 ## Pareando o celular
 
-1. No HUD do PC, o painel CELULAR (coluna da esquerda, só aparece com `--lan`) mostra o endereço. Toque em Parear celular: aparecem um código de 6 dígitos e um QR, válidos por 5 minutos.
+1. No HUD do PC, abra a área Sistema: o painel CELULAR (só aparece com `--lan`) mostra o endereço. Toque em Parear celular: aparecem um código de 6 dígitos e um QR, válidos por 5 minutos.
 2. No celular, leia o QR com a câmera, ou abra o endereço e digite o código. Dê um nome ao aparelho ("Pixel do Gabriel") e toque em Parear.
 3. O celular abre o HUD completo. Toque no núcleo para falar.
 
@@ -54,7 +54,7 @@ As regras de acesso (o que responde sem pareamento, tokens, revogação) estão 
 
 1. `python jarvis.py --lan` e libere o Python em Redes privadas no aviso do Windows. Anote o endereço `[LAN] Celular: ...`.
 2. Com o celular no mesmo Wi-Fi, abra o endereço sem parear: deve aparecer só a tela "Parear este aparelho". Tente `https://<ip>:8000/api/status` e `.../api/camera/snapshot` no navegador do celular: os dois devem responder `401`.
-3. No PC, painel CELULAR, Parear celular. Leia o QR com a câmera do celular: ele deve parear sozinho e abrir o HUD, e o aparelho aparece na lista do PC.
+3. No PC, área Sistema, painel CELULAR, Parear celular. Leia o QR com a câmera do celular: ele deve parear sozinho e abrir o HUD, e o aparelho aparece na lista do PC.
 4. Instale a CA (Android ou iPhone, acima) e reabra a página: o aviso de certificado some.
 5. Toque no núcleo, permita o microfone e peça "Jarvis, abre o bloco de notas" e "que horas são?". O Jarvis responde pelo alto-falante do celular e o app abre no PC.
 6. Peça "mostra a câmera": o feed da webcam do notebook aparece no celular, e o aviso CÂMERA ATIVA aparece nos dois.

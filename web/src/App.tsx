@@ -8,14 +8,14 @@ import { CameraIndicator } from './components/CameraIndicator';
 import { CardStage } from './components/cards/CardStage';
 import { ControlDock } from './components/ControlDock';
 import { DictationIndicator } from './components/DictationIndicator';
-import { GesturesPanel } from './components/GesturesPanel';
-import { HealthPanel } from './components/HealthPanel';
+import { BriefingPanel } from './components/BriefingPanel';
+import { CommandPalette } from './components/CommandPalette';
 import { ConversationPanel } from './components/ConversationPanel';
-import { LanPanel } from './components/LanPanel';
+import { NavTabs } from './components/NavTabs';
 import { PairingScreen } from './components/PairingScreen';
-import { SystemPanel } from './components/SystemPanel';
 import { Toasts } from './components/Toasts';
 import { TopBar } from './components/TopBar';
+import { SettingsView, SystemView } from './components/Workspaces';
 import { useCameraMonitor } from './hooks/useCameraMonitor';
 import { useDemo } from './hooks/useDemo';
 import { useIdle } from './hooks/useIdle';
@@ -23,17 +23,18 @@ import { usePanelDrag } from './hooks/usePanelDrag';
 import { usePersonaSync } from './hooks/usePersonaSync';
 import { useReactorHum } from './hooks/useReactorHum';
 import { useSettledMode } from './hooks/useSettledMode';
+import { useSilentMicrophone } from './hooks/useSilentMicrophone';
 import { usePresence } from './hooks/usePresence';
 import { useLanAccess } from './hooks/useLanAccess';
 import { type LiveJarvis, OFFLINE_LIVE, useLiveJarvis } from './hooks/useLiveJarvis';
 import { type StatusResult, useServerStatus } from './hooks/useServerStatus';
 import { useWakeWord } from './hooks/useWakeWord';
 import { AMBIENT_AFTER_MS } from './lib/ambient';
-import { mcpHint } from './lib/catalog';
 import { homeFromTimezone } from './lib/geo';
 import { useHud } from './lib/hudStore';
-import { type PanelId, usePrefs } from './lib/prefs';
+import { DEFAULT_LAYOUT, type PanelId, setPrefs, usePrefs } from './lib/prefs';
 import type { JarvisMode } from './lib/types';
+import { viewForKey } from './lib/views';
 import { micLabelFor } from './lib/wake';
 
 // three.js + postprocessing live in their own chunk; the boot sequence covers the load.
@@ -109,6 +110,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   const [sessionStart, setSessionStart] = useState<number | null>(null);
   const activeTool = useHud((s) => s.activeTool);
   const cinema = useHud((s) => s.cinema);
+  const view = useHud((s) => s.view);
   const prefs = usePrefs();
 
   const server = status.state === 'ok' ? status.status : null;
@@ -178,23 +180,23 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   // PRS-25: "Presente" / "Ausente há 5 min" in the Sistema panel.
   const presence = usePresence(server?.presence ?? false);
 
-  // Every panel of the side columns; Ajustes and dragging a header decide which column and order.
+  const micSilent = useSilentMicrophone(live.connected && !demo.running && live.micEnabled);
+  const sendText = (text: string) => void live.send(text);
+
+  // Os painéis das colunas do Painel; arrastar um cabeçalho decide a coluna e a ordem.
   const drag = usePanelDrag();
   const panels: Record<PanelId, ReactNode> = {
-    system: (
-      <SystemPanel
-        mode={mode}
+    briefing: (
+      <BriefingPanel
         status={status}
+        canSend={live.connected && !demo.running}
         demo={demo.running}
-        connected={live.connected}
-        micEnabled={live.micEnabled}
-        microphone={{ devices: live.micDevices, deviceId: live.micDeviceId, onSelect: (id) => void live.selectMic(id) }}
-        wake={wake.enabled ? wake : null}
-        presence={presence}
+        onSend={sendText}
+        wakeListening={wakeListening}
+        micSilent={micSilent}
       />
     ),
-    lan: local && server?.lan ? <LanPanel /> : null,
-    cards: <CardStage enabledTools={server?.tools ?? null} hints={{ mcp_status: mcpHint(server?.mcp) }} />,
+    cards: <CardStage />,
     conversation: (
       <>
         <ConversationPanel
@@ -210,23 +212,48 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
         )}
       </>
     ),
-    gestures: server?.gestures ? <GesturesPanel connected={live.connected && !demo.running} /> : null,
     log: <ActivityLog />,
-    // SAU-40: histórico local para calibrar o Jarvis.
-    health: server ? <HealthPanel local={local} /> : null,
+  };
+
+  // O que a paleta de comandos (Ctrl+K) precisa para rodar cada comando.
+  const paletteContext = {
+    connected,
+    demo: demo.running,
+    canConnect,
+    busy,
+    micEnabled: live.micEnabled,
+    prefs,
+    enabledTools: server?.tools ?? null,
+    start: () => void start(),
+    stop,
+    toggleMic: () => void live.toggleMic(),
+    startDemo: demo.start,
+    setPrefs,
+    resetLayout: () => setPrefs({ layout: DEFAULT_LAYOUT }),
+    send: sendText,
   };
 
   // Global shortcuts: Space starts, M toggles the mic, Esc clears the projections.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes((event.target as HTMLElement)?.tagName);
+      const hud = useHud.getState();
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        hud.setPalette(!hud.palette);
+        return;
+      }
+      // Com a paleta aberta as teclas são dela (o Esc inclusive).
+      if (hud.palette) return;
       if (event.key === 'Escape') {
-        const hud = useHud.getState();
         if (hud.expandedId) hud.setExpanded(null);
         else if (hud.cinema) hud.setCinema(false);
+        else if (hud.view !== 'home') hud.setView('home');
         else hud.clearCards();
       }
       if (typing) return;
+      const target = event.ctrlKey || event.metaKey || event.altKey ? null : viewForKey(event.key);
+      if (target) hud.setView(target);
       if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey && !event.altKey) {
         useHud.getState().setCinema(!useHud.getState().cinema);
       }
@@ -241,7 +268,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   });
 
   return (
-    <main className="app" data-mode={mode} data-cinema={cinema || undefined} data-ambient={ambient || undefined}>
+    <main className="app" data-mode={mode} data-view={view} data-cinema={cinema || undefined} data-ambient={ambient || undefined}>
       <Suspense fallback={null}>
         <Scene visible={booted} />
       </Suspense>
@@ -250,7 +277,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
       <div className="fx fx--scanlines" />
       <div className="fx fx--frame" />
 
-      {booted && !connected && canConnect && (
+      {booted && !connected && canConnect && view === 'home' && (
         <button type="button" className="core-trigger" onClick={() => void start()} aria-label="Inicializar o Jarvis">
           <span className="core-trigger__label">
             {busy ? 'Estabelecendo link' : wakeListening ? 'Diga “Jarvis” ou toque para inicializar' : 'Toque para inicializar'}
@@ -270,22 +297,41 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
           />
         </div>
 
-        {(['left', 'right'] as const).map((column) => (
-          <aside key={column} className={`hud__${column}`}>
-            {prefs.layout[column].map((id) => (
-              <div
-                key={id}
-                className={`slot ${drag.dragging === id ? 'slot--dragging' : ''}`}
-                data-slot={id}
-                onPointerDown={drag.onPointerDown(id)}
-              >
-                {panels[id]}
-              </div>
-            ))}
-          </aside>
-        ))}
-        {drag.target && (
+        {view === 'home' &&
+          (['left', 'right'] as const).map((column) => (
+            <aside key={column} className={`hud__${column}`}>
+              {prefs.layout[column].map((id) => (
+                <div
+                  key={id}
+                  className={`slot ${drag.dragging === id ? 'slot--dragging' : ''}`}
+                  data-slot={id}
+                  onPointerDown={drag.onPointerDown(id)}
+                >
+                  {panels[id]}
+                </div>
+              ))}
+            </aside>
+          ))}
+        {drag.target && view === 'home' && (
           <i className="drop-line" style={{ top: drag.target.top, left: drag.target.left, width: drag.target.width }} aria-hidden />
+        )}
+        {view === 'system' && (
+          <SystemView
+            mode={mode}
+            status={status}
+            demo={demo.running}
+            connected={live.connected}
+            micEnabled={live.micEnabled}
+            wake={wake.enabled ? wake : null}
+            presence={presence}
+            local={local}
+          />
+        )}
+        {view === 'settings' && (
+          <SettingsView
+            microphone={{ devices: live.micDevices, deviceId: live.micDeviceId, onSelect: (id) => void live.selectMic(id) }}
+            demo={demo.running}
+          />
         )}
 
         <div className="hud__dock">
@@ -306,7 +352,9 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
           />
         </div>
       </div>
+      {booted && <NavTabs variant="bar" />}
       <AmbientMode active={ambient} wakeWord={wake.enabled} />
+      <CommandPalette context={paletteContext} />
       <Toasts />
     </main>
   );

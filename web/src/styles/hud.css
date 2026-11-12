@@ -23,18 +23,26 @@
   flex-direction: column;
   gap: 14px;
   min-height: 0;
+  /* Cada coluna rola sozinha: um painel a mais nunca corta o de baixo. */
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--c-primary-rgb) / 0.28) transparent;
+  padding: 1px 6px 1px 1px;
   pointer-events: auto;
-  transform-style: preserve-3d;
 }
 .hud__left {
   grid-column: 1;
-  transform: perspective(1500px) rotateY(8deg);
-  transform-origin: left center;
 }
 .hud__right {
   grid-column: 3;
-  transform: perspective(1500px) rotateY(-8deg);
-  transform-origin: right center;
+}
+/* Os painéis ficam na altura do conteúdo; só a transcrição estica para ocupar o que sobra. */
+.slot > * {
+  flex: none;
+}
+.slot > .conversation {
+  flex: 1 1 300px;
 }
 
 .hud__dock {
@@ -198,7 +206,7 @@
   border: 1px solid rgb(var(--c-accent-rgb) / 0.35);
   background: rgb(var(--c-accent-rgb) / 0.06);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.4;
   color: var(--c-accent);
   letter-spacing: 0.08em;
@@ -207,7 +215,7 @@
   margin: 0;
   transition: color 0.6s, text-shadow 0.6s;
   font-family: var(--font-display);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.24em;
   text-transform: uppercase;
@@ -220,7 +228,7 @@
   align-items: center;
   gap: 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-faint);
 }
 .panel__body {
@@ -267,9 +275,28 @@
 
 .topbar {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 24px;
+}
+.topbar__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.topbar .clock {
+  justify-self: end;
+}
+.brand,
+.brand > div {
+  min-width: 0;
+}
+.brand__tag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .brand {
   display: flex;
@@ -327,7 +354,7 @@
 }
 .brand__tag {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.22em;
   color: var(--text-faint);
   text-transform: uppercase;
@@ -359,9 +386,9 @@
   gap: 8px;
   padding: 5px 12px 5px 10px;
   border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgb(8 30 44 / 0.92), rgb(3 13 21 / 0.92));
+  background: var(--panel-bg), rgb(1 5 10 / 0.75);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -433,7 +460,7 @@
 .clock__date {
   margin-top: 4px;
   font-family: var(--font-display);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.3em;
   color: var(--c-primary);
 }
@@ -448,7 +475,7 @@
 }
 .stat dt {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.14em;
   color: var(--text-faint);
   text-transform: uppercase;
@@ -468,7 +495,7 @@
   padding: 6px 8px;
   border: 1px solid var(--line);
   background: rgb(0 8 14 / 0.75);
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 500;
   color: var(--text);
   cursor: pointer;
@@ -486,7 +513,7 @@
 .latency small {
   margin-left: 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   color: var(--text-faint);
 }
@@ -548,7 +575,7 @@
   border: 1px solid var(--line);
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.06em;
   color: var(--text-dim);
   text-align: left;
@@ -572,7 +599,7 @@
 .quality-readout {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-faint);
 }
 .toggles {
@@ -580,7 +607,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 14px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 500;
 }
 .toggles .toggle {
@@ -597,7 +624,7 @@
   align-items: center;
   gap: 10px;
   margin-top: 4px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 500;
 }
 .toggle {
@@ -629,7 +656,7 @@
   border: 1px solid var(--line);
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -662,7 +689,7 @@
   padding: 9px 11px;
   border-left: 2px solid var(--c-accent);
   background: rgb(var(--c-accent-rgb) / 0.08);
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.35;
   color: var(--text-dim);
 }
@@ -672,7 +699,7 @@
 }
 .notice code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text);
 }
 
@@ -695,7 +722,7 @@
 }
 .protocol__code {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--c-accent);
 }
 .protocol__label {
@@ -705,7 +732,7 @@
 }
 .protocol__hint {
   display: block;
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 400;
   color: var(--text-faint);
 }
@@ -744,7 +771,7 @@
   display: flex;
   gap: 8px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.18em;
   color: var(--text-faint);
 }
@@ -804,11 +831,11 @@
   min-height: 120px;
   text-align: center;
   color: var(--text-faint);
-  font-size: 14px;
+  font-size: 14.5px;
 }
 .empty__glyph {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.4em;
   color: rgb(var(--c-primary-rgb) / 0.5);
 }
@@ -863,7 +890,7 @@
   border: 1px solid var(--line-strong);
   background: rgb(var(--c-primary-rgb) / 0.12);
   font-family: var(--font-display);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.2em;
   color: var(--c-primary);
   cursor: pointer;
@@ -885,7 +912,7 @@
   padding: 0;
   list-style: none;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
 }
 /* Timeline rule through the event marks. */
 .log__list::before {
@@ -921,7 +948,7 @@
   border: 1px solid currentColor;
   border-radius: 50%;
   background: #020d16;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
   color: var(--text-faint);
 }
@@ -1037,7 +1064,7 @@
   padding: 1px 6px;
   border: 1px solid rgb(var(--plate-rgb) / 0.6);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   color: rgb(var(--plate-rgb));
 }
@@ -1045,7 +1072,7 @@
   grid-area: label;
   overflow: hidden;
   font-family: var(--font-display);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -1057,7 +1084,7 @@
 .tool-plate__state {
   grid-area: state;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgb(var(--plate-rgb));
@@ -1068,7 +1095,7 @@
 .tool-plate__detail {
   grid-area: detail;
   overflow: hidden;
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1110,7 +1137,7 @@
   align-items: center;
   gap: 12px;
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   letter-spacing: 0.5em;
   text-transform: uppercase;
@@ -1133,7 +1160,7 @@
   gap: 14px;
 }
 .dock__hint {
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--text-faint);
   letter-spacing: 0.04em;
 }
@@ -1141,7 +1168,7 @@
   padding: 1px 6px;
   border: 1px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-dim);
 }
 
@@ -1156,7 +1183,7 @@
   border: 1px solid var(--line-strong);
   background: rgb(var(--c-primary-rgb) / 0.08);
   font-family: var(--font-display);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.26em;
   text-transform: uppercase;
@@ -1218,10 +1245,10 @@
   pointer-events: none;
 }
 .app[data-cinema] .hud__left {
-  transform: perspective(1500px) rotateY(28deg) translateX(-80px);
+  transform: translateX(-60px);
 }
 .app[data-cinema] .hud__right {
-  transform: perspective(1500px) rotateY(-28deg) translateX(80px);
+  transform: translateX(60px);
 }
 .app[data-cinema] .chips,
 .app[data-cinema] .brand__tag {
@@ -1268,7 +1295,7 @@
   translate: -50% 0;
   white-space: nowrap;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.42em;
   color: var(--text);
   text-shadow: 0 0 10px rgb(var(--c-primary-rgb) / 0.9);
@@ -1285,6 +1312,16 @@
 }
 
 /* ───────────────────────── Responsive ───────────────────────── */
+
+@media (max-width: 1320px) {
+  /* Coluna central estreita: o status perde a sessão e as abas, as legendas dos atalhos. */
+  .chips .chip:last-child {
+    display: none;
+  }
+  .brand__tag {
+    display: none;
+  }
+}
 
 @media (max-width: 1080px) {
   body {
@@ -1305,43 +1342,53 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
-    padding: 14px 16px 24px;
+    min-height: 100dvh;
+    /* A barra de áreas fica fixa embaixo: o conteúdo termina antes dela. */
+    padding: 14px 16px calc(var(--bar) + 20px + env(safe-area-inset-bottom));
   }
   .hud__left,
   .hud__right {
-    transform: none;
+    overflow: visible;
+    padding: 0;
   }
+  /* No Painel o núcleo aparece no espaço acima do dock; nas outras áreas os painéis vêm primeiro. */
   .hud__dock {
     order: 1;
-    margin-top: 62vh;
+    margin-top: 44vh;
   }
-  .hud__right {
-    order: 2;
+  .app:not([data-view='home']) .hud__dock {
+    order: 5;
+    margin-top: 0;
+    /* Fora do Painel o dock vai para o fim da página em vez de flutuar sobre os painéis. */
+    position: static;
   }
-  .hud__left {
-    order: 3;
-  }
-  .conversation {
+  .slot > .conversation {
+    flex: none;
     min-height: 320px;
     max-height: 60vh;
   }
   .topbar {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 16px;
   }
-  .chips {
+  .topbar__center {
     grid-column: 1 / -1;
     grid-row: 2;
+    align-items: stretch;
+  }
+  .chips {
     justify-content: flex-start;
+  }
+  .chips .chip:last-child {
+    display: flex;
   }
   .core-trigger {
     position: fixed;
-    top: 40vh;
+    top: 34vh;
   }
 }
 
 @media (max-width: 560px) {
-  .brand__tag,
   .clock__date,
   .clock__seconds {
     display: none;
@@ -1387,7 +1434,7 @@
   background: rgb(30 4 8 / 0.78);
   color: #ffd2d2;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.24em;
   text-transform: uppercase;
@@ -1406,7 +1453,7 @@
 .cam-alert__meta {
   font-family: var(--font-mono);
   font-weight: 400;
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.1em;
   color: rgb(255 210 210 / 0.65);
 }
@@ -1444,7 +1491,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.24em;
   text-transform: uppercase;
@@ -1464,7 +1511,7 @@
 .dict-alert__badge {
   padding: 1px 6px;
   border: 1px solid rgb(var(--c-accent-rgb) / 0.6);
-  font-size: 9.5px;
+  font-size: 10.5px;
   letter-spacing: 0.14em;
 }
 .dict-alert__meta {
@@ -1473,7 +1520,7 @@
   max-width: 50%;
   font-family: var(--font-mono);
   font-weight: 400;
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.06em;
   text-transform: none;
   text-overflow: ellipsis;
@@ -1485,7 +1532,7 @@
   max-height: 4.8em;
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 13.5px;
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1509,7 +1556,7 @@
 .dict-alert__msg {
   margin: 4px 0 0;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: rgb(255 230 194 / 0.7);
 }
 
@@ -1583,7 +1630,7 @@
 }
 .toast__head strong {
   font-family: var(--font-display);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -1592,7 +1639,7 @@
 }
 .toast__code {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--text-faint);
 }
 .toast__message {
@@ -1711,7 +1758,7 @@
 .ambient__hint {
   margin-top: 18px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -1769,7 +1816,7 @@
 .gestures__holding,
 .gestures__last {
   overflow: hidden;
-  font-size: 13.5px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-dim);
@@ -1792,13 +1839,13 @@
 .gestures__hint,
 .gestures__notice {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.35;
   color: var(--text-faint);
 }
 .gestures__hint code {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 .gestures__notice {
   padding: 6px 9px;
@@ -1839,7 +1886,7 @@
 }
 .gesture-row__name {
   overflow: hidden;
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1847,7 +1894,7 @@
 }
 .gesture-row__label {
   overflow: hidden;
-  font-size: 13px;
+  font-size: 13.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-dim);
@@ -1857,7 +1904,7 @@
 }
 .gesture-row__warn {
   margin: 3px 0 0 30px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--c-accent);
 }
 .binding-form {
@@ -1867,7 +1914,7 @@
 }
 .binding-form__how {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.35;
   color: var(--text-faint);
 }
@@ -1878,7 +1925,7 @@
 }
 .binding-form__row .select {
   margin-top: 0;
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .binding-form__row--actions {
   display: flex;
@@ -1889,7 +1936,7 @@
   padding: 6px 8px;
   border: 1px solid var(--line);
   background: rgb(0 8 14 / 0.75);
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--text);
   outline: none;
 }
@@ -1908,7 +1955,7 @@
   display: grid;
   gap: 6px;
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.35;
 }
 .gestures__fixed dt {
@@ -1933,7 +1980,7 @@
   padding: 7px 10px;
   border-left: 2px solid var(--c-primary);
   background: rgb(var(--c-primary-rgb) / 0.06);
-  font-size: 13px;
+  font-size: 13.5px;
   line-height: 1.35;
   color: var(--text-dim);
 }
@@ -1943,14 +1990,14 @@
 }
 .health__stats .stat dd {
   white-space: normal;
-  font-size: 13.5px;
+  font-size: 14px;
 }
 .health__alert {
   color: var(--c-accent);
 }
 .health__empty {
   margin: 0;
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--text-faint);
 }
 .health__foot {

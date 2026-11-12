@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useClock } from '../hooks/useClock';
 import type { StatusResult } from '../hooks/useServerStatus';
-import { levels, SIGNAL_FLOOR } from '../lib/audio';
+import { useSilentMicrophone } from '../hooks/useSilentMicrophone';
+import { levels } from '../lib/audio';
 import { type PresenceState, presenceLabel } from '../lib/presence';
 import { BACKEND_LABELS, MODE_LABELS } from '../lib/catalog';
 import { useHud } from '../lib/hudStore';
@@ -10,33 +11,6 @@ import type { JarvisMode } from '../lib/types';
 import { wakeWordsLabel } from '../lib/wake';
 import type { WakeWord } from '../hooks/useWakeWord';
 import { Panel } from './Panel';
-import { HudSettings } from './HudSettings';
-import { SoundControls } from './SoundControls';
-
-const SETTINGS_STORAGE_KEY = 'jarvis.hud.settings';
-
-function loadSettingsOpen(): boolean {
-  try {
-    return window.localStorage.getItem(SETTINGS_STORAGE_KEY) === 'open';
-  } catch {
-    return false;
-  }
-}
-
-/** Microphone and interface sounds stay folded behind "Ajustes"; the choice is kept in this browser. */
-function useSettingsOpen() {
-  const [open, setOpen] = useState(loadSettingsOpen);
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    try {
-      window.localStorage.setItem(SETTINGS_STORAGE_KEY, next ? 'open' : 'closed');
-    } catch {
-      // Private windows may refuse storage; the panel still toggles.
-    }
-  };
-  return [open, toggle] as const;
-}
 
 function GearIcon() {
   return (
@@ -48,7 +22,7 @@ function GearIcon() {
 }
 
 /** Voice level meter updated through a ref — no React renders per audio frame. */
-function VoiceMeter({ channel, label, title }: { channel: 'agent' | 'user'; label: string; title: string }) {
+export function VoiceMeter({ channel, label, title }: { channel: 'agent' | 'user'; label: string; title: string }) {
   const fill = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let frame = 0;
@@ -70,33 +44,7 @@ function VoiceMeter({ channel, label, title }: { channel: 'agent' | 'user'; labe
   );
 }
 
-/** True when the open microphone delivered no signal at all for a few seconds. */
-function useSilentMicrophone(active: boolean) {
-  const [silent, setSilent] = useState(false);
-  useEffect(() => {
-    if (!active) {
-      setSilent(false);
-      return;
-    }
-    let frame = 0;
-    let peak = 0;
-    let windowStart = performance.now();
-    const tick = (now: number) => {
-      peak = Math.max(peak, levels.user);
-      if (now - windowStart > 6000) {
-        setSilent(peak < SIGNAL_FLOOR);
-        peak = 0;
-        windowStart = now;
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [active]);
-  return silent;
-}
-
-interface MicrophoneProps {
+export interface MicrophoneProps {
   devices: MediaDeviceInfo[];
   deviceId: string;
   onSelect: (deviceId: string) => void;
@@ -108,7 +56,6 @@ interface SystemPanelProps {
   demo: boolean;
   connected: boolean;
   micEnabled: boolean;
-  microphone: MicrophoneProps;
   /** WAK-22, when JARVIS_WAKE_WORD=true. */
   wake?: WakeWord | null;
   /** PRS-25, when JARVIS_PRESENCE=true. */
@@ -122,7 +69,8 @@ function wakeLabel(wake: WakeWord, connected: boolean): { text: string; ok: bool
   return { text: connected ? 'Pausada durante o link' : 'Retomando escuta…', ok: false };
 }
 
-export function SystemPanel({ mode, status, demo, connected, micEnabled, microphone, wake, presence }: SystemPanelProps) {
+/** Estado do link e do agente. Microfone, sons e aparência ficam na área Ajustes. */
+export function SystemPanel({ mode, status, demo, connected, micEnabled, wake, presence }: SystemPanelProps) {
   const server = status.state === 'ok' ? status.status : null;
   const backend = server?.backend ? (BACKEND_LABELS[server.backend] ?? server.backend) : '—';
   const live = connected && !demo;
@@ -134,11 +82,8 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
   const fallback = Boolean(live && liveModel && server?.model && liveModel !== server.model);
   const now = useClock(1000);
   const heardRecently = heardAt !== null && now - heardAt < 4000;
-  const inputs = microphone.devices.filter((device) => device.deviceId);
-  const [settingsOpen, toggleSettings] = useSettingsOpen();
   const micAlert = live && micEnabled && silent;
-  // A silent microphone opens the settings: the warning points at the selector.
-  const showSettings = settingsOpen || micAlert;
+  const setView = useHud((s) => s.setView);
 
   return (
     <Panel
@@ -147,13 +92,7 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
       extra={
         <>
           <span>v{server?.version ?? '2.0.0'}</span>
-          <button
-            type="button"
-            className={`chip-btn settings-btn ${showSettings ? 'settings-btn--open' : ''}`}
-            onClick={toggleSettings}
-            aria-expanded={showSettings}
-            title="Microfone e sons da interface"
-          >
+          <button type="button" className="chip-btn settings-btn" onClick={() => setView('settings')} title="Persona, cena, microfone e sons">
             <GearIcon /> Ajustes
           </button>
         </>
@@ -189,29 +128,6 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
         )}
         <VoiceMeter channel="agent" label="Jarvis" title="Saída de voz · Jarvis" />
         <VoiceMeter channel="user" label="Você" title="Entrada de voz · Você" />
-        {showSettings && !demo && inputs.length > 0 && (
-          <div className="stat stat--setting" style={{ gridColumn: '1 / -1' }}>
-            <dt>
-              <label htmlFor="mic-select">Microfone</label>
-            </dt>
-            <dd>
-              <select
-                id="mic-select"
-                className="select"
-                value={microphone.deviceId}
-                onChange={(event) => microphone.onSelect(event.target.value)}
-              >
-                {inputs.map((device, index) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `Microfone ${index + 1}`}
-                  </option>
-                ))}
-              </select>
-            </dd>
-          </div>
-        )}
-        {showSettings && <SoundControls />}
-        {showSettings && <HudSettings />}
         {wake && !demo && (
           <div className="stat" style={{ gridColumn: '1 / -1' }}>
             <dt>Ativação por voz · WAK-22</dt>
@@ -242,8 +158,11 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
 
       {micAlert && (
         <div className="notice" role="alert">
-          <strong>Sem sinal do microfone.</strong> O navegador não está recebendo áudio. Escolha o microfone do seu fone
-          acima ou confira se ele não está mudo no Windows.
+          <strong>Sem sinal do microfone.</strong> O navegador não está recebendo áudio. Escolha o microfone do seu fone em{' '}
+          <button type="button" className="link-btn" onClick={() => setView('settings')}>
+            Ajustes
+          </button>{' '}
+          ou confira se ele não está mudo no Windows.
         </div>
       )}
 
@@ -256,7 +175,7 @@ export function SystemPanel({ mode, status, demo, connected, micEnabled, microph
       {server && !server.ready && !demo && (
         <div className="notice">
           <strong>Configuração pendente.</strong>
-          {server.errors.slice(0, 3).map((error) => (
+          {server.errors.map((error) => (
             <div key={error}>· {error}</div>
           ))}
         </div>

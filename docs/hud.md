@@ -6,15 +6,41 @@ O HUD roda no navegador (React com Three.js) e é servido pelo `server.py` em `h
 
 No centro fica o núcleo de plasma, feito com shader, rodeado por anéis com marcações, órbitas giroscópicas, um disco de partículas e a grade holográfica no piso, tudo com bloom. Ele reage em tempo real ao áudio do Jarvis e do seu microfone e muda de cor com o estado: ouvindo, processando ou respondendo. Ao processar, o HUD inteiro fica âmbar. Numa falha, vermelho. As cores deslizam em 0,8 s em vez de trocar de uma vez, e um "processando" curto antes da voz ou as pausas entre frases não repintam o HUD, para ele não piscar a cada turno da conversa.
 
-Quando o Jarvis usa uma ferramenta, um painel holográfico se projeta nas colunas laterais: clima com previsão de 5 dias e o globo girando até a cidade, resultados de pesquisa, notícias, relógio mundial, diagnóstico do PC, timers com contagem regressiva, notas, rascunhos de email e os painéis de cada protocolo. Uma placa sobre o núcleo mostra o protocolo em execução (código, nome e alvo) e depois o resultado.
+Os painéis são planos, de frente para você, com texto maior e mais contraste que antes. Cada coluna rola sozinha: um painel a mais nunca corta o de baixo.
+
+### Áreas de trabalho
+
+As abas no topo (no celular, a barra de baixo) trocam o que o HUD mostra. O dock com Inicializar, microfone e a legenda fica à mão em todas.
+
+| Área | Tecla | O que tem |
+| --- | --- | --- |
+| Painel | `1` | O núcleo no centro, o Briefing e as Projeções à esquerda, a Transcrição e o Registro à direita |
+| Sistema | `2` | Estado do link e do modelo, tempo de resposta, voz, ativação por voz, presença, o painel de Saúde, o do Celular, os Gestos e a lista de Protocolos com o que está ligado no `.env` |
+| Ajustes | `3` | Aparência (persona, qualidade da cena, legenda, modo ambiente, som do reator), Áudio (microfone, medidores e sons da interface) e a lista de atalhos |
+
+Fora do Painel o núcleo recua para o fundo e os painéis da área ocupam a tela. `Esc` volta ao Painel.
+
+### Briefing
+
+O primeiro painel do Painel junta o que importa agora: a saudação pela hora, o clima da `JARVIS_HOME_CITY`, a próxima reunião (com a [agenda](agenda.md) ligada), o que pede atenção (configuração pendente, servidor fora do ar, microfone sem sinal) e três frases de exemplo dos protocolos ligados, que mudam a cada dia. Com o link aberto, clicar numa frase manda o pedido por texto.
+
+Quando o Jarvis projeta um painel, o Briefing encolhe para uma linha e deixa o espaço para as projeções. A setinha do cabeçalho abre e recolhe na mão.
+
+### Projeções
+
+Quando o Jarvis usa uma ferramenta, um painel holográfico se projeta na coluna das Projeções: clima com previsão de 5 dias e o globo girando até a cidade, resultados de pesquisa, notícias, relógio mundial, diagnóstico do PC, timers com contagem regressiva, notas, rascunhos de email e os painéis de cada protocolo. Uma placa sobre o núcleo mostra o protocolo em execução (código, nome e alvo) e depois o resultado.
 
 Enquanto ele pensa ou busca algo na internet, o núcleo vira um globo que desenha arcos da sua cidade até os serviços consultados. Nas pesquisas o globo cresce, os anéis recuam e cada destino ganha um rótulo com a cidade e o serviço.
 
 Também tem a transcrição ao vivo da conversa (com hora), a linha de comando para mandar texto em vez de falar, o registro de atividades em linha do tempo, o radar no piso e o feixe de luz do projetor. O boot mostra o anel do reator se completando e os painéis entram em cascata depois dele.
 
+### Paleta de comandos
+
+`Ctrl+K` (ou a lupa nas abas e no dock) abre uma busca com tudo o que o HUD faz por clique: ir para uma área, iniciar e encerrar o link, microfone, simulação, as quatro personas, modo cinema, legenda, modo ambiente, qualidade da cena e restaurar os painéis. Os protocolos ligados também aparecem, cada um com uma frase de exemplo que vai por texto ao Jarvis. Com o link aberto, o que você digitar e não for um comando vira "Enviar ao Jarvis". Setas navegam, `Enter` executa e `Esc` fecha. A busca ignora acentos.
+
 ## Ajustes
 
-Fica no botão Ajustes do painel Sistema. Tudo que você muda ali é salvo no navegador.
+É a terceira área (tecla `3`, ou o botão Ajustes do painel Sistema). Tudo que você muda ali é salvo no navegador.
 
 ### Personas
 
@@ -46,7 +72,7 @@ O painel Saúde (SAU-40) guarda o histórico do tempo de resposta, das ativaçõ
 
 ### Painéis arrastáveis
 
-No computador, arraste um painel pelo cabeçalho para a outra coluna ou outra posição. "Restaurar painéis" volta ao layout de fábrica. No celular os painéis não se arrastam, de propósito.
+No computador, os quatro painéis do Painel (Briefing, Projeções, Transcrição e Registro) mudam de coluna ou de posição arrastando pelo cabeçalho. "Restaurar painéis" volta ao layout de fábrica. No celular os painéis não se arrastam, de propósito: a ordem é fixa, com a conversa logo abaixo do núcleo.
 
 ### Qualidade da cena
 
@@ -58,17 +84,19 @@ Um zumbido baixo que cresce com a voz do Jarvis enquanto o link está aberto. Ve
 
 ### Microfone
 
-O seletor de microfone e o medidor "Entrada de voz" também ficam em Ajustes. Se o microfone escolhido não entregar som, os ajustes abrem sozinhos junto com o aviso. A escolha de deixar os ajustes abertos ou fechados também fica salva.
+O seletor de microfone e os medidores de voz ficam no painel Áudio. Se o microfone escolhido não entregar som, o Briefing e o painel Sistema mostram o aviso com um atalho para lá.
 
 ## Atalhos de teclado
 
 | Tecla | Ação |
 | --- | --- |
 | `Espaço` | Inicia o link (ou diga "Jarvis", com a [palavra de ativação](voz.md#palavra-de-ativação)) |
+| `Ctrl+K` | Paleta de comandos |
+| `1` `2` `3` | Painel, Sistema e Ajustes |
 | `M` | Silencia ou ativa o microfone |
 | `/` | Vai para a linha de comando de texto |
 | `F` | Modo cinema (de novo para voltar) |
-| `Esc` | Sai do painel ampliado, depois do modo cinema, depois limpa os painéis |
+| `Esc` | Sai do painel ampliado, depois do modo cinema, depois volta ao Painel, depois limpa as projeções |
 
 ## O que cada persona muda
 
