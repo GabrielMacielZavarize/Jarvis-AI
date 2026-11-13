@@ -174,7 +174,7 @@ O HUD baixa só o que a tela precisa. O `npm run build` gera um pacote principal
 
 | Pedaço | Quando é baixado | kB | gzip |
 | --- | --- | --- | --- |
-| `index` (React, painéis do Painel, estado) | sempre, na abertura | 363 | 118 |
+| `index` (React, painéis do Painel, estado) | sempre, na abertura | 365 | 118 |
 | `Scene` (Three.js e efeitos) | na abertura, enquanto o boot roda | 1052 | 281 |
 | `landDots` (mapa-múndi do globo: `d3-geo`, `world-atlas`) | com a cena | 77 | 31 |
 | `motionFeatures` (layout e gestos do `motion`) | logo depois da primeira pintura | 95 | 32 |
@@ -188,12 +188,12 @@ Antes desta mudança o pacote principal tinha 1291 kB (386 kB com gzip), com o L
 
 | | Antes | Depois |
 | --- | --- | --- |
-| Pacote principal (`index`) | 1291 kB · 386 kB gzip | 363 kB · 118 kB gzip |
-| JavaScript baixado na abertura (com a cena) | 2343 kB · 667 kB gzip | 1633 kB · 481 kB gzip |
+| Pacote principal (`index`) | 1291 kB · 386 kB gzip | 365 kB · 118 kB gzip |
+| JavaScript baixado na abertura (com a cena) | 2343 kB · 667 kB gzip | 1635 kB · 481 kB gzip |
 | Maior pedaço | `index`, 1291 kB | `Scene`, 1052 kB |
 | `chunkSizeWarningLimit` | 1800 | 1100 |
 
-O `Scene` é o único pedaço acima de 500 kB que sobra na abertura (é o Three.js, que a cena precisa inteiro), por isso o limite é 1100 e não menos: o aviso do `vite build` volta se alguma coisa passar disso. O `LiveSession` (631 kB) vem fora do caminho do boot, mas com o LiveKit configurado ele é baixado em paralelo assim que o status chega; sem LiveKit, ou antes do status, o navegador nem o pede.
+O tamanho do texto, o alto contraste e a revisão de acessibilidade somaram uns 2 kB ao `index` (as preferências e o link "Pular para o conteúdo") e uns 3 kB ao CSS (`a11y.css` e `contrast.css`, que ficam no CSS principal, de 105 kB). O `Scene` é o único pedaço acima de 500 kB que sobra na abertura (é o Three.js, que a cena precisa inteiro), por isso o limite é 1100 e não menos: o aviso do `vite build` volta se alguma coisa passar disso. O `LiveSession` (631 kB) vem fora do caminho do boot, mas com o LiveKit configurado ele é baixado em paralelo assim que o status chega; sem LiveKit, ou antes do status, o navegador nem o pede.
 
 O que mudou:
 

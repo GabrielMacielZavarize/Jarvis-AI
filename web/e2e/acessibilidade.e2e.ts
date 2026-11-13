@@ -143,9 +143,14 @@ const DEVICES = {
 /** Respostas falsas para as áreas Dia a dia e Olho de Deus mostrarem conteúdo de verdade. */
 async function mockAreas(page: Page) {
   await page.route('**/api/status', async (route) => {
-    const response = await route.fetch();
-    const body = await response.json();
-    await route.fulfill({ response, json: { ...body, day: true, osint: { enabled: true, network: true, network_watch: true } } });
+    // Se a página já mudou quando a resposta chega (recarga, fim do teste), o navegador descarta a resposta: deixa passar.
+    try {
+      const response = await route.fetch();
+      const body = await response.json();
+      await route.fulfill({ response, json: { ...body, day: true, osint: { enabled: true, network: true, network_watch: true } } });
+    } catch {
+      await route.fallback().catch(() => undefined);
+    }
   });
   await page.route('**/api/tasks**', (route) => route.fulfill({ json: TASKS }));
   await page.route('**/api/osint/network/devices**', (route) => route.fulfill({ json: DEVICES }));
@@ -636,7 +641,7 @@ test('os textos de status do Dia a dia e do Olho de Deus são avisados ao leitor
   await expect(hint).toContainText('Reconhecido como IP');
   await page.route('**/api/osint', async (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
-    await new Promise((done) => setTimeout(done, 400));
+    await new Promise((done) => setTimeout(done, 2000));
     await route.fulfill({
       json: { kind: 'ip', label: 'IP', target: '8.8.8.8', title: '8.8.8.8', summary: 'Google', verdict: null, sections: [], lists: [], point: null, notes: [], sources: [], ts: 1_800_000_000 },
     });
