@@ -124,6 +124,21 @@ describe('texto livre', () => {
   });
 });
 
+describe('foco pela paleta', () => {
+  it('oferece começar ou encerrar conforme a sessão', () => {
+    const idle = context({ focusRunning: false, startFocus: vi.fn(), stopFocus: vi.fn() });
+    expect(ids(idle)).toContain('focus:start');
+    expect(ids(idle)).not.toContain('focus:stop');
+    buildCommands(idle)
+      .find((command) => command.id === 'focus:start')
+      ?.run();
+    expect(idle.startFocus).toHaveBeenCalled();
+    const running = context({ focusRunning: true, startFocus: vi.fn(), stopFocus: vi.fn() });
+    expect(ids(running)).toContain('focus:stop');
+    expect(searchCommands(buildCommands(running), 'pomodoro')[0].id).toBe('focus:stop');
+  });
+});
+
 describe('consulta pelo Olho de Deus', () => {
   it('oferece consultar o que tem formato de IP, domínio, link, CNPJ, CEP ou email', () => {
     const consult = vi.fn();

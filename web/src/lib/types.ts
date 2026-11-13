@@ -26,7 +26,11 @@ export type CardKind =
   | 'routine'
   | 'calendar'
   | 'diary'
-  | 'osint';
+  | 'osint'
+  | 'tasks'
+  | 'briefing'
+  | 'quotes'
+  | 'speed';
 
 export interface WeatherDay {
   date: string;
@@ -397,6 +401,8 @@ export type HudRequest =
   | { action: HudPanelAction; targets: string[] }
   | { action: 'mic' }
   | { action: 'end_session' }
+  /** FOC-47: começa, para, pula ou consulta a sessão de foco que roda no HUD. */
+  | { action: 'focus'; command: 'start' | 'stop' | 'skip' | 'status'; work: number; rest: number; cycles: number }
   /** Colour theme and/or cinema mode; null leaves that part as it is. */
   | { action: 'appearance'; theme: string | null; cinema: boolean | null };
 
@@ -466,6 +472,68 @@ export interface OsintData {
   ts: number;
 }
 
+/** TAR-43: uma tarefa como o painel mostra (tasks.py → card). */
+export interface TaskItem {
+  id: string;
+  text: string;
+  done: boolean;
+  due: string | null;
+  due_label: string;
+  overdue: boolean;
+}
+
+export interface TasksData {
+  tasks: TaskItem[];
+  notes: { id: string; text: string; created_at: string }[];
+  open: number;
+  overdue: number;
+  due_today: number;
+  done_today: number;
+}
+
+/** COT-44: uma moeda em reais (quotes.py). */
+export interface QuoteItem {
+  code: string;
+  base: string;
+  name: string;
+  value: number;
+  change_pct: number | null;
+  high: number | null;
+  low: number | null;
+  at: string;
+}
+
+export interface QuotesData {
+  items: QuoteItem[];
+  conversion: { amount: number; from: string; to: string; result: number; kind: 'currency' | 'unit'; rate: number | null } | null;
+}
+
+/** RED-45: uma medição da internet (netcheck.py). */
+export interface SpeedRun {
+  at: string;
+  ping_ms: number | null;
+  down_mbps: number | null;
+  up_mbps: number | null;
+}
+
+export interface SpeedData {
+  last: SpeedRun | null;
+  verdict: OsintVerdict | null;
+  history: SpeedRun[];
+}
+
+/** BRF-46: o resumo do dia montado pelo servidor (briefing.py → collect). */
+export interface BriefingData {
+  greeting: string;
+  date: string;
+  weather: { city: string; temperature: number; code: number; label: string; is_day?: number; max?: number | null; min?: number | null } | null;
+  next_event: { title: string; start: string; end: string; location?: string | null; call?: boolean } | null;
+  tasks: { open: number; overdue: number; due_today: number; done_today: number; items: TaskItem[] } | null;
+  reminders: { text: string; due_at: string; time: string }[];
+  quotes: QuoteItem[];
+  headlines: { title: string; source: string; url: string }[];
+}
+
 export interface CardDataMap {
   weather: WeatherData;
   search: SearchData;
@@ -486,6 +554,10 @@ export interface CardDataMap {
   calendar: CalendarData;
   diary: DiaryData;
   osint: OsintData;
+  tasks: TasksData;
+  briefing: BriefingData;
+  quotes: QuotesData;
+  speed: SpeedData;
 }
 
 export type HudCard = {
@@ -658,6 +730,8 @@ export interface ServerStatus {
   presence?: boolean;
   /** LAN-26: the server also answers paired phones on the home network (--lan). */
   lan?: boolean;
+  /** Dia a dia: tarefas, briefing, foco, cotações e teste de rede (JARVIS_ENABLE_DAY). */
+  day?: boolean;
   /** ODD-42: consultas em fontes públicas; network libera a consulta da rede do próprio PC. */
   osint?: { enabled: boolean; network: boolean };
   /** MCP-32: null when JARVIS_ENABLE_MCP=false. */

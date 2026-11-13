@@ -36,7 +36,11 @@ from gesture_engine import CALIBRATION_FILE as GESTURE_CALIBRATION_FILE
 from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
 from health import HealthStore, build_health_router
+from briefing import build_briefing_router
+from briefing import collect as collect_briefing
+from netcheck import build_net_router
 from osint import build_osint_router
+from tasks import build_tasks_router
 from routines import RoutineScheduler
 from context_triggers import ContextWatcher
 from proactive import ProactiveEngine, build_proactive_router
@@ -100,6 +104,18 @@ PC_TOOL_NAMES = [
 MEMORY_TOOL_NAMES = ["remember", "recall", "forget"]
 DIARY_TOOL_NAMES = ["diary_lookup", "forget_diary"]
 OSINT_TOOL_NAMES = ["osint_lookup"]
+DAY_TOOL_NAMES = [
+    "add_task",
+    "add_note",
+    "list_tasks",
+    "complete_task",
+    "remove_task",
+    "daily_briefing",
+    "focus_session",
+    "get_quotes",
+    "convert_value",
+    "network_speed",
+]
 ROUTINE_TOOL_NAMES = [
     "list_routines",
     "run_routine",
@@ -528,6 +544,7 @@ def create_app(
             + (MEMORY_TOOL_NAMES if settings.memory_enabled else [])
             + (DIARY_TOOL_NAMES if settings.diary_enabled else [])
             + (OSINT_TOOL_NAMES if settings.osint_enabled else [])
+            + (DAY_TOOL_NAMES if settings.day_enabled else [])
             + (ROUTINE_TOOL_NAMES if settings.routines_enabled else [])
             + (PC_TOOL_NAMES if settings.pc_control_enabled else [])
             + (GESTURE_TOOL_NAMES if settings.gestures_enabled else [])
@@ -558,6 +575,7 @@ def create_app(
             "memory": settings.memory_enabled,
             "diary": settings.diary_enabled,
             "osint": {"enabled": settings.osint_enabled, "network": settings.osint_network_enabled},
+            "day": settings.day_enabled,
             "voice": _active_voice(settings),
             "routines": {
                 "enabled": settings.routines_enabled,
@@ -811,14 +829,8 @@ def create_app(
     )
     app.state.context.fire = app.state.routines.fire
 
-    @app.get("/api/ambient")
-    def ambient(request: Request) -> dict[str, Any]:
-        """Modo ambiente do HUD: clima da JARVIS_HOME_CITY e a próxima reunião, com cache."""
-        _require_local(request, "A tela ambiente")
-        try:
-            settings = current_settings()
-        except SettingsError:
-            return {"weather": None, "next_event": None}
+    def ambient_info(settings: Settings) -> dict[str, Any]:
+        """Clima da JARVIS_HOME_CITY e a próxima reunião, com cache."""
         home = _geocode_home(settings.home_city) if settings.home_city else None
         weather = None
         if home is not None:
@@ -831,6 +843,43 @@ def create_app(
             )
         event = _cached("agenda", AMBIENT_AGENDA_TTL, _next_event) if settings.calendar_enabled else None
         return {"weather": weather, "next_event": event}
+
+    @app.get("/api/ambient")
+    def ambient(request: Request) -> dict[str, Any]:
+        """Modo ambiente do HUD: clima da JARVIS_HOME_CITY e a próxima reunião, com cache."""
+        _require_local(request, "A tela ambiente")
+        try:
+            settings = current_settings()
+        except SettingsError:
+            return {"weather": None, "next_event": None}
+        return ambient_info(settings)
+
+    def day_enabled() -> bool:
+        try:
+            return current_settings().day_enabled
+        except SettingsError:
+            return False
+
+    def briefing_data() -> dict[str, Any]:
+        """BRF-46: o painel Briefing do HUD e a ferramenta de voz leem o mesmo resumo do dia."""
+        now = dt.datetime.now().astimezone()
+        try:
+            settings = current_settings()
+        except SettingsError:
+            return collect_briefing(now=now, weather=None, next_event=None, day_enabled=False, reminders_enabled=False, news_topic=None, cached=_cached)
+        return collect_briefing(
+            now=now,
+            **ambient_info(settings),
+            day_enabled=settings.day_enabled,
+            reminders_enabled=settings.proactive_enabled,
+            news_topic=settings.briefing_news,
+            cached=_cached,
+        )
+
+    app.include_router(build_briefing_router(briefing_data, _require_local))
+    # TAR-43 e RED-45: o HUD marca tarefas e mede a rede sem passar pelo agente.
+    app.include_router(build_tasks_router(day_enabled, _require_local))
+    app.include_router(build_net_router(day_enabled, _require_local))
 
     @app.get("/api/system/live")
     def system_live(request: Request) -> dict[str, Any]:

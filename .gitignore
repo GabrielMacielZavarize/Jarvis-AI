@@ -70,3 +70,9 @@ saude.db-journal
 
 # Logs do Jarvis rodando pela bandeja ou pelo pythonw (BAN-41), com rotação
 logs/
+
+# Tarefas e notas (TAR-43) e histórico do teste de rede (RED-45)
+tarefas*.json
+tarefas.json.tmp
+rede.json
+rede.json.tmp

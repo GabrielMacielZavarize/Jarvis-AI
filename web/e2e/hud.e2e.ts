@@ -111,7 +111,7 @@ test('as abas trocam de área e o Painel volta com Esc', async ({ page }) => {
   // O dock continua à mão em qualquer área.
   await expect(page.getByRole('button', { name: 'Simulação' })).toBeVisible();
 
-  await page.keyboard.press('4');
+  await page.keyboard.press('5');
   await expect(app).toHaveAttribute('data-view', 'settings');
   for (const panel of ['Aparência', 'Áudio', 'Atalhos']) await expect(page.getByRole('region', { name: panel })).toBeVisible();
 
@@ -209,7 +209,7 @@ test('o Olho de Deus reconhece o que foi digitado, consulta e recusa dados pesso
     await route.fulfill({ json: IP_RESULT });
   });
 
-  await page.keyboard.press('2');
+  await page.keyboard.press('3');
   await expect(page.locator('main.app')).toHaveAttribute('data-view', 'eye');
   const field = page.getByRole('textbox', { name: 'O que consultar' });
   await expect(field).toBeFocused();
@@ -242,7 +242,7 @@ test('a senha é conferida sem sair do navegador', async ({ page }) => {
     await route.fulfill({ json: { prefix: '5BAA6', suffixes: [['1E4C9B93F3F0682250B6CF8331B7EE68FD8', 9545824]] } });
   });
 
-  await page.keyboard.press('2');
+  await page.keyboard.press('3');
   const field = page.getByLabel('Senha para conferir em vazamentos');
   await field.fill('password');
   await page.getByRole('button', { name: 'Conferir' }).click();
@@ -270,4 +270,89 @@ test('a paleta consulta um domínio digitado', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(page.locator('main.app')).toHaveAttribute('data-view', 'eye');
   await expect(page.getByRole('region', { name: 'Domínio', exact: true })).toContainText('github.com');
+});
+
+
+const TASKS = {
+  enabled: true,
+  tasks: [
+    { id: 't1', text: 'Fechar o relatório', done: false, due: '2026-11-12', due_label: 'hoje', overdue: false },
+    { id: 't2', text: 'Ligar pro contador', done: false, due: '2026-11-10', due_label: 'atrasada desde 10/11', overdue: true },
+  ],
+  notes: [{ id: 'n1', text: 'Ideia: painel de consumo', created_at: '2026-11-12T09:00:00-03:00' }],
+  open: 2,
+  overdue: 1,
+  due_today: 1,
+  done_today: 0,
+};
+
+test('o Dia a dia mostra tarefas, marca uma como feita e anota outra', async ({ page }) => {
+  const calls: string[] = [];
+  let state = TASKS;
+  await page.route('**/api/tasks**', async (route) => {
+    const request = route.request();
+    calls.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    if (request.method() === 'PATCH') {
+      state = { ...state, open: 1, due_today: 0, done_today: 1, tasks: state.tasks.map((task) => (task.id === 't1' ? { ...task, done: true } : task)) };
+    }
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() as { text: string };
+      state = { ...state, open: state.open + 1, tasks: [...state.tasks, { id: 't3', text: body.text, done: false, due: null, due_label: '', overdue: false }] };
+    }
+    await route.fulfill({ json: state });
+  });
+  // As tarefas falsas entram antes de o HUD abrir: o Briefing do Painel já pede a lista ao carregar.
+  const errors = await openHud(page, 'jarvis');
+
+  await page.keyboard.press('2');
+  await expect(page.locator('main.app')).toHaveAttribute('data-view', 'day');
+  const panel = page.getByRole('region', { name: 'Tarefas' });
+  await expect(panel).toContainText('2 abertas · 1 atrasada · 1 para hoje');
+  await expect(panel.locator('.task--late')).toContainText('Ligar pro contador');
+
+  await panel.getByRole('checkbox', { name: 'Fechar o relatório' }).check();
+  await expect(panel.locator('.task--done')).toContainText('Fechar o relatório');
+  await expect(panel).toContainText('1 aberta');
+
+  await panel.getByRole('textbox', { name: 'Nova tarefa' }).fill('Comprar café');
+  await panel.getByRole('textbox', { name: 'Nova tarefa' }).press('Enter');
+  await expect(panel).toContainText('Comprar café');
+  await expect(panel.getByRole('textbox', { name: 'Nova tarefa' })).toHaveValue('');
+  expect(calls).toContain('PATCH /api/tasks/t1');
+  expect(calls).toContain('POST /api/tasks');
+
+  // De volta ao Painel, o Briefing mostra as mesmas tarefas (o foco está no campo, então vai pelo clique).
+  await page.getByRole('navigation', { name: 'Áreas do HUD' }).getByRole('button', { name: 'Painel' }).click();
+  await expect(page.getByRole('region', { name: 'Briefing' })).toContainText('Comprar café');
+  expect(errors).toEqual([]);
+});
+
+test('a sessão de foco conta no painel, aparece no topo e sobrevive a recarregar', async ({ page }) => {
+  const errors = await openHud(page, 'jarvis');
+  await page.keyboard.press('2');
+  const panel = page.getByRole('region', { name: 'Foco' });
+  await panel.getByRole('spinbutton', { name: 'Foco (min)' }).fill('10');
+  await panel.getByRole('spinbutton', { name: 'Blocos' }).fill('2');
+  await panel.getByRole('button', { name: 'Começar o foco' }).click();
+
+  await expect(panel.getByRole('timer')).toContainText('Foco 1/2');
+  await expect(panel.getByRole('timer')).toContainText(/^(10:00|09:5\d)/);
+  const chip = page.locator('.chip--focus');
+  await expect(chip).toContainText('Foco');
+
+  // O bloco em andamento fica à vista em qualquer área e leva de volta ao Dia a dia.
+  await page.keyboard.press('1');
+  await expect(chip).toBeVisible();
+  await page.reload();
+  await page.locator('.boot').click();
+  await expect(page.locator('.hud.hud--online')).toBeVisible();
+  await expect(page.locator('.chip--focus')).toContainText('1/2');
+  await page.locator('.chip--focus').click();
+  await expect(page.locator('main.app')).toHaveAttribute('data-view', 'day');
+
+  await page.getByRole('region', { name: 'Foco' }).getByRole('button', { name: 'Pular bloco' }).click();
+  await expect(page.getByRole('region', { name: 'Foco' }).getByRole('timer')).toContainText('Pausa 1/2');
+  await page.getByRole('region', { name: 'Foco' }).getByRole('button', { name: 'Encerrar' }).click();
+  await expect(page.locator('.chip--focus')).toHaveCount(0);
+  expect(errors).toEqual([]);
 });

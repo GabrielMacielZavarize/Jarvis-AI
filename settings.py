@@ -91,6 +91,14 @@ def _parse_bool(raw_value: str | None, env_name: str, default: bool = False) -> 
     )
 
 
+def _briefing_news(raw_value: str | None) -> str | None:
+    """JARVIS_BRIEFING_NEWS: assunto das manchetes; vazio, "false" ou "off" tira as manchetes."""
+    if raw_value is None:
+        return "principais notícias do Brasil hoje"
+    cleaned = " ".join(raw_value.split())[:80]
+    return None if cleaned.lower() in FALSY_VALUES or not cleaned else cleaned
+
+
 def _parse_tool_routing(raw_value: str | None) -> str:
     """JARVIS_TOOL_ROUTING: "auto" (default), or any true/false spelling."""
     normalized = (raw_value or "").strip().lower()
@@ -300,6 +308,10 @@ class Settings:
     # ODD-42: consultas em fontes públicas (IP, domínio, link, CNPJ...) e, à parte, a rede do próprio PC.
     osint_enabled: bool = True
     osint_network_enabled: bool = False
+    # Dia a dia: tarefas e notas (TAR-43), cotações (COT-44), teste de rede (RED-45), briefing (BRF-46) e foco (FOC-47).
+    day_enabled: bool = True
+    # Assunto das manchetes do briefing; vazio tira as manchetes.
+    briefing_news: str | None = "principais notícias do Brasil hoje"
     # Painel de saúde (SAU-40): histórico local em saude.db.
     health_enabled: bool = True
     allowed_emails: tuple[str, ...] = ()
@@ -467,6 +479,8 @@ class Settings:
             diary_enabled=_parse_bool(env_map.get("JARVIS_DIARY"), "JARVIS_DIARY", default=True),
             osint_enabled=_parse_bool(env_map.get("JARVIS_ENABLE_OSINT"), "JARVIS_ENABLE_OSINT", default=True),
             osint_network_enabled=_parse_bool(env_map.get("JARVIS_OSINT_NETWORK"), "JARVIS_OSINT_NETWORK", default=False),
+            day_enabled=_parse_bool(env_map.get("JARVIS_ENABLE_DAY"), "JARVIS_ENABLE_DAY", default=True),
+            briefing_news=_briefing_news(env_map.get("JARVIS_BRIEFING_NEWS")),
             health_enabled=_parse_bool(env_map.get("JARVIS_HEALTH"), "JARVIS_HEALTH", default=True),
             gmail_user=_clean_optional(env_map.get("GMAIL_USER")),
             gmail_app_password=_clean_optional(env_map.get("GMAIL_APP_PASSWORD")),

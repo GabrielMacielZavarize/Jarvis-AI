@@ -11,6 +11,7 @@ import { DictationIndicator } from './components/DictationIndicator';
 import { BriefingPanel } from './components/BriefingPanel';
 import { CommandPalette } from './components/CommandPalette';
 import { ConversationPanel } from './components/ConversationPanel';
+import { DayView } from './components/DayView';
 import { EyeView } from './components/EyeView';
 import { NavTabs } from './components/NavTabs';
 import { PairingScreen } from './components/PairingScreen';
@@ -32,6 +33,7 @@ import { type StatusResult, useServerStatus } from './hooks/useServerStatus';
 import { useWakeWord } from './hooks/useWakeWord';
 import { AMBIENT_AFTER_MS } from './lib/ambient';
 import { homeFromTimezone } from './lib/geo';
+import { useFocus } from './lib/focus';
 import { useHud } from './lib/hudStore';
 import { DEFAULT_LAYOUT, type PanelId, setPrefs, usePrefs } from './lib/prefs';
 import type { JarvisMode } from './lib/types';
@@ -181,6 +183,15 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   // PRS-25: "Presente" / "Ausente há 5 min" in the Sistema panel.
   const presence = usePresence(server?.presence ?? false);
 
+  // FOC-47: a sessão de foco anda a cada segundo, com ou sem link aberto.
+  const focusRunning = useFocus((s) => s.focus.running);
+  useEffect(() => {
+    if (!focusRunning) return;
+    useFocus.getState().tick();
+    const timer = window.setInterval(() => useFocus.getState().tick(), 1000);
+    return () => window.clearInterval(timer);
+  }, [focusRunning]);
+
   const micSilent = useSilentMicrophone(live.connected && !demo.running && live.micEnabled);
   const sendText = (text: string) => void live.send(text);
 
@@ -232,6 +243,9 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
     setPrefs,
     resetLayout: () => setPrefs({ layout: DEFAULT_LAYOUT }),
     send: sendText,
+    focusRunning,
+    startFocus: () => useFocus.getState().start(),
+    stopFocus: () => useFocus.getState().stop(),
   };
 
   // Global shortcuts: Space starts, M toggles the mic, Esc clears the projections.
@@ -316,6 +330,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
         {drag.target && view === 'home' && (
           <i className="drop-line" style={{ top: drag.target.top, left: drag.target.left, width: drag.target.width }} aria-hidden />
         )}
+        {view === 'day' && <DayView server={server} local={local} />}
         {view === 'eye' && <EyeView server={server} />}
         {view === 'system' && (
           <SystemView

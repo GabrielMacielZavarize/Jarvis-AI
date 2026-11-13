@@ -1,12 +1,16 @@
-"""Nenhum teste grava no saude.db real nem manda eventos de saúde ao servidor do PC, e nenhum
-depende da persona que o dono escolheu no HUD (persona.json)."""
+"""Nenhum teste grava no saude.db real nem manda eventos de saúde ao servidor do PC, nenhum
+depende da persona que o dono escolheu no HUD (persona.json) e nenhum lê ou escreve as tarefas e
+o histórico de rede de verdade."""
 
 from __future__ import annotations
 
 import pytest
 
 import health
+import netcheck
 import personas
+import quotes
+import tasks
 
 
 @pytest.fixture(autouse=True)
@@ -19,3 +23,12 @@ def _isolated_health(tmp_path, monkeypatch):
 def _isolated_persona(tmp_path, monkeypatch):
     # Com "stealth" salvo no persona.json de verdade, os testes de voz esperavam a voz errada.
     monkeypatch.setattr(personas, "PERSONA_FILE", tmp_path / "persona.json")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_day(tmp_path, monkeypatch):
+    monkeypatch.setattr(tasks, "TASKS_FILE", tmp_path / "tarefas.json")
+    monkeypatch.setattr(netcheck, "HISTORY_FILE", tmp_path / "rede.json")
+    monkeypatch.setattr(netcheck, "_last_run", 0.0)
+    # As cotações ficam um minuto em memória: um teste não pode herdar a do anterior.
+    quotes._cache.clear()

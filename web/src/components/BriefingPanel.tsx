@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import { useAmbientInfo } from '../hooks/useAmbientInfo';
+import { useEffect, useState } from 'react';
 import { useClock } from '../hooks/useClock';
 import type { StatusResult } from '../hooks/useServerStatus';
 import { untilEvent } from '../lib/ambient';
 import { greeting, suggestions } from '../lib/briefing';
+import { formatChange, formatQuote, tasksSummary, useBriefing, useTasks } from '../lib/day';
 import { useHud } from '../lib/hudStore';
 import { usePrefs } from '../lib/prefs';
 import { themeInfo } from '../lib/themes';
 import { Panel } from './Panel';
+import { TaskList } from './cards/DayCards';
 import { WeatherGlyph } from './cards/WeatherGlyph';
 
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -32,7 +33,15 @@ interface BriefingPanelProps {
 export function BriefingPanel({ status, canSend, demo, onSend, wakeListening, micSilent }: BriefingPanelProps) {
   const now = useClock(30_000);
   const server = status.state === 'ok' ? status.status : null;
-  const info = useAmbientInfo(server !== null);
+  const info = useBriefing(server !== null);
+  const dayOn = server?.day ?? false;
+  // A lista viva (que os cliques e a voz atualizam) vale mais que a cópia do briefing.
+  const tasks = useTasks((s) => s.data);
+  const loadTasks = useTasks((s) => s.load);
+  useEffect(() => {
+    if (dayOn) void loadTasks();
+  }, [dayOn, loadTasks]);
+  const taskCount = tasks ?? info?.tasks ?? null;
   const address = themeInfo(usePrefs().theme).address;
   const setView = useHud((s) => s.setView);
   const today = new Date(now);
@@ -75,7 +84,12 @@ export function BriefingPanel({ status, canSend, demo, onSend, wakeListening, mi
               <b>{event.title}</b> {untilEvent(event, now)}
             </span>
           )}
-          {!weather && !event && <span>{dateFormatter.format(today)}</span>}
+          {taskCount && taskCount.open > 0 && (
+            <span>
+              <b>{taskCount.open}</b> {taskCount.open === 1 ? 'tarefa' : 'tarefas'}
+            </span>
+          )}
+          {!weather && !event && !(taskCount && taskCount.open > 0) && <span>{dateFormatter.format(today)}</span>}
         </p>
       </Panel>
     );
@@ -134,6 +148,60 @@ export function BriefingPanel({ status, canSend, demo, onSend, wakeListening, mi
           )}
         </div>
       </div>
+
+      {dayOn && tasks && (
+        <div className="briefing__block">
+          <div className="tile__label">
+            Tarefas · {tasksSummary(tasks)}
+            <button type="button" className="link-btn" onClick={() => setView('day')}>
+              abrir
+            </button>
+          </div>
+          {tasks.open > 0 && <TaskList data={{ ...tasks, tasks: tasks.tasks.filter((task) => !task.done) }} editable={false} limit={4} />}
+        </div>
+      )}
+      {info && info.reminders.length > 0 && (
+        <div className="briefing__block">
+          <div className="tile__label">Lembretes nas próximas 24 h</div>
+          <ul className="briefing__list">
+            {info.reminders.map((reminder) => (
+              <li key={reminder.due_at + reminder.text}>
+                <b>{reminder.time}</b> {reminder.text}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {info && info.quotes.length > 0 && (
+        <div className="briefing__quotes">
+          {info.quotes.map((quote) => {
+            const change = formatChange(quote.change_pct);
+            return (
+              <span key={quote.code} title={quote.name}>
+                {quote.code} <b>{formatQuote(quote.value)}</b> <i className={`quotes__change quotes__change--${change.tone}`}>{change.text}</i>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {info && info.headlines.length > 0 && (
+        <div className="briefing__block">
+          <div className="tile__label">Manchetes</div>
+          <ul className="briefing__list">
+            {info.headlines.slice(0, 3).map((item) => (
+              <li key={item.title}>
+                {/^https?:\/\//i.test(item.url) ? (
+                  <a href={item.url} target="_blank" rel="noopener noreferrer">
+                    {item.title}
+                  </a>
+                ) : (
+                  item.title
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {status.state === 'unreachable' && !demo && (
         <div className="notice" role="status">

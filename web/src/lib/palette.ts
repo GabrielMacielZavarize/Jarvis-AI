@@ -46,6 +46,10 @@ export interface PaletteContext {
   clearCards: () => void;
   /** Manda um texto ao Jarvis pelo link aberto. */
   send: (text: string) => void;
+  /** FOC-47: a sessão de foco está rodando; começar e parar. */
+  focusRunning?: boolean;
+  startFocus?: () => void;
+  stopFocus?: () => void;
 }
 
 const NEEDS_LINK = 'Inicie o link para enviar';
@@ -119,6 +123,21 @@ export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
       shortcut: 'M',
       run: ctx.toggleMic,
     });
+  }
+
+  if (ctx.startFocus && ctx.stopFocus) {
+    commands.push(
+      ctx.focusRunning
+        ? { id: 'focus:stop', group: 'Dia a dia', label: 'Encerrar o foco', keywords: 'pomodoro parar sessao', run: ctx.stopFocus }
+        : {
+            id: 'focus:start',
+            group: 'Dia a dia',
+            label: 'Começar o foco',
+            hint: 'Pomodoro com os tempos do painel Foco',
+            keywords: 'pomodoro concentracao timer sessao iniciar',
+            run: ctx.startFocus,
+          },
+    );
   }
 
   commands.push({

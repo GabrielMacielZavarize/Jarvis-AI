@@ -26,6 +26,7 @@ import {
   WeatherBody,
 } from './Cards';
 import { HoloCard } from './HoloCard';
+import { BriefingBody, QuotesBody, SpeedBody, TasksBody } from './DayCards';
 import { OsintBody } from './OsintCard';
 
 function panelBody(card: HudCard, expanded: boolean): ReactNode {
@@ -68,6 +69,14 @@ function panelBody(card: HudCard, expanded: boolean): ReactNode {
       return <DiaryBody id={card.id} data={card.data} />;
     case 'osint':
       return <OsintBody data={card.data} />;
+    case 'tasks':
+      return <TasksBody data={card.data} compact={!expanded} />;
+    case 'briefing':
+      return <BriefingBody data={card.data} />;
+    case 'quotes':
+      return <QuotesBody data={card.data} />;
+    case 'speed':
+      return <SpeedBody data={card.data} />;
   }
 }
 

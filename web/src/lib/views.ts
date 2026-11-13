@@ -2,7 +2,7 @@
  * Áreas de trabalho do HUD: o que as abas do topo (e a barra de baixo, no celular) abrem.
  * "home" é o HUD de sempre, com o núcleo no centro; as outras abrem painéis por cima dele.
  */
-export type ViewId = 'home' | 'eye' | 'system' | 'settings';
+export type ViewId = 'home' | 'day' | 'eye' | 'system' | 'settings';
 
 export interface ViewInfo {
   id: ViewId;
@@ -17,9 +17,10 @@ export interface ViewInfo {
 
 export const VIEWS: ViewInfo[] = [
   { id: 'home', label: 'Painel', hint: 'Núcleo, briefing do dia, conversa e projeções', key: '1' },
-  { id: 'eye', label: 'Olho de Deus', short: 'Olho', hint: 'Consultas em fontes públicas: IP, domínio, link, CNPJ, CEP, email, usuário e a sua rede', key: '2' },
-  { id: 'system', label: 'Sistema', hint: 'Estado do link, protocolos, saúde, gestos e celular', key: '3' },
-  { id: 'settings', label: 'Ajustes', hint: 'Persona, cena, áudio, microfone e atalhos', key: '4' },
+  { id: 'day', label: 'Dia a dia', short: 'Dia', hint: 'Tarefas e notas, foco, cotações e o teste da internet', key: '2' },
+  { id: 'eye', label: 'Olho de Deus', short: 'Olho', hint: 'Consultas em fontes públicas: IP, domínio, link, CNPJ, CEP, email, usuário e a sua rede', key: '3' },
+  { id: 'system', label: 'Sistema', hint: 'Estado do link, protocolos, saúde, gestos e celular', key: '4' },
+  { id: 'settings', label: 'Ajustes', hint: 'Persona, cena, áudio, microfone e atalhos', key: '5' },
 ];
 
 export const DEFAULT_VIEW: ViewId = 'home';

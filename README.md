@@ -24,7 +24,8 @@ In English: real-time voice assistant built on LiveKit Agents (Gemini Live or Op
 - Acorda quando você diz "Jarvis" (ou "Friday", que já abre a F.R.I.D.A.Y.) e também funciona pelo celular, na rede de casa.
 - Se o modelo gratuito do Google estoura a cota ou trava, a conversa continua em outro modelo sem cair.
 - Tem o Olho de Deus: consulta de onde é um IP, o que um domínio expõe, se um link tem cara de golpe, um CNPJ, um CEP, se o seu email apareceu em vazamentos e como está a sua rede. Só fontes públicas, nada de dados pessoais de terceiros.
-- O HUD tem áreas de trabalho (Painel, Olho de Deus, Sistema e Ajustes), um briefing do dia e uma paleta de comandos no `Ctrl+K`.
+- Cuida do dia a dia: tarefas e notas por voz, um briefing ("como está o meu dia?"), sessões de foco no estilo Pomodoro, cotações, conversões e o teste da internet.
+- O HUD tem áreas de trabalho (Painel, Dia a dia, Olho de Deus, Sistema e Ajustes), um briefing do dia e uma paleta de comandos no `Ctrl+K`.
 - Guarda um histórico de tempo de resposta, ativações e falhas, e sugere o que ajustar no `.env`.
 - No Windows, fica como um ícone na bandeja, sem janela de terminal, e pode abrir junto com o Windows.
 
@@ -89,6 +90,7 @@ Linux, macOS, OpenAI e as demais opções estão em [docs/instalacao.md](docs/in
 | Casa inteligente (Home Assistant) | [casa.md](docs/casa.md) |
 | Avisos e lembretes | [avisos.md](docs/avisos.md) |
 | Celular na rede de casa | [celular.md](docs/celular.md) |
+| Dia a dia: tarefas, briefing, foco, cotações e rede | [dia-a-dia.md](docs/dia-a-dia.md) |
 | Olho de Deus (consultas em fontes públicas) | [olho-de-deus.md](docs/olho-de-deus.md) |
 | Painel de saúde | [saude.md](docs/saude.md) |
 | Ícone na bandeja do Windows | [bandeja.md](docs/bandeja.md) |

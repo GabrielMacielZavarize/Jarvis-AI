@@ -119,6 +119,15 @@ GROUPS: tuple[ToolGroup, ...] = (
     ),
     ToolGroup("apps", "Instalar apps", "procurar e instalar aplicativos", ("search_apps", "prepare_app_install")),
     ToolGroup(
+        "dia",
+        "Dia a dia",
+        "tarefas e notas (anotar, listar, concluir, apagar), briefing do dia, foco/Pomodoro, cotações de moedas, conversão de moedas e unidades, velocidade da internet",
+        (
+            "add_task", "add_note", "list_tasks", "complete_task", "remove_task", "daily_briefing", "focus_session",
+            "get_quotes", "convert_value", "network_speed",
+        ),
+    ),  # fmt: skip
+    ToolGroup(
         "olho",
         "Olho de Deus",
         "consultas em fontes públicas: localizar IP, investigar domínio, link suspeito, CNPJ, CEP, DDD, email em vazamentos, usuário em sites, minha rede",

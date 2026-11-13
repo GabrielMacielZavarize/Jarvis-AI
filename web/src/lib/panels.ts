@@ -26,6 +26,10 @@ export const PANEL_META: Record<CardKind, { code: string; title: string; aliases
   routine: { code: 'ROT-24', title: 'Rotina', aliases: ['rotinas', 'modo', 'passos', 'sequencia'] },
   calendar: { code: 'AGD-27', title: 'Agenda', aliases: ['calendario', 'compromissos', 'reuniao', 'reunioes', 'eventos'] },
   diary: { code: 'DIA-36', title: 'Diário', aliases: ['diario', 'conversas', 'historico', 'resumos', 'pendencias'] },
+  tasks: { code: 'TAR-43', title: 'Tarefas', aliases: ['tarefa', 'lista', 'afazeres', 'pendencias', 'notas', 'nota', 'todo'] },
+  briefing: { code: 'BRF-46', title: 'Briefing', aliases: ['resumo', 'dia', 'bom dia', 'hoje'] },
+  quotes: { code: 'COT-44', title: 'Cotações', aliases: ['cotacao', 'dolar', 'euro', 'bitcoin', 'moedas', 'cambio', 'conversao'] },
+  speed: { code: 'RED-45', title: 'Rede', aliases: ['internet', 'velocidade', 'conexao', 'ping', 'wifi'] },
   osint: { code: 'ODD-42', title: 'Olho de Deus', aliases: ['olho', 'consulta', 'osint', 'ip', 'dominio', 'link', 'cnpj', 'cep', 'vazamento', 'rede'] },
 };
 
@@ -95,6 +99,14 @@ export function panelDetail(card: HudCard, now = Date.now()): string {
       return diaryDetail(card.data);
     case 'osint':
       return [card.data.label, card.data.title].filter(Boolean).join(' · ');
+    case 'tasks':
+      return `${card.data.open} ${card.data.open === 1 ? 'aberta' : 'abertas'}${card.data.notes.length ? ` · ${card.data.notes.length} notas` : ''}`;
+    case 'briefing':
+      return card.data.greeting;
+    case 'quotes':
+      return card.data.conversion ? `${card.data.conversion.from} → ${card.data.conversion.to}` : card.data.items.map((item) => item.code).join(', ');
+    case 'speed':
+      return card.data.verdict?.label ?? '';
   }
 }
 
@@ -185,6 +197,12 @@ export function parseHudRequest(payload: string): HudRequest {
     raw = {};
   }
   if (raw.action === 'mic' || raw.action === 'end_session') return { action: raw.action };
+  if (raw.action === 'focus') {
+    const extra = raw as { command?: unknown; work?: unknown; rest?: unknown; cycles?: unknown };
+    const command = ['start', 'stop', 'skip', 'status'].includes(extra.command as string) ? (extra.command as 'start' | 'stop' | 'skip' | 'status') : 'status';
+    const number = (value: unknown, fallback: number) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback);
+    return { action: 'focus', command, work: number(extra.work, 25), rest: number(extra.rest, 5), cycles: number(extra.cycles, 4) };
+  }
   if (raw.action === 'appearance') {
     return {
       action: 'appearance',

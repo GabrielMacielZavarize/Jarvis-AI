@@ -52,6 +52,10 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `confirmation.py` | A frase "confirmar <código>", tolerante à transcrição de voz |
 | `memory.py` | Memória entre conversas (`memoria.json`), busca pelo sentido, filtro de segredos e painel |
 | `diary.py` | Diário das conversas (DIA-36): resumo no fim do link pelo Gemini, `diario.json`, busca por data e pelo sentido e painel |
+| `tasks.py` | Tarefas e notas (TAR-43): `tarefas.json`, prazos falados, ferramentas e as rotas `/api/tasks` |
+| `quotes.py` | Cotações e conversões (COT-44): AwesomeAPI com um minuto de memória e a conta local das unidades |
+| `netcheck.py` | Velocidade da internet (RED-45): latência, download, upload, `rede.json` e as rotas `/api/network` |
+| `briefing.py` | Briefing do dia (BRF-46), montado no servidor em `/api/briefing`, e a ferramenta do foco (FOC-47), que pede a sessão ao HUD |
 | `osint.py` | Olho de Deus (ODD-42): consultas em fontes públicas (IP, domínio, link, CNPJ, CEP, DDD, email, usuário, rede), a trava contra SSRF, a ferramenta `osint_lookup` e as rotas `/api/osint` |
 | `voices.py` | Voz do Jarvis (VOZ-30): vozes do Gemini Live, `voz.json` (uma voz por persona) e a ferramenta `change_voice` |
 | `routines.py` | Rotinas (`rotinas.json`): passos, execução com falhas parciais, ferramentas e agendador |
@@ -91,7 +95,7 @@ E o HUD, em `web/src`:
 
 ## Arquivos locais
 
-Ficam na pasta do projeto, fora do git: `.env`, `memoria.json`, `memoria_vetores.json`, `diario.json`, `rotinas.json`, `lembretes.json`, `layouts.json`, `telas.json`, `atalhos.json`, `gestos.json`, `gestos_calibracao.json`, `voz.json`, `persona.json`, `modelos.json`, `presenca_rosto.json`, `aparelhos.json`, `mcp.json`, `saude.db`, `google_credentials.json`, `google_token.json` e as pastas `.jarvis-tls/` e `logs/`.
+Ficam na pasta do projeto, fora do git: `.env`, `memoria.json`, `memoria_vetores.json`, `diario.json`, `rotinas.json`, `lembretes.json`, `layouts.json`, `telas.json`, `atalhos.json`, `gestos.json`, `gestos_calibracao.json`, `voz.json`, `persona.json`, `modelos.json`, `presenca_rosto.json`, `aparelhos.json`, `mcp.json`, `tarefas.json`, `rede.json`, `saude.db`, `google_credentials.json`, `google_token.json` e as pastas `.jarvis-tls/` e `logs/`.
 
 ## Referências
 

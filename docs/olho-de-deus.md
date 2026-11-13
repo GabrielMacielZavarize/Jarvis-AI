@@ -1,6 +1,6 @@
 # Olho de Deus
 
-Protocolo ODD-42. Consultas em fontes públicas, por voz ou pela área Olho de Deus do HUD (tecla `2`).
+Protocolo ODD-42. Consultas em fontes públicas, por voz ou pela área Olho de Deus do HUD (tecla `3`).
 
 O nome vem dos painéis de "consulta" que circulam pelo Telegram, que puxam CPF, telefone e endereço de pessoas a partir de bases vazadas. Isso aqui não faz: vender ou consultar esses dados é crime e fere a LGPD. O que este protocolo faz é juntar, num lugar só, o que já é público e legal.
 
@@ -31,7 +31,7 @@ O que tiver lugar conhecido (um IP, o servidor de um domínio, um CEP com coorde
 
 ## Como usar
 
-No HUD, abra a área Olho de Deus (tecla `2` ou a aba no topo) e digite. O tipo é reconhecido pelo formato: `8.8.8.8` é IP, `github.com` é domínio, um endereço com `/` é link, 14 números são CNPJ, 8 são CEP, 2 são DDD, um texto com `@` é email e uma palavra só é usuário. Se ele reconhecer errado, clique no tipo embaixo do campo. Os resultados ficam empilhados ao lado, o mais novo em cima, e somem quando a aba fecha: nada é gravado em disco.
+No HUD, abra a área Olho de Deus (tecla `3` ou a aba no topo) e digite. O tipo é reconhecido pelo formato: `8.8.8.8` é IP, `github.com` é domínio, um endereço com `/` é link, 14 números são CNPJ, 8 são CEP, 2 são DDD, um texto com `@` é email e uma palavra só é usuário. Se ele reconhecer errado, clique no tipo embaixo do campo. Os resultados ficam empilhados ao lado, o mais novo em cima, e somem quando a aba fecha: nada é gravado em disco.
 
 Pela paleta (`Ctrl+K`), digitar um IP, domínio, link, CNPJ, CEP ou email já oferece "Consultar" como primeira opção.
 

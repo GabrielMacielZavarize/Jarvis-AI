@@ -11,6 +11,12 @@ function ViewIcon({ id }: { id: ViewId }) {
         <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" />
       </>
     ),
+    day: (
+      <>
+        <rect x="3.5" y="4.5" width="17" height="16" rx="2" />
+        <path d="M3.5 9.5h17M8 2.5v4M16 2.5v4M8 14.5l2.5 2.5 5-5" />
+      </>
+    ),
     eye: (
       <>
         <path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" />

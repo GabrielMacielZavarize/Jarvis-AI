@@ -793,6 +793,10 @@ HUD_PANEL_KINDS = {
     "calendar": "Agenda",
     "diary": "Diário",
     "osint": "Olho de Deus",
+    "tasks": "Tarefas",
+    "briefing": "Briefing",
+    "quotes": "Cotações",
+    "speed": "Rede",
 }
 LAST_PANEL = "last"
 MAX_PANEL_TARGETS = 6
@@ -1414,6 +1418,16 @@ def build_tools(settings: Settings) -> list[Any]:
         from osint import build_osint_tools
 
         tools.extend(build_osint_tools(settings.osint_network_enabled))
+    if settings.day_enabled:
+        from briefing import build_day_tools
+        from netcheck import build_net_tools
+        from quotes import build_quote_tools
+        from tasks import build_task_tools
+
+        tools.extend(build_task_tools())
+        tools.extend(build_day_tools(settings.hud_url))
+        tools.extend(build_quote_tools())
+        tools.extend(build_net_tools())
     if settings.routines_enabled:
         from routines import build_routine_tools
 

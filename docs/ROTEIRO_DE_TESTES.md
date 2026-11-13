@@ -359,7 +359,7 @@ Detalhes em [bandeja.md](bandeja.md). Só no Windows.
 
 Detalhes em [hud.md](hud.md).
 
-- [ ] As abas no topo trocam entre Painel, Olho de Deus, Sistema e Ajustes; as teclas `1` a `4` fazem o mesmo e `Esc` volta ao Painel.
+- [ ] As abas no topo trocam entre Painel, Dia a dia, Olho de Deus, Sistema e Ajustes; as teclas `1` a `5` fazem o mesmo e `Esc` volta ao Painel.
 - [ ] `Ctrl+K` abre a paleta. Digite "mark" e Enter: a persona troca. Com o link aberto, digite uma pergunta e Enter: ela vai por texto ao Jarvis.
 - [ ] O Briefing mostra a saudação, o clima da `JARVIS_HOME_CITY` e a próxima reunião. Peça o clima por voz: o Briefing encolhe para uma linha e a projeção aparece logo abaixo.
 - [ ] Peça três ou quatro coisas seguidas (clima, diagnóstico, um timer, uma pesquisa): a coluna da esquerda rola e nenhum painel fica cortado.
@@ -371,7 +371,7 @@ Detalhes em [hud.md](hud.md).
 
 Detalhes em [olho-de-deus.md](olho-de-deus.md). Os testes automáticos usam respostas falsas das fontes: é aqui que se confere contra os serviços de verdade.
 
-- [ ] Área Olho de Deus (tecla `2`), digite `8.8.8.8`: o aviso diz "Reconhecido como IP" e o resultado traz Estados Unidos, Google e um globo pequeno. No Painel, o globo 3D desenha um arco até lá.
+- [ ] Área Olho de Deus (tecla `3`), digite `8.8.8.8`: o aviso diz "Reconhecido como IP" e o resultado traz Estados Unidos, Google e um globo pequeno. No Painel, o globo 3D desenha um arco até lá.
 - [ ] Campo vazio com o tipo IP escolhido: aparece o seu IP público e o seu provedor.
 - [ ] `github.com`: registro (criado em 2007), DNS, SPF e DMARC, certificado válido e uma lista de subdomínios. Se o crt.sh estiver lento, o resto aparece sem os subdomínios.
 - [ ] Um link encurtado (`bit.ly/...`) de um site conhecido: "Caminho do link" mostra o redirecionamento e o veredito é verde ou de atenção.
@@ -386,4 +386,20 @@ Detalhes em [olho-de-deus.md](olho-de-deus.md). Os testes automáticos usam resp
 - [ ] "Minha rede" aparece apagado. Com `JARVIS_OSINT_NETWORK=true` e o Jarvis reiniciado, o botão mostra o IP público, as portas abertas (a 8000 do HUD entre elas) e os aparelhos do Wi-Fi.
 - [ ] `Ctrl+K`, digite um domínio: a primeira opção é "Consultar Domínio", e Enter abre a área com o resultado.
 - [ ] Com `JARVIS_ENABLE_OSINT=false`, a área mostra "Olho de Deus desligado" e o Jarvis não tem a ferramenta.
+
+## 31. Dia a dia
+
+Detalhes em [dia-a-dia.md](dia-a-dia.md). As cotações, as manchetes e o teste de rede só foram testados com respostas falsas: é aqui que se confere de verdade.
+
+- [ ] "Jarvis, tenho que fechar o relatório até sexta" e "anota aí: comprar café": o painel Tarefas projeta a lista e o `tarefas.json` aparece na pasta do projeto, fora do `git status`.
+- [ ] "O que falta hoje?": ele lê as tarefas numeradas. "Já fiz a segunda": a tarefa some das abertas e aparece riscada.
+- [ ] Na área Dia a dia (tecla `2`), marque uma tarefa com o mouse, escreva outra no campo e apague uma nota no X. Recarregue a página: tudo continua igual.
+- [ ] "Anota aí: a senha do banco é 1234" é recusado com a explicação.
+- [ ] "Como está o meu dia?": o painel Briefing traz clima, próxima reunião, tarefas, lembretes, cotações e manchetes, e ele fala o resumo. O Briefing do Painel mostra o mesmo.
+- [ ] "Quanto está o dólar?" e "quanto dá 150 dólares em reais?": os valores batem com um site de câmbio. "10 milhas em quilômetros" responde 16,09 sem abrir painel.
+- [ ] "Começa um foco de 1 minuto com pausa de 1, dois blocos": a contagem aparece no painel Foco e na barra do topo. Deixe o link fechar por silêncio: a contagem continua e, na troca, tocam o som e a notificação "Hora da pausa".
+- [ ] Com o foco rodando, recarregue a página: a contagem volta de onde estava. "Quanto falta do foco?" e "encerra o foco" funcionam por voz.
+- [ ] "Como está a minha internet?": em uns 15 segundos ele fala download, upload e latência, e o painel Rede ganha uma barra no histórico. Peça de novo na hora: ele pede para esperar.
+- [ ] No celular pareado, o painel Rede mostra o histórico sem o botão "Medir agora".
+- [ ] Com `JARVIS_ENABLE_DAY=false`, a área mostra "Dia a dia desligado" e o Jarvis não tem essas ferramentas.
 

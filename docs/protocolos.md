@@ -42,6 +42,11 @@ Cada ferramenta do Jarvis tem um código de protocolo, que aparece no HUD (na pl
 | MCP-32 | `mcp_status`, `confirm_mcp_action`, `cancel_mcp_action` e as ferramentas liberadas no `mcp.json` (`github_list_issues`...) | Usa ferramentas de servidores MCP (GitHub, Notion, Spotify...). Só as do `permitir` chegam ao modelo, e as que escrevem pedem código | "Quais issues abertas eu tenho no Jarvis-AI?", "Procura a página da reunião no Notion.", "Quais integrações você tem?" |
 | FER-33 | `use_tools` | Ferramentas sob demanda: o modelo pede um grupo (agenda, janelas, mouse, cada integração MCP...) quando o assunto chega. Quem chama é o próprio modelo | "O que eu tenho hoje?" com a agenda fora do núcleo: "Um instante." e a resposta |
 | ODD-42 | `osint_lookup` | Olho de Deus: consultas em fontes públicas. IP, domínio, link suspeito, CNPJ, CEP, DDD, email em vazamentos, usuário em sites e a rede do próprio PC. Não consulta dados pessoais de terceiros ([olho-de-deus.md](olho-de-deus.md)) | "De onde é o IP 8.8.8.8?", "Esse link é golpe?", "Consulta esse CNPJ.", "Meu email apareceu em algum vazamento?" |
+| TAR-43 | `add_task`, `add_note`, `list_tasks`, `complete_task`, `remove_task` | Tarefas com prazo opcional e notas rápidas, em `tarefas.json`. Painel Tarefas com caixa de marcar ([dia-a-dia.md](dia-a-dia.md)) | "Tenho que fechar o relatório até sexta.", "Anota aí: comprar café.", "O que falta hoje?", "Já fiz o relatório." |
+| COT-44 | `get_quotes`, `convert_value` | Cotação de moedas em reais e conversão entre moedas ou entre unidades de medida | "Quanto está o dólar?", "Quanto dá 150 dólares em reais?", "10 milhas em quilômetros." |
+| RED-45 | `network_speed` | Latência, download e upload da internet, com histórico | "Como está a minha internet?", "Testa a velocidade." |
+| BRF-46 | `daily_briefing` | Resumo do dia num painel: clima, próxima reunião, tarefas, lembretes, cotações e manchetes | "Como está o meu dia?", "Me dá o resumo do dia." |
+| FOC-47 | `focus_session` | Sessão de foco (Pomodoro) com a contagem no HUD, que continua com o link fechado | "Começa um foco de 25 minutos.", "Quanto falta do foco?", "Encerra o foco." |
 | SAU-40 | Nenhuma (painel do HUD) | Histórico local de tempo de resposta, ativações, falhas e modelos, com sugestões de ajuste do `.env` | Abra o painel Saúde no HUD |
 
 A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm ferramenta de voz. Estão em [voz.md](voz.md#palavra-de-ativação) e [celular.md](celular.md).
@@ -61,6 +66,7 @@ A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm 
 | PRO | `JARVIS_PROACTIVE=true` |
 | MEM | Vem ligado. `JARVIS_ENABLE_MEMORY=false` desliga |
 | DIA | Vem ligado. `JARVIS_DIARY=false` desliga. O resumo precisa da `GOOGLE_API_KEY` (veja [diario.md](diario.md)) |
+| TAR, COT, RED, BRF e FOC | Vêm ligados. `JARVIS_ENABLE_DAY=false` desliga todos de uma vez |
 | ODD | Vem ligado. `JARVIS_ENABLE_OSINT=false` desliga. A consulta da rede do PC precisa de `JARVIS_OSINT_NETWORK=true` |
 | ROT | Vem ligado. `JARVIS_ENABLE_ROUTINES=false` desliga. Os passos que mexem no PC precisam de `JARVIS_ENABLE_PC_CONTROL=true`. `JARVIS_CONTEXT_TRIGGERS=false` desliga só os gatilhos por contexto |
 | WAK-22 | `JARVIS_WAKE_WORD=true` |

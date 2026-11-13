@@ -1,4 +1,6 @@
 import { useClock } from '../hooks/useClock';
+import { formatCountdown, remainingSeconds, useFocus } from '../lib/focus';
+import { useHud } from '../lib/hudStore';
 import { BACKEND_LABELS } from '../lib/catalog';
 import { formatDuration } from '../lib/format';
 import { usePrefs } from '../lib/prefs';
@@ -76,6 +78,7 @@ export function TopBar({ mode, status, connected, micEnabled, demo, sessionStart
   const [hours, minutes, seconds] = time.toLocaleTimeString('pt-BR').split(':');
   const linkLed = mode === 'error' ? 'led--off' : connected ? (mode === 'connecting' ? 'led--busy' : 'led--on') : '';
   const { theme } = usePrefs();
+  const focus = useFocus((s) => s.focus);
   const persona = themeInfo(theme);
 
   return (
@@ -92,6 +95,11 @@ export function TopBar({ mode, status, connected, micEnabled, demo, sessionStart
         <NavTabs variant="top" />
       <div className="chips">
         {demo && <div className="chip chip--demo">Simulação</div>}
+        {focus.running && (
+          <button type="button" className={`chip chip--focus chip--focus-${focus.phase}`} onClick={() => useHud.getState().setView('day')} title="Abrir o Dia a dia">
+            {focus.phase === 'work' ? 'Foco' : 'Pausa'} <b>{formatCountdown(remainingSeconds(focus, now))}</b> {focus.cycle}/{focus.cycles}
+          </button>
+        )}
         <div className="chip">
           <i className={`led ${linkLed}`} /> Link <b>{connected ? (mode === 'connecting' ? 'sincronizando' : 'ativo') : 'inativo'}</b>
         </div>
