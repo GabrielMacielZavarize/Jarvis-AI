@@ -1041,10 +1041,11 @@ class RouteTests(unittest.TestCase):
     def test_status_and_info(self) -> None:
         client = self.client()
         status = client.get("/api/status").json()
-        self.assertEqual(status["osint"], {"enabled": True, "network": False})
+        self.assertEqual(status["osint"], {"enabled": True, "network": False, "network_watch": False})
         self.assertIn("osint_lookup", status["tools"])
         info = client.get("/api/osint").json()
         self.assertTrue(info["enabled"])
+        self.assertFalse(info["network_watch"])
         self.assertEqual([kind["id"] for kind in info["kinds"]], list(osint.KINDS))
 
     def test_lookup_returns_the_card(self) -> None:

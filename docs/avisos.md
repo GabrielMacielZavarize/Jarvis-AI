@@ -67,6 +67,21 @@ Avisa, num aviso só, os que vencem em menos de 14 dias ("loja.meusite.com.br ve
 - O dia da última conferência fica no `lembretes.json` (`certs_check_day`), então reiniciar o Jarvis não repete. Para conferir de novo no mesmo dia, troque esse valor por `null`.
 - O assunto é `certs`: "para de me avisar sobre certificados" silencia a voz (continua no HUD).
 
+### Aparelho novo no Wi-Fi
+
+Com `JARVIS_NETWORK_WATCH=true` (e `JARVIS_OSINT_NETWORK=true`, que o liga ao [Olho de Deus](olho-de-deus.md#aparelho-novo-na-rede)), o Jarvis lê a tabela ARP do PC a cada 5 minutos e avisa quando aparece um aparelho que nunca viu: "Aparelho novo no Wi-Fi: 192.168.0.23 (endereço 3c:22:fb:aa:bb:cc). Se for seu, dê um nome a ele em Olho de Deus, Minha rede."
+
+```env
+JARVIS_OSINT_NETWORK=true
+JARVIS_NETWORK_WATCH=true
+```
+
+- **Só leitura.** O que ele lê é a tabela que o sistema já tem (`arp -a`, `ip neigh show`). Nenhum pacote vai para os aparelhos.
+- **Aprende em silêncio.** Nos primeiros 30 minutos depois da primeira leitura que mostrar algum aparelho, tudo entra como conhecido, sem aviso. Os aparelhos ficam no `rede_aparelhos.json` (fora do git), pelo MAC; reiniciar o Jarvis não repete aviso.
+- **Endereço privado.** Celulares usam um MAC aleatório (o bit "localmente administrado") e alguns trocam de tempos em tempos, então um celular seu pode parecer novo de novo. Esses aparecem à parte, "N aparelhos novos com endereço privado", num aviso só e no máximo a cada 6 horas, dizendo que pode ser um aparelho seu que trocou de endereço. Os de MAC de fábrica avisam na hora.
+- **Prioridade normal**: com o link aberto o Jarvis fala; com o link fechado fica só no HUD, nunca abre o navegador. Segue o horário de silêncio e espera o fim do bloco de foco. O assunto é `network` ("para de me avisar sobre a rede", "sobre os aparelhos" ou "sobre o wi-fi").
+- **Nomear.** No painel "Aparelhos na rede" da área Olho de Deus do HUD você dá nome ao aparelho ou marca como seu; um aparelho que você já revisou não avisa. O monitor só existe com `JARVIS_PROACTIVE=true`.
+
 ### Troca de bloco do foco
 
 A [sessão de foco](dia-a-dia.md#foco-foc-47) também avisa pelo motor, com o assunto `focus`: "Hora da pausa", "De volta ao foco", "Sessão de foco concluída" e, com a presença ligada, "Foco retomado" quando você volta. A prioridade é normal: com o link aberto o Jarvis fala; com o link fechado o aviso fica no HUD e, com o [ícone da bandeja](bandeja.md#avisos-do-jarvis-na-bandeja), vira notificação do Windows. Nunca abre o navegador. O assunto é `focus` ("para de me avisar sobre o foco"). Vale também com `JARVIS_PROACTIVE=false`: sem o motor, o aviso vai só para a bandeja e para a aba aberta.
@@ -98,12 +113,14 @@ Enquanto um bloco de [foco](dia-a-dia.md#foco-foc-47) está correndo, o motor se
 
 - "Durante o bloco" vale também quando a contagem está parada pela ausência: você saiu, mas a sessão não acabou. Na pausa (o descanso), ao encerrar o foco e ao terminar a sessão, a espera acaba.
 - O aviso que esperou sai pelo caminho de sempre, decidido na hora da entrega: um lembrete alto com o link fechado abre o link nessa hora, e o horário de silêncio e os assuntos silenciados continuam valendo. Ele ganha "(chegou às 14:02, durante o foco)" no fim. Vários avisos saem juntos, na ordem em que chegaram, no máximo 30 (passando disso, os mais antigos caem).
-- Quem segura é o servidor, na memória: se o Jarvis for reiniciado no meio do bloco, o que esperava se perde. Um lembrete comum que vence durante o foco também espera (ele já saiu do `lembretes.json`), então um bloco de 3 horas pode atrasar um lembrete em até 3 horas. Para um lembrete que não pode esperar, peça como urgente.
+- Quem segura é o servidor, e a fila fica no `lembretes.json` (chave `held`), não só na memória: se o Jarvis for reiniciado no meio do bloco, o que esperava continua lá e sai quando o bloco acabar. Se o bloco acabou enquanto ele estava desligado, sai assim que ele voltar, com a data quando o aviso é de outro dia ("chegou em 12/11 às 14:02, durante o foco"). Cada aviso sai uma vez só: a fila é esvaziada na mesma gravação em que é lida.
+- Um lembrete comum que vence durante o foco também espera, e passa da lista de lembretes para a fila numa gravação só do mesmo arquivo, então não há instante em que ele não esteja em nenhum dos dois. Um bloco de 3 horas pode atrasar um lembrete em até 3 horas. Para um lembrete que não pode esperar, peça como urgente.
+- Se o disco recusar a gravação da fila, o aviso não espera: sai na hora, em vez de se perder.
 - Sem o foco rodando, ou com `JARVIS_ENABLE_DAY=false`, nada é segurado.
 
 ## Por voz
 
-"Para de me avisar sobre bateria" silencia o assunto, que continua aparecendo no HUD, sem voz. Os assuntos são bateria, desempenho (CPU e RAM), downloads, disco, lembretes, erros na tela, tarefas e foco. "Por duas horas" põe prazo, e "pode voltar a avisar da bateria" desfaz.
+"Para de me avisar sobre bateria" silencia o assunto, que continua aparecendo no HUD, sem voz. Os assuntos são bateria, desempenho (CPU e RAM), downloads, disco, lembretes, erros na tela, tarefas, foco, certificados e rede (aparelhos novos no Wi-Fi). "Por duas horas" põe prazo, e "pode voltar a avisar da bateria" desfaz.
 
 "Horário de silêncio das 22h às 6h" ou "desliga o horário de silêncio" mudam o horário. O que você fala vale mais que o `.env` e fica guardado no `lembretes.json`.
 
@@ -129,3 +146,4 @@ No Windows, com `JARVIS_PROACTIVE=true` e `python jarvis.py --rebuild`:
 8. Silêncio: "horário de silêncio de agora até daqui a uma hora" (por exemplo "das 15h às 16h") e repita o passo 5: só HUD. Um lembrete urgente nesse horário ainda fala. No fim, "desliga o horário de silêncio".
 9. Tarefas: veja os itens de "Tarefas nos avisos proativos" no [roteiro de testes](ROTEIRO_DE_TESTES.md#tarefas-nos-avisos-proativos).
 10. Foco: veja os itens de "Foco integrado" no [roteiro de testes](ROTEIRO_DE_TESTES.md#foco-integrado-com-presença-avisos-e-bandeja).
+11. Aparelho novo e fila do foco depois de um reinício: veja "Aparelho novo no Wi-Fi e fila do foco" no [roteiro de testes](ROTEIRO_DE_TESTES.md#aparelho-novo-no-wi-fi-e-fila-do-foco).

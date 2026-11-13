@@ -63,7 +63,8 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `routines.py` | Rotinas (`rotinas.json`): passos, execução com falhas parciais, ferramentas e agendador |
 | `context_triggers.py` | Rotinas por contexto: gatilhos, sondas (processos, foco, áudio, Wi-Fi, presença) e o vigia no servidor |
 | `calendar_tools.py` | Google Agenda (AGD-27): login OAuth, datas em português, ferramentas e avisos de reunião |
-| `proactive.py` | Avisos proativos (PRO-28): `lembretes.json`, monitores (incluindo o vigia de certificados do ODD-42), prioridade, silêncio e ferramentas |
+| `proactive.py` | Avisos proativos (PRO-28): `lembretes.json` (lembretes, silêncio e a fila dos avisos segurados no foco), monitores (incluindo o vigia de certificados e o aviso de aparelho novo do ODD-42), prioridade, silêncio e ferramentas |
+| `netwatch.py` | Aparelhos vistos na rede (ODD-42): `rede_aparelhos.json`, aprendizado em silêncio, endereço privado e o que o HUD edita |
 | `camera.py` | Dono único da webcam (`CameraHub`): captura, feed MJPEG e fotos |
 | `vision.py` | Ferramentas de visão: `look_at_camera`, `camera_view` e envio de imagens ao modelo |
 | `presence.py` | Presença (PRS-25): chegou e saiu pela webcam, boas-vindas, pausa, bloqueio e cadastro do rosto |
@@ -97,7 +98,7 @@ E o HUD, em `web/src`:
 
 ## Arquivos locais
 
-Ficam na pasta do projeto, fora do git: `.env`, `memoria.json`, `memoria_vetores.json`, `diario.json`, `rotinas.json`, `lembretes.json`, `layouts.json`, `telas.json`, `atalhos.json`, `gestos.json`, `gestos_calibracao.json`, `voz.json`, `persona.json`, `modelos.json`, `presenca_rosto.json`, `aparelhos.json`, `mcp.json`, `tarefas.json`, `rede.json`, `saude.db`, `google_credentials.json`, `google_token.json` e as pastas `.jarvis-tls/` e `logs/`.
+Ficam na pasta do projeto, fora do git: `.env`, `memoria.json`, `memoria_vetores.json`, `diario.json`, `rotinas.json`, `lembretes.json`, `layouts.json`, `telas.json`, `atalhos.json`, `gestos.json`, `gestos_calibracao.json`, `voz.json`, `persona.json`, `modelos.json`, `presenca_rosto.json`, `aparelhos.json`, `mcp.json`, `tarefas.json`, `rede.json`, `rede_aparelhos.json`, `saude.db`, `google_credentials.json`, `google_token.json` e as pastas `.jarvis-tls/` e `logs/`.
 
 ## Referências
 

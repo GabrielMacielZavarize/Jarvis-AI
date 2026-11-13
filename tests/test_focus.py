@@ -20,7 +20,8 @@ from fastapi.testclient import TestClient
 import focus
 import tray
 from focus import AWAY_GRACE_S, FocusSession, clean_config, spoken_left
-from proactive import Notice, ProactiveEngine
+import proactive
+from proactive import Notice, ProactiveEngine, ReminderMonitor, add_reminder, load_state
 from server import create_app
 from tray import TrayController, TrayToasts
 
@@ -464,6 +465,204 @@ class EngineHoldTests(unittest.IsolatedAsyncioTestCase):
         routed = await self.engine.tick()
         self.assertEqual([way for _, way in routed], ["wake"])
         self.assertEqual(self.hub.triggers, [(1.0, "notice")])
+
+
+class HeldQueueRestartTests(unittest.IsolatedAsyncioTestCase):
+    """A fila dos avisos segurados durante o foco fica no ``lembretes.json``: um reinício do Jarvis no meio
+    do bloco não pode perdê-los, nem repeti-los, e isso inclui o lembrete que venceu nesse intervalo."""
+
+    def setUp(self) -> None:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.path = Path(folder.name) / "lembretes.json"
+        patcher = patch("proactive.REMINDERS_FILE", self.path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.focusing = True
+        self.mono = 1000.0
+        self.wall = dt.datetime(2026, 10, 19, 14, 0, tzinfo=BRT)
+
+    def boot(self, monitors: list | None = None) -> tuple[ProactiveEngine, FakeHub, FixedMonitor]:
+        """Um "Jarvis" novo: motor, hub e monitores novos, o mesmo arquivo."""
+        hub = FakeHub()
+        monitor = FixedMonitor()
+        engine = ProactiveEngine(
+            hub,
+            monitors if monitors is not None else [monitor],
+            quiet_hours=None,
+            clock=lambda: self.mono,
+            now=lambda: self.wall,
+            hold=lambda: self.focusing,
+        )
+        engine.agent_poll()  # o link está aberto
+        return engine, hub, monitor
+
+    def advance(self, seconds: float) -> None:
+        self.mono += seconds
+        self.wall += dt.timedelta(seconds=seconds)
+
+    async def test_held_notices_survive_a_restart_and_come_out_once(self) -> None:
+        first, _, monitor = self.boot()
+        monitor.queue = [
+            Notice("downloads", "normal", "Download concluído", "Download concluído: a.pdf.", id="d1"),
+            Notice("battery", "high", "Bateria baixa", "Bateria em 18%.", id="b1"),
+        ]
+        self.assertEqual(await first.tick(), [])
+        self.assertTrue(self.path.exists())
+
+        # O Jarvis reinicia no meio do bloco: nada na memória, o foco ainda corre.
+        second, hub, _ = self.boot()
+        self.assertEqual([notice.title for _, notice in second.held], ["Download concluído", "Bateria baixa"])
+        self.assertEqual(await second.tick(), [])  # continua segurando
+        self.assertEqual(hub.events, [])
+
+        # O bloco acaba: a segunda instância entrega, na ordem, dizendo quando chegaram.
+        self.focusing = False
+        self.advance(25 * MIN)
+        second.agent_poll()
+        routed = await second.tick()
+        self.assertEqual([(notice.title, way) for notice, way in routed], [("Download concluído", "speak"), ("Bateria baixa", "speak")])
+        self.assertEqual(routed[0][0].message, "Download concluído: a.pdf. (chegou às 14:00, durante o foco)")
+
+        # Um terceiro reinício e uma segunda instância viva ao mesmo tempo: ninguém repete.
+        third, hub3, _ = self.boot()
+        self.assertEqual(third.held, [])
+        self.assertEqual(await third.tick(), [])
+        self.assertEqual(await second.tick(), [])
+        self.assertEqual(hub3.events, [])
+
+    async def test_a_reminder_that_came_due_during_focus_is_not_lost_by_a_restart(self) -> None:
+        add_reminder("Ligar para o contador", self.wall + dt.timedelta(minutes=10), now=self.wall)
+        first, _, _ = self.boot([ReminderMonitor()])
+        self.advance(11 * MIN)
+        self.assertEqual(await first.tick(), [])  # venceu durante o foco: espera
+        state = load_state()
+        self.assertEqual(state["reminders"], [])  # já saiu da lista de lembretes...
+        self.assertEqual([entry["notice"]["message"] for entry in state["held"]], ["Ligar para o contador"])  # ...e está na fila, na mesma gravação
+
+        second, hub, _ = self.boot([ReminderMonitor()])  # reinício
+        self.focusing = False
+        self.advance(20 * MIN)
+        second.agent_poll()
+        routed = await second.tick()
+        self.assertEqual([(notice.title, way) for notice, way in routed], [("Lembrete", "speak")])
+        self.assertEqual(routed[0][0].message, "Ligar para o contador (chegou às 14:11, durante o foco)")
+        self.assertEqual(load_state()["held"], [])
+        self.assertEqual(await second.tick(), [])  # e não volta
+
+    async def test_a_reminder_never_sits_in_both_files_nor_in_neither(self) -> None:
+        add_reminder("Pagar o boleto", self.wall + dt.timedelta(minutes=1), now=self.wall)
+        engine, _, _ = self.boot([ReminderMonitor()])
+        self.advance(2 * MIN)
+        engine.collect()  # só a coleta: o aviso ainda não foi despachado
+        state = load_state()
+        self.assertEqual((len(state["reminders"]), len(state["held"])), (0, 1))
+
+    async def test_an_urgent_reminder_does_not_wait_and_is_not_stored(self) -> None:
+        add_reminder("Remédio", self.wall + dt.timedelta(minutes=1), now=self.wall, urgent=True)
+        engine, _, _ = self.boot([ReminderMonitor()])
+        self.advance(2 * MIN)
+        engine.agent_poll()
+        routed = await engine.tick()
+        self.assertEqual([(notice.priority, way) for notice, way in routed], [("critical", "speak")])
+        self.assertEqual(load_state()["held"], [])
+
+    async def test_a_reminder_after_the_block_goes_straight_out(self) -> None:
+        add_reminder("Beber água", self.wall + dt.timedelta(minutes=1), now=self.wall)
+        self.focusing = False
+        engine, _, _ = self.boot([ReminderMonitor()])
+        self.advance(2 * MIN)
+        engine.agent_poll()
+        routed = await engine.tick()
+        self.assertEqual([notice.message for notice, _ in routed], ["Beber água"])
+        self.assertEqual(load_state()["held"], [])
+
+    async def test_if_focus_ended_while_jarvis_was_off_they_are_delivered_on_start(self) -> None:
+        first, _, monitor = self.boot()
+        monitor.queue = [Notice("tasks", "normal", "Tarefas", "2 tarefas atrasadas.", id="t1")]
+        await first.tick()
+        self.focusing = False  # o bloco acabou com o Jarvis desligado
+        self.advance(3 * 3600)
+        second, _, _ = self.boot()
+        routed = await second.tick()
+        self.assertEqual([notice.title for notice, _ in routed], ["Tarefas"])
+        self.assertEqual(routed[0][0].message, "2 tarefas atrasadas. (chegou às 14:00, durante o foco)")
+
+    async def test_one_that_arrived_on_another_day_says_the_date(self) -> None:
+        first, _, monitor = self.boot()
+        monitor.queue = [Notice("tasks", "normal", "Tarefas", "2 tarefas atrasadas.", id="t1")]
+        await first.tick()
+        self.focusing = False
+        self.advance(26 * 3600)
+        second, _, _ = self.boot()
+        routed = await second.tick()
+        self.assertEqual(routed[0][0].message, "2 tarefas atrasadas. (chegou em 19/10 às 14:00, durante o foco)")
+
+    async def test_the_route_is_decided_after_the_restart(self) -> None:
+        first, _, monitor = self.boot()
+        monitor.queue = [Notice("battery", "high", "Bateria baixa", "Bateria em 18%.", id="b1")]
+        await first.tick()
+        self.focusing = False
+        second, hub, _ = self.boot()
+        second.agent_seen_at = None  # o link está fechado: aviso alto abre o link
+        routed = await second.tick()
+        self.assertEqual([way for _, way in routed], ["wake"])
+        self.assertEqual(hub.triggers, [(1.0, "notice")])
+
+    async def test_the_same_notice_is_not_stored_twice_and_the_queue_has_a_limit_across_restarts(self) -> None:
+        first, _, monitor = self.boot()
+        monitor.queue = [Notice("downloads", "normal", "Download", "x", id="d1")]
+        await first.tick()
+        second, _, monitor2 = self.boot()
+        monitor2.queue = [Notice("downloads", "normal", "Download", "x", id="d1")]
+        await second.tick()
+        self.assertEqual(len(second.held), 1)
+        monitor2.queue = [Notice("downloads", "normal", f"Download {n}", "x", id=f"n{n}") for n in range(60)]
+        self.advance(10)
+        await second.tick()
+        self.assertEqual(len(second.held), 30)
+        self.assertEqual(second.held[-1][1].title, "Download 59")
+
+    async def test_if_the_queue_cannot_be_saved_the_notice_is_not_lost(self) -> None:
+        engine, hub, _ = self.boot()
+        with patch("proactive.hold_notice", side_effect=OSError("disco cheio")):
+            routed = engine.dispatch([Notice("downloads", "normal", "Download", "x", id="d1")])
+        self.assertEqual([way for _, way in routed], ["speak"])  # sai agora, em vez de sumir
+        self.assertEqual(engine.held, [])
+
+    async def test_a_damaged_queue_is_ignored_entry_by_entry(self) -> None:
+        good = {"arrived_at": "2026-10-19T14:00:00-03:00", "notice": {"id": "d1", "topic": "downloads", "priority": "normal", "title": "Download", "message": "a.pdf"}}
+        self.path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "reminders": [],
+                    "held": [
+                        good,
+                        "lixo",
+                        {"arrived_at": "ontem", "notice": good["notice"]},
+                        {"arrived_at": good["arrived_at"], "notice": {**good["notice"], "priority": "urgentíssimo"}},
+                        {"arrived_at": good["arrived_at"], "notice": {**good["notice"], "topic": "inventado", "id": "x"}},
+                        {"arrived_at": good["arrived_at"], "notice": {"id": "", "topic": "tasks", "priority": "normal", "title": "t", "message": "m"}},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        engine, _, _ = self.boot()
+        self.assertEqual([notice.id for _, notice in engine.held], ["d1"])
+
+    async def test_other_data_in_the_file_is_kept_when_the_queue_changes(self) -> None:
+        add_reminder("Mais tarde", self.wall + dt.timedelta(days=1), now=self.wall)
+        proactive.set_muted(["disk"], None)
+        engine, _, monitor = self.boot()
+        monitor.queue = [Notice("downloads", "normal", "Download", "x", id="d1")]
+        await engine.tick()
+        self.focusing = False
+        await engine.tick()
+        state = load_state()
+        self.assertEqual([item["text"] for item in state["reminders"]], ["Mais tarde"])
+        self.assertIn("disk", state["muted"])
 
 
 # ───────────────────────── servidor ─────────────────────────

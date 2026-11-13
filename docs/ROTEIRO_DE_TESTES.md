@@ -594,3 +594,45 @@ Vigia de certificados (com `JARVIS_PROACTIVE=true`):
 - [ ] Com o link fechado, um aviso de certificado inválido ou vencido (prioridade alta) acorda o Jarvis como um lembrete; "vence em N dias" fica só no HUD. "Para de me avisar sobre certificados" silencia a voz e o aviso segue no HUD.
 - [ ] Horário de silêncio cobrindo a hora atual: nada acontece e `certs_check_day` não é gravado; ao acabar o silêncio, o aviso sai.
 - [ ] Com `JARVIS_OSINT_WATCH_DOMAINS=192.168.0.1` ou `localhost` o Jarvis recusa subir dizendo que o domínio é inválido. Com `JARVIS_ENABLE_OSINT=false` ou sem `JARVIS_PROACTIVE`, o vigia não existe.
+
+## Aparelho novo no Wi-Fi e fila do foco
+
+Detalhes em [olho-de-deus.md](olho-de-deus.md#aparelho-novo-na-rede) e [avisos.md](avisos.md#aparelho-novo-no-wi-fi). Os testes automáticos usam saídas falsas do ARP (Windows e Linux) e relógio injetado; aqui fica o que só dá para ver na máquina e na rede de verdade. Antes de começar, apague o `rede_aparelhos.json` se existir.
+
+Aprendizado (no `.env`: `JARVIS_PROACTIVE=true`, `JARVIS_OSINT_NETWORK=true`, `JARVIS_NETWORK_WATCH=true`):
+
+- [ ] Suba o Jarvis no Windows. Em até uns 5 minutos o `rede_aparelhos.json` aparece na pasta do projeto (e não aparece no `git status`) com o roteador e os aparelhos que o PC falou há pouco. Nenhum aviso sai.
+- [ ] No Windows, `arp -a` no prompt mostra as mesmas linhas (IP e endereço físico) que o arquivo guardou. Confira se há entradas de placas virtuais (WSL, VirtualBox, Docker, Hyper-V): elas aparecem como aparelhos? Anote.
+- [ ] Repita no Linux ou no WSL (`ip neigh show`), se tiver: o arquivo também é preenchido e as linhas `FAILED` não viram aparelho.
+- [ ] Em Wi-Fi com bastante gente, a tabela ARP do PC recém-ligado tem poucos aparelhos. Confira que, nos primeiros 30 minutos, quem foi aparecendo entrou sem aviso ("aprendendo", no painel do HUD) e que depois disso não houve falso aviso dos aparelhos de sempre. Anote quantos "novos" apareceram à toa.
+- [ ] O Jarvis não manda pacote: com o Wireshark (ou o monitor de recursos) ligado, a única coisa que ele faz na rede por causa deste recurso é rodar `arp -a`, que só lê a tabela do sistema.
+
+Aviso:
+
+- [ ] Depois dos 30 minutos (ou, para pular a espera, troque o `learning_until` do arquivo por uma data antiga, como `2020-01-01T00:00:00-03:00`, com o Jarvis fechado), ligue um aparelho que nunca esteve na sua rede (o celular de um amigo, um notebook velho) e deixe-o falar com o PC (abra uma página no roteador, ou faça um `ping` dele a partir do PC). Em até uns 5 minutos o Jarvis fala "Aparelho novo no Wi-Fi: <IP> (endereço <MAC>)...", com o link aberto. O HUD mostra o aviso e ele entra no registro de atividades.
+- [ ] Reinicie o Jarvis: o mesmo aparelho não avisa de novo.
+- [ ] Com o link fechado, o aviso fica só no HUD, não acorda o Jarvis nem abre o navegador.
+- [ ] Horário de silêncio cobrindo a hora atual: o aviso aparece só no HUD, sem voz. "Para de me avisar sobre a rede" silencia a voz e o aviso segue no HUD; "pode voltar a avisar sobre a rede" desfaz.
+- [ ] Durante um bloco de foco, o aviso espera o fim do bloco (ver abaixo).
+
+Endereço privado:
+
+- [ ] Com um celular com "endereço Wi-Fi privado" ligado (iPhone: Ajustes > Wi-Fi > (i) > Endereço Wi-Fi privado; Android: Rede > Privacidade > MAC aleatório), entre na rede depois do aprendizado. O aviso sai à parte, "aparelho novo com endereço privado", e o painel marca "endereço privado".
+- [ ] Desligue e ligue o Wi-Fi do celular várias vezes e troque o endereço (iPhone: desligue e ligue o "Endereço Wi-Fi privado"; algumas versões também trocam sozinhas de tempos em tempos): o aviso dos privados não passa de um a cada 6 horas.
+- [ ] Um celular que mostra o MAC de fábrica (com o endereço privado desligado) avisa na hora, sem o selo "privado".
+
+HUD (área Olho de Deus, tecla `3`):
+
+- [ ] Com `JARVIS_OSINT_NETWORK=true` o painel "Aparelhos na rede" aparece; sem a variável ele some e `/api/osint/network/devices` responde 403 dizendo o motivo.
+- [ ] Os aparelhos novos vêm primeiro, marcados "novo". Dê um nome a um deles ("TV da sala") e salve: ele deixa de ser "novo", o nome aparece no painel e a consulta "Minha rede" mostra o nome ao lado do MAC. "É meu" marca sem dar nome. "Esquecer" tira da lista; na próxima leitura ele volta como novo e avisa.
+- [ ] Recarregue a página: os nomes continuam (estão no `rede_aparelhos.json`).
+- [ ] Abra o HUD no celular pareado: o painel "Aparelhos na rede" mostra o erro "só pode ser acessada pelo próprio computador" e não lista nada.
+- [ ] Com `JARVIS_NETWORK_WATCH=false` o painel avisa que o aviso está desligado e como ligar. Com `JARVIS_NETWORK_WATCH=true` e `JARVIS_OSINT_NETWORK` ausente, o Jarvis recusa subir dizendo qual variável falta.
+
+Fila do foco depois de um reinício:
+
+- [ ] Comece um foco de 10 minutos. Marque um lembrete para daqui a 1 minuto e baixe um arquivo pelo navegador. Quando o lembrete vencer, nada fala; abra o `lembretes.json`: o lembrete saiu de `reminders` e está em `held`, junto com o aviso do download.
+- [ ] Reinicie o Jarvis (menu da bandeja, ou Ctrl+C e `python jarvis.py`) no meio do bloco: o `held` continua no arquivo e o foco continua de onde estava.
+- [ ] Encerre o foco ("encerra o foco"): o Jarvis fala o lembrete e o download, cada um uma vez, com "(chegou às HH:MM, durante o foco)", e o `held` fica vazio. Reinicie de novo: nada se repete.
+- [ ] Repita, desta vez fechando o Jarvis durante o bloco, esperando o bloco acabar (ou encerrando-o pelo `foco.json`) e só então subindo o Jarvis: os avisos saem logo que ele voltar. Se passou de um dia, o aviso diz "chegou em DD/MM às HH:MM".
+- [ ] Um lembrete urgente continua falando na hora, durante o bloco, e não aparece no `held`.

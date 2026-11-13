@@ -23,7 +23,7 @@ In English: real-time voice assistant built on LiveKit Agents (Gemini Live or Op
 - Olha pela webcam quando você pede, percebe quando você sai e volta e entende gestos das mãos para mexer nas janelas. Um painel no HUD mostra os gestos ao vivo e deixa trocar o que cada um faz.
 - Acorda quando você diz "Jarvis" (ou "Friday", que já abre a F.R.I.D.A.Y.) e também funciona pelo celular, na rede de casa.
 - Se o modelo gratuito do Google estoura a cota ou trava, a conversa continua em outro modelo sem cair.
-- Tem o Olho de Deus: consulta de onde é um IP, o que um domínio expõe, se um link tem cara de golpe, um CNPJ, um CEP, se o seu email apareceu em vazamentos e como está a sua rede (e, no IP, portas e CVEs que o Shodan já viu; no link, a lista de malware do URLhaus). O motor de avisos ainda vigia o certificado HTTPS dos seus domínios. Só fontes públicas, nada de dados pessoais de terceiros.
+- Tem o Olho de Deus: consulta de onde é um IP, o que um domínio expõe, se um link tem cara de golpe, um CNPJ, um CEP, se o seu email apareceu em vazamentos e como está a sua rede (e, no IP, portas e CVEs que o Shodan já viu; no link, a lista de malware do URLhaus). O motor de avisos ainda vigia o certificado HTTPS dos seus domínios e, se você ligar, avisa quando um aparelho novo entra no seu Wi-Fi. Só fontes públicas, nada de dados pessoais de terceiros.
 - Cuida do dia a dia: tarefas e notas por voz, um briefing ("como está o meu dia?"), sessões de foco no estilo Pomodoro, cotações, conversões e o teste da internet.
 - O HUD tem áreas de trabalho (Painel, Dia a dia, Olho de Deus, Sistema e Ajustes), um briefing do dia e uma paleta de comandos no `Ctrl+K`.
 - Guarda um histórico de tempo de resposta, ativações e falhas, e sugere o que ajustar no `.env`.

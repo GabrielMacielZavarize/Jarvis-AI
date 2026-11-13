@@ -115,7 +115,7 @@ Com a [presença](camera-e-presenca.md) ligada (`JARVIS_PRESENCE=true`, com a c�
 
 ### Avisos esperam o bloco
 
-Enquanto um bloco de foco corre (mesmo parado pela ausência), os avisos proativos que **não são críticos** esperam o fim do bloco: download concluído, CPU alta, disco, tarefas, lembrete comum e a bateria em 20%. Nem a notificação aparece. Quando o bloco acaba (a pausa começa, a sessão termina ou você encerra o foco), eles saem juntos, pelo caminho de sempre, com "(chegou às 14:02, durante o foco)" no fim. Continuam furando o foco: a bateria em 10%, o lembrete marcado como urgente e a troca de bloco do próprio foco. Detalhes em [avisos.md](avisos.md#durante-o-foco).
+Enquanto um bloco de foco corre (mesmo parado pela ausência), os avisos proativos que **não são críticos** esperam o fim do bloco: download concluído, CPU alta, disco, tarefas, lembrete comum e a bateria em 20%. Nem a notificação aparece. Quando o bloco acaba (a pausa começa, a sessão termina ou você encerra o foco), eles saem juntos, pelo caminho de sempre, com "(chegou às 14:02, durante o foco)" no fim. Continuam furando o foco: a bateria em 10%, o lembrete marcado como urgente e a troca de bloco do próprio foco. A fila de quem espera fica no `lembretes.json`: se o Jarvis reiniciar no meio do bloco, nada se perde. Detalhes em [avisos.md](avisos.md#durante-o-foco).
 
 A rotina "modo foco" ([memoria-e-rotinas.md](memoria-e-rotinas.md)) continua existindo e faz outra coisa: minimiza as janelas, baixa o volume e põe um timer. Dito sozinho, "modo foco" é a rotina; "foco de 25 minutos", "pomodoro" e "bloco de foco" são a sessão. Quem esconde os painéis é o "modo cinema" ([hud.md](hud.md)): "modo foco" só faz isso se não existir a rotina nem a sessão de foco.
 

@@ -80,3 +80,7 @@ rede.json.tmp
 # Sessão de foco (FOC-47): estado e preferências, cópias e temporários
 foco*.json
 foco.json.tmp
+
+# Aparelhos vistos na rede (REDE-48): MACs e nomes dados por você, cópias e temporários
+rede_aparelhos*.json
+rede_aparelhos.json.tmp

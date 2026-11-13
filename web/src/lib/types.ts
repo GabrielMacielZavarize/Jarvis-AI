@@ -453,6 +453,28 @@ export interface OsintList {
   links?: string[];
 }
 
+/** ODD-42: um aparelho que o PC viu na rede (netwatch.py → listing). */
+export interface NetworkDevice {
+  mac: string;
+  ip: string;
+  name: string;
+  /** Já revisado: aprendido na primeira vez, ou nomeado/marcado por você. */
+  known: boolean;
+  /** MAC aleatório (celulares e notebooks modernos). */
+  private: boolean;
+  origin: 'aprendido' | 'novo';
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface NetworkDevices {
+  watching: boolean;
+  devices: NetworkDevice[];
+  unreviewed: number;
+  learning: boolean;
+  learning_until: string | null;
+}
+
 /** Resultado de uma consulta em fontes públicas (osint.py → _result). */
 export interface OsintData {
   kind: OsintKind;
@@ -731,7 +753,7 @@ export interface ServerStatus {
   /** Dia a dia: tarefas, briefing, foco, cotações e teste de rede (JARVIS_ENABLE_DAY). */
   day?: boolean;
   /** ODD-42: consultas em fontes públicas; network libera a consulta da rede do próprio PC. */
-  osint?: { enabled: boolean; network: boolean };
+  osint?: { enabled: boolean; network: boolean; network_watch?: boolean };
   /** MCP-32: null when JARVIS_ENABLE_MCP=false. */
   mcp?: McpStatus | null;
   errors: string[];

@@ -218,7 +218,9 @@ O texto de um aviso (nome de arquivo baixado, nome de processo, lembrete) chega 
 
 O `/api/proactive/next` só atende o próprio computador (`Host` local e sem `Sec-Fetch-Site` de outro site). Um aviso só abre o mesmo link do botão Inicializar, e as regras de email, instalação e controle do PC continuam iguais.
 
-O `lembretes.json` é gravado de forma atômica, com uma trava de arquivo entre o agente e o servidor. Um arquivo ilegível é guardado como `lembretes.corrompido-<data>.json`.
+O `lembretes.json` é gravado de forma atômica, com uma trava de arquivo entre o agente e o servidor. Um arquivo ilegível é guardado como `lembretes.corrompido-<data>.json`. A fila dos avisos segurados durante o foco mora nele e é validada entrada por entrada ao ler: o que não tem a forma de um aviso é descartado.
+
+O `rede_aparelhos.json` (aparelhos vistos no Wi-Fi, com MAC, IP e o nome que você deu) é pessoal e fica fora do git. Só o próprio PC o lê ou edita pelo HUD, e só com `JARVIS_OSINT_NETWORK=true`; o aviso de aparelho novo só lê a tabela ARP que o sistema já tem, sem mandar pacote a ninguém.
 
 ## Painel de saúde
 

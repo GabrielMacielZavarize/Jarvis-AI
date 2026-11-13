@@ -44,6 +44,7 @@ from fastapi import APIRouter, HTTPException, Request
 from livekit.agents import RunContext, function_tool
 from pydantic import BaseModel, Field
 
+import netwatch
 from hud import net_activity, show_card, tool_status
 
 logger = logging.getLogger("jarvis-osint")
@@ -1500,6 +1501,21 @@ def lookup_network(
     connection = geo.get("connection") or {}
     public_ip = clean_text(geo.get("ip"), 60)
 
+    try:
+        saved = netwatch.names()
+    except Exception:  # noqa: BLE001 - o registro é um extra: a consulta não depende dele
+        saved = {}
+
+    def device_line(device: dict[str, Any]) -> str:
+        """IP · MAC, mais o nome dado no HUD e o selo de endereço privado (MAC aleatório de celular)."""
+        line = f"{device['ip']} · {device['mac']}"
+        name = (saved.get(device["mac"]) or {}).get("name")
+        if name:
+            line += f" · {clean_text(name, 40)}"
+        if netwatch.is_private_mac(device["mac"]):
+            line += " · endereço privado"
+        return line
+
     def port_line(item: dict[str, Any]) -> str:
         return f"{item['port']}" + (f" · {item['process']}" if item["process"] else "")
 
@@ -1524,13 +1540,14 @@ def lookup_network(
             ),
         ],
         lists=[
-            {"title": "Aparelhos que este PC viu na rede", "items": [f"{device['ip']} · {device['mac']}" for device in devices], "total": len(devices)},
+            {"title": "Aparelhos que este PC viu na rede", "items": [device_line(device) for device in devices], "total": len(devices)},
             {"title": "Portas abertas para a rede", "items": [port_line(item) for item in exposed[:40]], "total": len(exposed)},
             {"title": "Portas só deste PC", "items": [port_line(item) for item in local[:40]], "total": len(local)},
         ],
         point=_point(geo.get("city") or geo.get("country"), geo.get("latitude"), geo.get("longitude")) if geo else None,
         notes=[
             "A lista de aparelhos vem da memória da rede deste PC (tabela ARP): mostra quem ele viu há pouco, sem varrer nada.",
+            "\"Endereço privado\" é um MAC aleatório: celulares e notebooks modernos usam um por rede, e alguns trocam de tempos em tempos.",
             "Porta aberta para a rede não é defeito: o HUD no celular, jogos e compartilhamento usam isso. Vale conferir as que você não reconhece.",
         ],
         sources=["ipwho.is", "tabela ARP local", "psutil"],
@@ -1661,6 +1678,13 @@ def build_osint_tools(network_enabled: bool, urlhaus_key: str | None = None) -> 
 # ───────────────────────── rotas do HUD ─────────────────────────
 
 
+class DeviceUpdate(BaseModel):
+    """O que o HUD muda num aparelho: o nome e/ou se já é conhecido."""
+
+    name: str | None = Field(default=None, max_length=200)
+    known: bool | None = None
+
+
 class LookupRequest(BaseModel):
     kind: str | None = Field(default=None, max_length=20)
     target: str = Field(default="", max_length=2000)
@@ -1683,6 +1707,7 @@ def build_osint_router(current_settings: Callable[[], Any], require_local: Calla
         return {
             "enabled": settings.osint_enabled,
             "network": settings.osint_network_enabled,
+            "network_watch": settings.network_watch_enabled,
             "kinds": [{"id": kind, "label": KIND_LABELS[kind]} for kind in KINDS],
         }
 
@@ -1709,5 +1734,44 @@ def build_osint_router(current_settings: Callable[[], Any], require_local: Calla
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except requests.RequestException as exc:
             raise HTTPException(status_code=502, detail="O serviço de senhas vazadas não respondeu.") from exc
+
+    # ODD-42 (aviso de aparelho novo): os aparelhos que o PC já viu na rede, para dar nome ou marcar como conhecido.
+    # Só com a consulta da rede ligada: a lista mostra a sua casa a quem estiver olhando o HUD.
+    def network_or_403(request: Request) -> Any:
+        # Só o próprio PC: nem um celular pareado (o resto do Olho de Deus ele alcança) vê a lista da casa.
+        require_local(request, "Os aparelhos da rede", devices=False)
+        settings = settings_or_403(request)
+        if not settings.osint_network_enabled:
+            raise HTTPException(status_code=403, detail=NETWORK_DISABLED)
+        return settings
+
+    def device_not_found(mac: str) -> HTTPException:
+        return HTTPException(status_code=404, detail=f"Não conheço o aparelho {mac}.")
+
+    @router.get("/network/devices")
+    def devices(request: Request) -> dict[str, Any]:
+        settings = network_or_403(request)
+        return {"watching": settings.network_watch_enabled, **netwatch.listing()}
+
+    @router.patch("/network/devices/{mac}")
+    def update_device(mac: str, body: DeviceUpdate, request: Request) -> dict[str, Any]:
+        network_or_403(request)
+        if not netwatch.MAC_FORMAT.match(mac.strip().lower().replace("-", ":")):
+            raise HTTPException(status_code=422, detail="Endereço MAC inválido.")
+        try:
+            return netwatch.update_device(mac, name=body.name, known=body.known)
+        except netwatch.DeviceNotFound as exc:
+            raise device_not_found(mac) from exc
+
+    @router.delete("/network/devices/{mac}")
+    def forget_device(mac: str, request: Request) -> dict[str, Any]:
+        network_or_403(request)
+        if not netwatch.MAC_FORMAT.match(mac.strip().lower().replace("-", ":")):
+            raise HTTPException(status_code=422, detail="Endereço MAC inválido.")
+        try:
+            netwatch.forget_device(mac)
+        except netwatch.DeviceNotFound as exc:
+            raise device_not_found(mac) from exc
+        return {"forgotten": mac.strip().lower().replace("-", ":")}
 
     return router

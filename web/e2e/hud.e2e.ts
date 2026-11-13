@@ -293,6 +293,79 @@ test('a senha é conferida sem sair do navegador', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+const NETWORK_DEVICES = {
+  watching: true,
+  unreviewed: 1,
+  learning: false,
+  learning_until: null,
+  devices: [
+    { mac: '00:1a:2b:3c:4d:5e', ip: '192.168.0.50', name: '', known: false, private: false, origin: 'novo', first_seen: '2026-11-13T11:00:00-03:00', last_seen: '2026-11-13T11:05:00-03:00' },
+    { mac: 'da:a1:19:12:34:56', ip: '192.168.0.77', name: 'Celular da Ana', known: true, private: true, origin: 'aprendido', first_seen: '2026-11-13T10:00:00-03:00', last_seen: '2026-11-13T11:00:00-03:00' },
+  ],
+};
+
+test('o Olho de Deus lista os aparelhos da rede, dá nome, marca como seu e esquece', async ({ page }) => {
+  let state = structuredClone(NETWORK_DEVICES);
+  const calls: string[] = [];
+  const bodies: unknown[] = [];
+  // O servidor de teste tem a consulta da rede desligada: aqui ela vem ligada, com o aviso de aparelho novo.
+  await page.route('**/api/status', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({ response, json: { ...body, osint: { enabled: true, network: true, network_watch: true } } });
+  });
+  await page.route('**/api/osint/network/devices**', async (route) => {
+    const request = route.request();
+    const mac = decodeURIComponent(new URL(request.url()).pathname.split('/').pop() ?? '');
+    calls.push(`${request.method()} ${mac}`);
+    if (request.method() === 'PATCH') {
+      const change = request.postDataJSON() as { name?: string; known?: boolean };
+      bodies.push(change);
+      state = {
+        ...state,
+        unreviewed: 0,
+        devices: state.devices.map((device) => (device.mac === mac ? { ...device, ...change, known: true } : device)),
+      };
+    }
+    if (request.method() === 'DELETE') state = { ...state, unreviewed: 0, devices: state.devices.filter((device) => device.mac !== mac) };
+    await route.fulfill({ json: request.method() === 'GET' ? state : { ok: true } });
+  });
+  const errors = await openHud(page, 'jarvis');
+
+  await page.keyboard.press('3');
+  const panel = page.getByRole('region', { name: 'Aparelhos na rede' });
+  await expect(panel).toBeVisible();
+  const rows = panel.locator('.devices__row');
+  await expect(rows).toHaveCount(2);
+  // Os não revisados primeiro, marcados "novo"; o celular com MAC aleatório leva o selo de endereço privado.
+  await expect(rows.first()).toContainText('192.168.0.50');
+  await expect(rows.first().locator('.devices__tag--new')).toHaveText('novo');
+  await expect(rows.nth(1)).toContainText('Celular da Ana');
+  await expect(rows.nth(1)).toContainText('endereço privado');
+  await expect(panel).toContainText('1 aparelho novo ainda não foi revisado');
+
+  // Dar nome: o aparelho deixa de ser novo.
+  await rows.first().getByRole('textbox').fill('TV da sala');
+  await rows.first().getByRole('button', { name: 'Salvar' }).click();
+  await expect(panel).not.toContainText('ainda não foi revisado');
+  await expect(rows.first().locator('.devices__tag--new')).toHaveCount(0);
+  await expect(panel.locator('.devices__row', { hasText: 'TV da sala' })).toHaveCount(1);
+  expect(bodies).toEqual([{ name: 'TV da sala' }]);
+
+  // Esquecer tira da lista.
+  await panel.locator('.devices__row', { hasText: 'TV da sala' }).getByRole('button', { name: 'Esquecer' }).click();
+  await expect(rows).toHaveCount(1);
+  expect(calls).toContain('DELETE 00:1a:2b:3c:4d:5e');
+  expect(errors).toEqual([]);
+});
+
+test('sem a consulta da rede, o painel de aparelhos não aparece', async ({ page }) => {
+  await openHud(page, 'jarvis');
+  await page.keyboard.press('3');
+  await expect(page.locator('main.app')).toHaveAttribute('data-view', 'eye');
+  await expect(page.getByRole('region', { name: 'Aparelhos na rede' })).toHaveCount(0);
+});
+
 test('a paleta consulta um domínio digitado', async ({ page }) => {
   await openHud(page, 'jarvis');
   await page.route('**/api/osint', async (route) => {

@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useHud } from '../lib/hudStore';
+import { deviceTitle, learningMinutes, useNetworkDevices } from '../lib/network';
 import { checkPassword, guessKind, kindLabel, looksPersonal, OSINT_KINDS, useOsint } from '../lib/osint';
-import type { OsintKind, ServerStatus } from '../lib/types';
+import type { NetworkDevice, OsintKind, ServerStatus } from '../lib/types';
 import { Panel } from './Panel';
 import { Workspace } from './Workspaces';
 import { OsintBody } from './cards/OsintCard';
@@ -69,6 +70,99 @@ function PasswordCheck({ disabled }: { disabled: boolean }) {
         A senha não sai deste navegador: ele calcula o código dela (SHA-1) e pede ao serviço só os 5 primeiros caracteres, que milhares de
         senhas diferentes têm em comum.
       </p>
+    </Panel>
+  );
+}
+
+/** Um aparelho da lista: nome editável, "conhecido" e esquecer. */
+function DeviceRow({ device, busy }: { device: NetworkDevice; busy: boolean }) {
+  const { rename, setKnown, forget } = useNetworkDevices();
+  const [name, setName] = useState(device.name);
+  useEffect(() => setName(device.name), [device.name]);
+  const save = (event: FormEvent) => {
+    event.preventDefault();
+    if (name.trim() !== device.name) void rename(device.mac, name.trim());
+  };
+  return (
+    <li className={`devices__row ${device.known ? '' : 'devices__row--new'}`}>
+      <div className="devices__id">
+        <b>{deviceTitle(device)}</b>
+        {!device.known && <span className="devices__tag devices__tag--new">novo</span>}
+        {device.private && (
+          <span className="devices__tag" title="MAC aleatório: celulares e notebooks modernos usam um por rede e alguns trocam de tempos em tempos">
+            endereço privado
+          </span>
+        )}
+        <code>
+          {device.ip || 'sem IP'} · {device.mac}
+        </code>
+      </div>
+      <form className="devices__edit" onSubmit={save}>
+        <input
+          className="eye__input devices__name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Dar um nome"
+          aria-label={`Nome do aparelho ${device.ip || device.mac}`}
+          maxLength={40}
+          autoComplete="off"
+        />
+        <button type="submit" className="chip-btn" disabled={busy || name.trim() === device.name}>
+          Salvar
+        </button>
+        {!device.known && (
+          <button type="button" className="chip-btn" disabled={busy} onClick={() => void setKnown(device.mac, true)}>
+            É meu
+          </button>
+        )}
+        <button
+          type="button"
+          className="chip-btn"
+          disabled={busy}
+          title="Tira da lista. Se ele aparecer de novo, o Jarvis avisa como aparelho novo."
+          onClick={() => void forget(device.mac)}
+        >
+          Esquecer
+        </button>
+      </form>
+    </li>
+  );
+}
+
+/** Aparelhos que o PC viu no Wi-Fi (JARVIS_NETWORK_WATCH): dar nome ou marcar como conhecido. */
+function NetworkDevices() {
+  const { data, error, busy, load } = useNetworkDevices();
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const left = learningMinutes(data?.learning_until ?? null);
+  return (
+    <Panel code="ODD-42" title="Aparelhos na rede" className="eye__extra" extra={data ? <span>{data.devices.length}</span> : undefined}>
+      {error && (
+        <div className="notice" role="alert">
+          <strong>Não deu.</strong> {error}
+        </div>
+      )}
+      {data && !data.watching && (
+        <div className="notice">
+          O aviso de aparelho novo está desligado. Ponha <code>JARVIS_NETWORK_WATCH=true</code> (e <code>JARVIS_PROACTIVE=true</code>) no <code>.env</code>.
+        </div>
+      )}
+      {data?.learning && (
+        <p className="osint__note" role="status">
+          Aprendendo a rede em silêncio{left ? `: faltam uns ${left} min` : ''}. Quem aparecer agora entra como conhecido, sem aviso.
+        </p>
+      )}
+      {data && data.devices.length === 0 ? (
+        <p className="stage__empty-text">Nenhum aparelho guardado ainda. Eles aparecem depois da primeira leitura da tabela ARP (a cada 5 minutos).</p>
+      ) : (
+        <ul className="devices">{data?.devices.map((device) => <DeviceRow key={device.mac} device={device} busy={busy} />)}</ul>
+      )}
+      {data && data.unreviewed > 0 && (
+        <p className="osint__note">
+          {data.unreviewed} {data.unreviewed === 1 ? 'aparelho novo ainda não foi revisado' : 'aparelhos novos ainda não foram revisados'}: dê um nome a ele ou marque como seu.
+        </p>
+      )}
     </Panel>
   );
 }
@@ -171,6 +265,7 @@ export function EyeView({ server }: { server: ServerStatus | null }) {
           )}
         </Panel>
         <PasswordCheck disabled={!enabled} />
+        {enabled && network && <NetworkDevices />}
         <Panel code="ODD-42" title="O que ele consulta" className="eye__extra">
           <ul className="eye__about">
             {OSINT_KINDS.map((item) => (

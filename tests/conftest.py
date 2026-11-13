@@ -1,6 +1,7 @@
 """Nenhum teste grava no saude.db real nem manda eventos de saúde ao servidor do PC, nenhum
 depende da persona que o dono escolheu no HUD (persona.json) e nenhum lê ou escreve as tarefas e
-o histórico de rede nem a sessão de foco (foco.json) de verdade."""
+o histórico de rede, a sessão de foco (foco.json), os lembretes (lembretes.json) nem os aparelhos da
+rede (rede_aparelhos.json) de verdade."""
 
 from __future__ import annotations
 
@@ -9,7 +10,9 @@ import pytest
 import focus
 import health
 import netcheck
+import netwatch
 import personas
+import proactive
 import quotes
 import tasks
 
@@ -31,6 +34,9 @@ def _isolated_day(tmp_path, monkeypatch):
     monkeypatch.setattr(tasks, "TASKS_FILE", tmp_path / "tarefas.json")
     monkeypatch.setattr(netcheck, "HISTORY_FILE", tmp_path / "rede.json")
     monkeypatch.setattr(focus, "FOCUS_FILE", tmp_path / "foco.json")
+    # A fila dos avisos segurados no foco mora no lembretes.json: um teste não pode deixar avisos para o seguinte.
+    monkeypatch.setattr(proactive, "REMINDERS_FILE", tmp_path / "lembretes.json")
+    monkeypatch.setattr(netwatch, "DEVICES_FILE", tmp_path / "rede_aparelhos.json")
     monkeypatch.setattr(netcheck, "_last_run", 0.0)
     # As cotações ficam um minuto em memória: um teste não pode herdar a do anterior.
     quotes._cache.clear()

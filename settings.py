@@ -260,6 +260,18 @@ def _parse_watch_domains(raw_value: str | None) -> tuple[str, ...]:
     return tuple(domains)
 
 
+def _parse_network_watch(env_map: Mapping[str, str]) -> bool:
+    """JARVIS_NETWORK_WATCH: só liga com a consulta da rede (e o Olho de Deus) ligados."""
+    enabled = _parse_bool(env_map.get("JARVIS_NETWORK_WATCH"), "JARVIS_NETWORK_WATCH", default=False)
+    if not enabled:
+        return False
+    if not _parse_bool(env_map.get("JARVIS_OSINT_NETWORK"), "JARVIS_OSINT_NETWORK", default=False):
+        raise SettingsError("JARVIS_NETWORK_WATCH=true precisa de JARVIS_OSINT_NETWORK=true (a consulta \"Minha rede\" do Olho de Deus).")
+    if not _parse_bool(env_map.get("JARVIS_ENABLE_OSINT"), "JARVIS_ENABLE_OSINT", default=True):
+        raise SettingsError("JARVIS_NETWORK_WATCH=true precisa do Olho de Deus ligado (JARVIS_ENABLE_OSINT não pode ser false).")
+    return True
+
+
 def _is_google_live_model(model_name: str | None) -> bool:
     if not model_name:
         return True
@@ -341,6 +353,8 @@ class Settings:
     urlhaus_key: str | None = field(default=None, repr=False)
     # Domínios cujo certificado HTTPS o motor de avisos confere uma vez por dia (precisa de JARVIS_PROACTIVE).
     osint_watch_domains: tuple[str, ...] = ()
+    # ODD-42: avisa de aparelho novo no Wi-Fi (lê a tabela ARP). Exige JARVIS_OSINT_NETWORK e JARVIS_PROACTIVE.
+    network_watch_enabled: bool = False
     # Dia a dia: tarefas e notas (TAR-43), cotações (COT-44), teste de rede (RED-45), briefing (BRF-46) e foco (FOC-47).
     day_enabled: bool = True
     # Assunto das manchetes do briefing; vazio tira as manchetes.
@@ -514,6 +528,7 @@ class Settings:
             osint_network_enabled=_parse_bool(env_map.get("JARVIS_OSINT_NETWORK"), "JARVIS_OSINT_NETWORK", default=False),
             urlhaus_key=_clean_optional(env_map.get("JARVIS_URLHAUS_KEY")),
             osint_watch_domains=_parse_watch_domains(env_map.get("JARVIS_OSINT_WATCH_DOMAINS")),
+            network_watch_enabled=_parse_network_watch(env_map),
             day_enabled=_parse_bool(env_map.get("JARVIS_ENABLE_DAY"), "JARVIS_ENABLE_DAY", default=True),
             briefing_news=_briefing_news(env_map.get("JARVIS_BRIEFING_NEWS")),
             health_enabled=_parse_bool(env_map.get("JARVIS_HEALTH"), "JARVIS_HEALTH", default=True),

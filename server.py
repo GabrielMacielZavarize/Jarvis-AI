@@ -627,7 +627,7 @@ def create_app(
             "computer_use": settings.computer_use_enabled,
             "memory": settings.memory_enabled,
             "diary": settings.diary_enabled,
-            "osint": {"enabled": settings.osint_enabled, "network": settings.osint_network_enabled},
+            "osint": {"enabled": settings.osint_enabled, "network": settings.osint_network_enabled, "network_watch": settings.network_watch_enabled},
             "day": settings.day_enabled,
             "voice": _active_voice(settings),
             "routines": {

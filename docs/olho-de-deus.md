@@ -71,6 +71,7 @@ A senha só se confere no HUD, no painel "Senha vazada?". Ela não passa pelo Ja
 | --- | --- | --- |
 | `JARVIS_ENABLE_OSINT` | `true` | Liga as consultas. `false` tira a ferramenta de voz e as rotas `/api/osint` |
 | `JARVIS_OSINT_NETWORK` | `false` | Libera "Minha rede": portas deste PC e aparelhos na rede local |
+| `JARVIS_NETWORK_WATCH` | `false` | Avisa quando aparece um aparelho novo no Wi-Fi e libera a lista de aparelhos no HUD ([como funciona](#aparelho-novo-na-rede)). Exige `JARVIS_OSINT_NETWORK=true` e, para avisar, `JARVIS_PROACTIVE=true` |
 | `JARVIS_URLHAUS_KEY` | vazio | Chave grátis do URLhaus. Sem ela a consulta de link só não mostra a parte do URLhaus ([como conseguir](#urlhaus-chave-grátis)) |
 | `JARVIS_OSINT_WATCH_DOMAINS` | vazio | Domínios seus (separados por vírgula) cujo certificado HTTPS o Jarvis confere uma vez por dia ([vigia de certificados](#vigia-de-certificados)). Precisa de `JARVIS_PROACTIVE=true` |
 
@@ -96,6 +97,25 @@ A API do URLhaus exige uma chave (cabeçalho `Auth-Key`) desde 2025. Ela é grat
 
 Sem a chave a consulta de link funciona igual, só sem a parte do URLhaus. Com a chave recusada ou o serviço fora do ar, a consulta segue e uma nota diz o que houve; um problema no URLhaus nunca vira "link suspeito". A chave fica só no `.env`: não vai para o HUD, para o resultado, para o modelo nem para o log. O endereço consultado é enviado ao abuse.ch, inclusive o que vem depois do `?`: se o link tiver um código pessoal (redefinição de senha, convite), pense antes de consultá-lo com a chave ligada.
 
+### Aparelho novo na rede
+
+Com `JARVIS_NETWORK_WATCH=true`, o motor de [avisos](avisos.md#aparelho-novo-no-wi-fi) lê a tabela ARP do PC a cada 5 minutos (`arp -a` no Windows, `ip neigh show` no Linux) e avisa quando aparece um aparelho que ele nunca viu. É a mesma leitura da consulta "Minha rede": só olha o que o sistema já sabe, não manda pacote nem faz ping em ninguém.
+
+```env
+JARVIS_OSINT_NETWORK=true
+JARVIS_NETWORK_WATCH=true
+JARVIS_PROACTIVE=true
+```
+
+Com `JARVIS_NETWORK_WATCH=true` sem `JARVIS_OSINT_NETWORK=true` (ou com o Olho de Deus desligado), o Jarvis recusa subir e diz qual variável falta. Sem `JARVIS_PROACTIVE=true` a lista do HUD funciona, mas nada lê a rede.
+
+- **Quem é um aparelho.** Cada um é identificado pelo MAC, não pelo IP (o IP muda de um dia para o outro). Eles ficam no `rede_aparelhos.json`, fora do git, com IP, nome, quando apareceu e quando foi visto por último. O arquivo não guarda mais nada; apague-o para recomeçar.
+- **Primeira vez.** O Jarvis aprende a rede em silêncio: tudo o que a tabela mostrar nos primeiros 30 minutos (contados da primeira leitura que trouxe algum aparelho) entra como conhecido, sem aviso. O prazo existe porque a tabela do PC ainda está se enchendo quando ele acaba de ligar, e só tem quem o PC falou há pouco. Depois disso, um MAC que não está no arquivo vira aviso, uma vez só, mesmo que o Jarvis reinicie.
+- **Endereço privado.** Celulares e notebooks modernos usam um MAC aleatório por rede (o bit "localmente administrado" do primeiro byte), e alguns trocam de endereço de tempos em tempos. O mesmo celular pode, então, parecer um aparelho novo mais de uma vez. Esses ficam marcados como "endereço privado" na lista e no aviso, e são avisados **em grupo e no máximo a cada 6 horas**: "2 aparelhos novos com endereço privado: ...". Os de MAC de fábrica avisam na hora (também em grupo, se vierem vários na mesma leitura). Um aparelho que você já nomeou ou marcou como seu não avisa, mesmo estando na fila.
+- **Dar nome.** Na área Olho de Deus do HUD (tecla `3`), o painel "Aparelhos na rede" (aparece com `JARVIS_OSINT_NETWORK=true`) lista os aparelhos, os ainda não revisados primeiro, marcados como "novo". Dê um nome ("TV da sala") e salve, ou clique em "É meu". "Esquecer" tira o aparelho da lista; se ele aparecer de novo, volta como novo. A consulta "Minha rede" passa a mostrar o nome ao lado do MAC.
+- **Silêncio e assunto.** O aviso tem o assunto `network` ("para de me avisar sobre a rede", "sobre os aparelhos" ou "sobre o wi-fi"), segue o horário de silêncio e prioridade normal: com o link aberto o Jarvis fala, com o link fechado fica só no HUD, nunca abre o navegador. Durante um bloco de [foco](dia-a-dia.md#foco-foc-47) ele espera o fim do bloco.
+- **Limites.** A tabela ARP só tem quem falou com este PC há pouco. Um aparelho que ficou quieto pode demorar para aparecer, e um aparelho de outra rede (visitantes numa rede à parte) nunca aparece. Placas virtuais (WSL, VirtualBox, Docker) também têm tabela e podem mostrar aparelhos que são só máquinas virtuais suas: nomeie-os uma vez. Um aviso de "aparelho novo" é uma pista, não uma prova de invasão: conferir quem é continua sendo com você (o roteador costuma ter a lista de conectados).
+
 ### Vigia de certificados
 
 Com `JARVIS_PROACTIVE=true` e domínios em `JARVIS_OSINT_WATCH_DOMAINS`, o motor de [avisos](avisos.md#certificados-dos-seus-domínios) confere uma vez por dia o certificado HTTPS de cada um deles, pela mesma `osint.fetch_certificate` (a trava de IP público vale também aqui), e avisa quando o certificado vence em menos de 14 dias, está inválido ou vencido, ou o site não responde. Com tudo em ordem, ele fica quieto.
@@ -114,7 +134,9 @@ Use domínios seus (ou que você administra). Aceita até 20, separados por vír
 - Só as portas 80, 443, 8080 e 8443 são aceitas, para a consulta não virar um scanner de portas.
 - De um site consultado só se leem o status e os cabeçalhos. O corpo da página nunca é baixado.
 - Os textos que voltam de fora (nome de registrador, cidade, razão social) saem sem caracteres de controle, cortados e marcados como conteúdo externo na resposta ao modelo, que não segue instruções vindas deles.
-- "Minha rede" só lê: a tabela ARP que o sistema já tem e as portas do próprio PC. Não manda pacote para nenhum aparelho.
+- "Minha rede" só lê: a tabela ARP que o sistema já tem e as portas do próprio PC. Não manda pacote para nenhum aparelho. O aviso de aparelho novo usa a mesma leitura.
+- Os nomes dos aparelhos são texto seu, mas passam por uma limpeza (uma linha, sem caracteres de controle, 40 caracteres) antes de ir para o arquivo ou para o modelo. Os MACs só entram no arquivo se tiverem o formato de um MAC.
+- As rotas `/api/osint/network/devices` (listar, dar nome, esquecer) só atendem o próprio PC (ao contrário do resto do Olho de Deus, nem um celular pareado as alcança) e só com `JARVIS_OSINT_NETWORK=true`: a lista mostra a sua casa a quem estiver olhando o HUD.
 - A chave do URLhaus nunca é gravada em arquivo pelo Jarvis (só lida do `.env`) e não aparece em resultado, log nem na tela do HUD.
 - As rotas `/api/osint` só atendem o próprio PC ou um celular pareado, como as outras.
 
@@ -131,5 +153,7 @@ Use domínios seus (ou que você administra). Aceita até 20, separados por vír
 - `osint.py`: as consultas, a ferramenta `osint_lookup` e as rotas do HUD.
 - `web/src/lib/osint.ts`: o reconhecimento do tipo no campo, o SHA-1 da senha e os resultados da sessão.
 - `web/src/components/EyeView.tsx` e `web/src/components/cards/OsintCard.tsx`: a área e o painel do resultado.
-- `proactive.py` (`CertsMonitor`): o vigia de certificados.
-- Testes: `tests/test_osint.py`, `tests/test_proactive.py` (vigia), `web/src/lib/osint.test.ts` e os testes visuais em `web/e2e/hud.e2e.ts`.
+- `proactive.py` (`CertsMonitor`, `NetworkMonitor`): o vigia de certificados e o aviso de aparelho novo.
+- `netwatch.py`: o `rede_aparelhos.json`, o aprendizado, o endereço privado e as rotas do que o HUD edita.
+- `web/src/lib/network.ts` e o painel "Aparelhos na rede" do `EyeView.tsx`.
+- Testes: `tests/test_osint.py`, `tests/test_netwatch.py` (aparelhos, com saídas falsas do ARP do Windows e do Linux), `tests/test_proactive.py` (vigia), `web/src/lib/osint.test.ts` e os testes visuais em `web/e2e/hud.e2e.ts`.

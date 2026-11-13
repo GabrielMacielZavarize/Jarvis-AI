@@ -47,6 +47,7 @@ import requests
 from fastapi import APIRouter, HTTPException, Request
 from livekit.agents import RunContext, function_tool
 
+import netwatch
 import tasks as tasks_module
 from confirmation import strip_accents
 from hud import show_card, tool_status
@@ -59,7 +60,7 @@ API_PREFIX = "/api/proactive"
 
 Priority = Literal["low", "normal", "high", "critical"]
 PRIORITY_ORDER: dict[str, int] = {"low": 0, "normal": 1, "high": 2, "critical": 3}
-Topic = Literal["reminders", "battery", "performance", "downloads", "disk", "watch", "tasks", "focus", "certs"]
+Topic = Literal["reminders", "battery", "performance", "downloads", "disk", "watch", "tasks", "focus", "certs", "network"]
 TOPIC_LABELS: dict[str, str] = {
     "reminders": "Lembretes",
     "battery": "Bateria",
@@ -70,6 +71,7 @@ TOPIC_LABELS: dict[str, str] = {
     "tasks": "Tarefas",
     "focus": "Foco",
     "certs": "Certificados",
+    "network": "Rede",
 }
 Route = Literal["speak", "wake", "hud"]
 
@@ -113,6 +115,9 @@ CERT_WARN_DAYS = 14
 CERT_RETRY_S = 600.0
 # Avisos que esperam o fim do bloco de foco (FOC-47): passando disso, os mais antigos caem.
 MAX_HELD = 30
+# Aparelho novo na rede (ODD-42): a tabela ARP é lida de tempos em tempos.
+NETWORK_CHECK_S = 300.0
+NETWORK_LISTED = 3
 
 # ───────────────────────── quando ─────────────────────────
 
@@ -359,7 +364,7 @@ def _path(path: Path | None) -> Path:
 
 
 def _empty_state() -> dict[str, Any]:
-    return {"version": 1, "reminders": [], "muted": {}, "quiet_hours": None, "tasks_notice_day": None, "certs_check_day": None}
+    return {"version": 1, "reminders": [], "muted": {}, "quiet_hours": None, "tasks_notice_day": None, "certs_check_day": None, "held": []}
 
 
 def _valid_reminder(item: Any) -> dict[str, Any] | None:
@@ -381,6 +386,26 @@ def _valid_reminder(item: Any) -> dict[str, Any] | None:
         "created_at": str(item.get("created_at") or ""),
         "urgent": bool(item.get("urgent")),
     }
+
+
+def _valid_held(item: Any) -> dict[str, Any] | None:
+    """Um aviso que espera o fim do bloco de foco, como fica no arquivo."""
+    if not isinstance(item, dict):
+        return None
+    notice = item.get("notice")
+    if not isinstance(notice, dict) or notice.get("priority") not in PRIORITY_ORDER or notice.get("topic") not in TOPIC_LABELS:
+        return None
+    title, message, notice_id = str(notice.get("title") or "")[:120], str(notice.get("message") or "")[:1000], str(notice.get("id") or "")[:40]
+    if not (title or message) or not notice_id:
+        return None
+    arrived = str(item.get("arrived_at") or "")
+    with contextlib.suppress(ValueError):
+        arrived = dt.datetime.fromisoformat(arrived).isoformat(timespec="seconds")
+        return {
+            "arrived_at": arrived,
+            "notice": {"id": notice_id, "topic": notice["topic"], "priority": notice["priority"], "title": title, "message": message},
+        }
+    return None
 
 
 def _read(path: Path) -> tuple[dict[str, Any], bool]:
@@ -412,6 +437,9 @@ def _read(path: Path) -> tuple[dict[str, Any], bool]:
     if isinstance(certs_day, str):
         with contextlib.suppress(ValueError):
             state["certs_check_day"] = dt.date.fromisoformat(certs_day).isoformat()
+    held = raw.get("held")
+    if isinstance(held, list):
+        state["held"] = [item for item in (_valid_held(entry) for entry in held) if item][-MAX_HELD:]
     return state, True
 
 
@@ -544,6 +572,46 @@ def quiet_window(state: dict[str, Any], default: tuple[int, int] | None) -> tupl
     if isinstance(stored, str):
         return parse_clock_range(stored) or default
     return default
+
+
+# ───────────────────────── fila do foco (persistida) ─────────────────────────
+# Os avisos que esperam o fim do bloco de foco ficam no ``lembretes.json`` (chave ``held``): um lembrete
+# que venceu durante o foco já saiu da lista de lembretes, então se esta fila ficasse só na memória um
+# reinício do Jarvis o perderia. Ela só esvazia quando os avisos são entregues.
+
+
+def _held_entry(notice: "Notice", now: dt.datetime) -> dict[str, Any]:
+    return {"arrived_at": now.isoformat(timespec="seconds"), "notice": notice.to_dict()}
+
+
+def _push_held(state: dict[str, Any], notices: list["Notice"], now: dt.datetime) -> None:
+    """Põe avisos no fim da fila (um aviso com o mesmo id não entra duas vezes; passando de MAX_HELD, os mais antigos caem)."""
+    ids = {notice.id for notice in notices}
+    kept = [entry for entry in state["held"] if entry["notice"]["id"] not in ids]
+    state["held"] = [*kept, *(_held_entry(notice, now) for notice in notices)][-MAX_HELD:]
+
+
+def hold_notice(notice: "Notice", now: dt.datetime, path: Path | None = None) -> None:
+    with _editing(path) as state:
+        _push_held(state, [notice], now)
+
+
+def held_label(arrived_at: str, now: dt.datetime) -> str:
+    """"14:02" se chegou hoje; "12/11 às 14:02" se foi antes (o Jarvis ficou desligado, por exemplo)."""
+    try:
+        arrived = dt.datetime.fromisoformat(arrived_at)
+    except ValueError:
+        return "?"
+    if arrived.astimezone(now.tzinfo).date() == now.date():
+        return arrived.astimezone(now.tzinfo).strftime("%H:%M")
+    return arrived.astimezone(now.tzinfo).strftime("%d/%m às %H:%M")
+
+
+def take_held(path: Path | None = None) -> list[dict[str, Any]]:
+    """Tira a fila do arquivo e a devolve: o que sai daqui é entregue uma vez só."""
+    with _editing(path) as state:
+        items, state["held"] = state["held"], []
+    return items
 
 
 # ───────────────────────── avisos ─────────────────────────
@@ -761,26 +829,47 @@ class Monitor(Protocol):
     def check(self, now: dt.datetime, clock: float) -> list[Notice]: ...
 
 
+def _reminder_notice(reminder: dict[str, Any], now: dt.datetime) -> "Notice":
+    due = due_time(reminder)
+    late = (now - due).total_seconds()
+    message = reminder["text"]
+    priority: Priority = "critical" if reminder["urgent"] else "high"
+    if late > LATE_AFTER_S:
+        message += f" (era para {describe_when(due, now) if late < STALE_AFTER_S else due.strftime('%d/%m às %H:%M')}; o Jarvis estava desligado)"
+        if late > STALE_AFTER_S:
+            priority = "normal"
+    return Notice("reminders", priority, "Lembrete", message, id=f"r-{reminder['id']}")
+
+
 class ReminderMonitor:
+    """Os lembretes que venceram. Durante um bloco de foco, os que não são críticos vão direto para a fila
+    persistida do foco, na mesma gravação em que saem da lista de lembretes: nenhum instante em que o
+    lembrete já saiu de um arquivo e ainda não entrou no outro, mesmo que o Jarvis caia nesse meio tempo."""
+
     topic = "reminders"
     interval = TICK_S
 
     def __init__(self, path: Path | None = None) -> None:
         self.path = path
+        # O motor troca por quem sabe se há um bloco de foco em andamento.
+        self.holding: Callable[[], bool] = lambda: False
 
     def check(self, now: dt.datetime, clock: float) -> list[Notice]:
-        notices = []
-        for reminder in pop_due_reminders(now, self.path):
-            due = due_time(reminder)
-            late = (now - due).total_seconds()
-            message = reminder["text"]
-            priority: Priority = "critical" if reminder["urgent"] else "high"
-            if late > LATE_AFTER_S:
-                message += f" (era para {describe_when(due, now) if late < STALE_AFTER_S else due.strftime('%d/%m às %H:%M')}; o Jarvis estava desligado)"
-                if late > STALE_AFTER_S:
-                    priority = "normal"
-            notices.append(Notice("reminders", priority, "Lembrete", message, id=f"r-{reminder['id']}"))
-        return notices
+        try:
+            holding = bool(self.holding())
+        except Exception:
+            logger.exception("Não consegui saber se há um bloco de foco em andamento.")
+            holding = False
+        with _editing(self.path) as state:
+            due = [item for item in state["reminders"] if due_time(item) <= now]
+            if not due:
+                return []
+            state["reminders"] = [item for item in state["reminders"] if due_time(item) > now]
+            notices = [_reminder_notice(reminder, now) for reminder in due]
+            if not holding:
+                return notices
+            _push_held(state, [notice for notice in notices if notice.priority != "critical"], now)
+            return [notice for notice in notices if notice.priority == "critical"]
 
 
 class BatteryMonitor:
@@ -1122,6 +1211,59 @@ class CertsMonitor:
         return [Notice("certs", priority, "Certificado", message, id=f"c-{today}")]
 
 
+def _device_line(device: dict[str, Any]) -> str:
+    return f"{device['ip'] or 'sem IP'} (endereço {device['mac']})"
+
+
+def _device_list(devices: list[dict[str, Any]]) -> str:
+    shown = "; ".join(_device_line(device) for device in devices[:NETWORK_LISTED])
+    return shown + (f" e mais {len(devices) - NETWORK_LISTED}" if len(devices) > NETWORK_LISTED else "")
+
+
+class NetworkMonitor:
+    """Avisa quando aparece um aparelho novo na rede (ODD-42).
+
+    Lê a tabela ARP do PC de tempos em tempos (``arp -a`` / ``ip neigh``: só leitura, nenhum pacote vai
+    para os aparelhos) e compara com o ``rede_aparelhos.json``. Na primeira vez aprende a rede em silêncio
+    (por 30 minutos, porque a tabela do PC ainda está se enchendo). Aparelhos com MAC aleatório (endereço
+    privado, o que celulares fazem) são avisados em grupo e no máximo a cada 6 horas. Quem você nomeia ou
+    marca como conhecido no HUD não é avisado. O horário de silêncio e o assunto silenciado são decididos
+    pelo motor, como nos outros avisos.
+    """
+
+    topic = "network"
+    interval = NETWORK_CHECK_S
+
+    def __init__(
+        self,
+        *,
+        path: Path | None = None,
+        read: Callable[[], list[dict[str, str]]] = netwatch.read_neighbors,
+    ) -> None:
+        self.path = path
+        self._read = read
+
+    def check(self, now: dt.datetime, clock: float) -> list[Notice]:
+        found = netwatch.observe(self._read(), now, self.path)
+        stamp = f"{now:%Y%m%d%H%M}"
+        notices: list[Notice] = []
+        public, private = found["public"], found["private"]
+        if public:
+            count = len(public)
+            lead = "Aparelho novo no Wi-Fi" if count == 1 else f"{count} aparelhos novos no Wi-Fi"
+            message = f"{lead}: {_device_list(public)}. Se for seu, dê um nome a ele em Olho de Deus, Minha rede."
+            notices.append(Notice("network", "normal", "Aparelho novo na rede", message, id=f"n-{stamp}"))
+        if private:
+            count = len(private)
+            lead = "1 aparelho novo com endereço privado" if count == 1 else f"{count} aparelhos novos com endereço privado"
+            message = (
+                f"{lead}: {_device_list(private)}. Celulares costumam usar um endereço aleatório por rede, "
+                "então pode ser um aparelho seu que trocou de endereço."
+            )
+            notices.append(Notice("network", "normal", "Aparelho novo (endereço privado)", message, id=f"np-{stamp}"))
+        return notices
+
+
 # ───────────────────────── motor (servidor do HUD) ─────────────────────────
 
 
@@ -1162,8 +1304,9 @@ class ProactiveEngine:
         self._clock = clock
         self._now = now
         self.hold = hold
-        # Avisos não críticos que chegaram durante o foco: (hora em que chegaram, aviso).
-        self.held: list[tuple[str, Notice]] = []
+        for monitor in monitors:
+            if isinstance(monitor, ReminderMonitor):
+                monitor.holding = self._holding
         self.agent_seen_at: float | None = None
         self.agent_queue: list[tuple[float, Notice]] = []
         self.recent: deque[dict[str, Any]] = deque(maxlen=20)
@@ -1176,6 +1319,7 @@ class ProactiveEngine:
         folder = default_downloads_dir(settings.downloads_dir)
         present = kwargs.pop("present", None)
         tasks_path = kwargs.pop("tasks_path", None)
+        devices_path = kwargs.pop("devices_path", None)
         monitors: list[Monitor] = [
             ReminderMonitor(kwargs.get("path")),
             BatteryMonitor(probe),
@@ -1201,6 +1345,8 @@ class ProactiveEngine:
                     present=present or (lambda: None),
                 )
             )
+        if settings.network_watch_enabled:  # ODD-42: aparelho novo no Wi-Fi
+            monitors.append(NetworkMonitor(path=devices_path))
         logger.info("Avisos proativos ligados (Downloads em %s).", folder)
         return cls(hub, monitors, quiet_hours=settings.quiet_hours, hud_url=settings.hud_url, **kwargs)
 
@@ -1241,20 +1387,49 @@ class ProactiveEngine:
             logger.exception("Não consegui saber se há um bloco de foco em andamento.")
             return False
 
-    def _hold(self, notice: Notice, now: dt.datetime) -> None:
-        self.held = [item for item in self.held if item[1].id != notice.id]
-        self.held.append((now.strftime("%H:%M"), notice))
-        del self.held[:-MAX_HELD]
+    @property
+    def held(self) -> list[tuple[str, Notice]]:
+        """Os avisos que esperam o fim do foco, do arquivo: (hora em que chegaram, aviso)."""
+        now = self._now()
+        try:
+            entries = load_state(self.path)["held"]
+        except Exception:
+            logger.exception("Não consegui ler a fila de avisos do foco.")
+            return []
+        return [(held_label(entry["arrived_at"], now), Notice(**entry["notice"])) for entry in entries]
+
+    def _hold(self, notice: Notice, now: dt.datetime) -> bool:
+        """Guarda o aviso no arquivo. Se não der, o aviso não espera: sai agora, em vez de se perder."""
+        try:
+            hold_notice(notice, now, self.path)
+        except (OSError, TimeoutError):
+            logger.exception("Não consegui guardar o aviso para o fim do foco; ele sai agora.")
+            return False
         logger.info("Aviso proativo (%s) espera o fim do bloco de foco: %s", notice.topic, notice.title)
+        return True
 
     def release_held(self) -> list[Notice]:
-        """Os avisos que esperaram o foco, quando o bloco de foco acabou (ou a sessão foi encerrada)."""
-        if not self.held or self._holding():
+        """Os avisos que esperaram o foco, quando o bloco de foco acabou (ou a sessão foi encerrada).
+
+        Também é o que entrega, depois de um reinício do Jarvis, o que ficou esperando: a fila vem do
+        arquivo. Ela é esvaziada na mesma gravação em que é lida, então cada aviso sai uma vez só.
+        """
+        if self._holding():
             return []
-        released = [
-            replace(notice, message=f"{notice.message} (chegou às {arrived}, durante o foco)") for arrived, notice in self.held
-        ]
-        self.held = []
+        now = self._now()
+        try:
+            if not load_state(self.path)["held"]:
+                return []
+            entries = take_held(self.path)
+        except (OSError, TimeoutError):
+            logger.exception("Não consegui ler a fila de avisos do foco; tento de novo no próximo ciclo.")
+            return []
+        released = []
+        for entry in entries:
+            label = held_label(entry["arrived_at"], now)
+            when = f"em {label}" if " às " in label else f"às {label}"  # "14:02" ou "12/11 às 14:02"
+            notice = Notice(**entry["notice"])
+            released.append(replace(notice, message=f"{notice.message} (chegou {when}, durante o foco)"))
         return released
 
     def dispatch(self, notices: list[Notice]) -> list[tuple[Notice, Route]]:
@@ -1265,10 +1440,8 @@ class ProactiveEngine:
         if self._holding():
             ready = []
             for notice in notices:
-                if notice.topic == "focus" or notice.priority == "critical":
+                if notice.topic == "focus" or notice.priority == "critical" or not self._hold(notice, now):
                     ready.append(notice)
-                else:
-                    self._hold(notice, now)
             notices = ready
             if not notices:
                 return []
@@ -1403,6 +1576,8 @@ TOPIC_ALIASES = {
     "tarefa": "tasks", "tarefas": "tasks", "pendencia": "tasks", "pendencias": "tasks",
     "foco": "focus", "pomodoro": "focus",
     "certificado": "certs", "certificados": "certs", "https": "certs", "ssl": "certs",
+    "rede": "network", "wifi": "network", "wi-fi": "network", "aparelho": "network", "aparelhos": "network",
+    "dispositivo": "network", "dispositivos": "network", "roteador": "network",
 }
 ALL_WORDS = {"tudo", "todos", "todas", "all"}
 
@@ -1567,7 +1742,7 @@ def _settings_quiet_hours() -> tuple[int, int] | None:
 async def configure_alerts(
     context: RunContext,
     action: Literal["mute", "unmute", "quiet_hours", "status"],
-    topic: Literal["battery", "performance", "downloads", "disk", "reminders", "watch", "tasks", "focus", "certs", "all"] | None = None,
+    topic: Literal["battery", "performance", "downloads", "disk", "reminders", "watch", "tasks", "focus", "certs", "network", "all"] | None = None,
     hours: float | None = None,
     quiet_start: str | None = None,
     quiet_end: str | None = None,
@@ -1586,7 +1761,8 @@ async def configure_alerts(
         action: mute, unmute, quiet_hours or status.
         topic: battery, performance (CPU/RAM), downloads, disk, reminders, watch (errors in the
             window watched by watch_screen), tasks (morning summary of tasks), focus (the focus session's
-            block changes), certs (the daily check of the HTTPS certificates of the user's own domains) or all.
+            block changes), certs (the daily check of the HTTPS certificates of the user's own domains),
+            network (new devices on the Wi-Fi, when JARVIS_NETWORK_WATCH is on) or all.
         hours: Mute only for this many hours; omit to mute until the user lifts it.
         quiet_start: Start of the quiet hours ("23:00"), or "off" to turn them off.
         quiet_end: End of the quiet hours ("07:00").
@@ -1598,7 +1774,7 @@ async def configure_alerts(
         topics = _topics(topic)
         if not topics:
             await tool_status("configure_alerts", "error")
-            return f"Assunto desconhecido: '{topic}'. Use battery, performance, downloads, disk, reminders, watch, tasks, focus, certs ou all."
+            return f"Assunto desconhecido: '{topic}'. Use battery, performance, downloads, disk, reminders, watch, tasks, focus, certs, network ou all."
         labels = ", ".join(TOPIC_LABELS[name].lower() for name in topics)
         if action == "mute":
             until = now + dt.timedelta(hours=hours) if hours and hours > 0 else None
@@ -1638,7 +1814,7 @@ async def configure_alerts(
         {
             "title": "Avisos proativos",
             "content": (
-                "Vigiando: bateria, CPU/RAM, downloads, disco, lembretes, tarefas, o foco e certificados.\n"
+                "Vigiando: bateria, CPU/RAM, downloads, disco, lembretes, tarefas, o foco, certificados e aparelhos novos na rede (quando ligado).\n"
                 f"Silenciados: {muted_text}\nHorário de silêncio: {format_window(window)}\n"
                 f"Lembretes marcados: {len(state['reminders'])}"
             ),
@@ -1647,7 +1823,7 @@ async def configure_alerts(
     await tool_status("configure_alerts", "done")
     return (
         "Vigio bateria (baixa e carregador), CPU/RAM alta por mais de 5 minutos, downloads concluídos, "
-        f"disco quase cheio, os lembretes e, de manhã, as tarefas atrasadas e as de hoje, e, uma vez por dia, o certificado HTTPS dos domínios que o usuário pediu para vigiar. Silenciados: {muted_text}. Horário de silêncio: "
+        f"disco quase cheio, os lembretes e, de manhã, as tarefas atrasadas e as de hoje, e, uma vez por dia, o certificado HTTPS dos domínios que o usuário pediu para vigiar e, se ligado, aparelhos novos na rede. Silenciados: {muted_text}. Horário de silêncio: "
         f"{format_window(window)}{' (agora)' if in_quiet_hours(now, window) else ''}. "
         f"Lembretes marcados: {len(state['reminders'])}."
     )
