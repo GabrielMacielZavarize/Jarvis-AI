@@ -78,6 +78,13 @@ function usePaletteReady(): boolean {
   return ready;
 }
 
+/** "Pular para o conteúdo": leva o foco ao primeiro painel da área aberta (ou ao dock, no modo cinema). */
+function skipToContent(event: React.MouseEvent) {
+  event.preventDefault();
+  const target = document.getElementById('conteudo') ?? document.querySelector<HTMLElement>('.hud__dock button');
+  target?.focus();
+}
+
 /** Fica montado depois da primeira abertura, para a saída animada de uma paleta/ambiente já visto. */
 function useEverTrue(value: boolean): boolean {
   const [seen, setSeen] = useState(value);
@@ -308,6 +315,11 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
 
   return (
     <main className="app" data-mode={mode} data-view={view} data-cinema={cinema || undefined} data-ambient={ambient || undefined} data-pending={viewPending || undefined}>
+      {booted && (
+        <a className="skip-link" href="#conteudo" onClick={skipToContent}>
+          Pular para o conteúdo
+        </a>
+      )}
       <Suspense fallback={null}>
         <Scene visible={booted} />
       </Suspense>
@@ -338,7 +350,7 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
 
         {view === 'home' &&
           (['left', 'right'] as const).map((column) => (
-            <aside key={column} className={`hud__${column}`}>
+            <aside key={column} className={`hud__${column}`} id={column === 'left' ? 'conteudo' : undefined} tabIndex={column === 'left' ? -1 : undefined}>
               {prefs.layout[column].map((id) => (
                 <div
                   key={id}

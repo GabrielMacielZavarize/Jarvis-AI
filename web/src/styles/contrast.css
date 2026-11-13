@@ -1,0 +1,175 @@
+/*
+ * Alto contraste (Ajustes › Aparência, ou o "mais contraste" do sistema com a opção em Automático).
+ * `prefs.ts` põe data-contrast="high" no <html>. Vale para as quatro personas: o que muda é só o que
+ * atrapalha a leitura (transparência, scanlines, brilhos, texto apagado, bordas fracas). A cor, a
+ * fonte, o formato dos painéis e os cantos de cada persona ficam como estão.
+ */
+
+/* Texto: branco com o tom da persona, sem os níveis apagados. */
+:root[data-contrast='high'] {
+  --text: #f4feff;
+  --text-dim: rgb(244 254 255 / 0.96);
+  --text-faint: rgb(244 254 255 / 0.86);
+  --panel-bg: linear-gradient(160deg, #05192a, #020b14);
+  --bg: #000;
+  --c-danger: #ff7a7a;
+  --c-ok: #6dffc0;
+}
+:root[data-contrast='high'][data-theme='mark3'] {
+  --text: #fff8ec;
+  --text-dim: rgb(255 248 236 / 0.96);
+  --text-faint: rgb(255 248 236 / 0.86);
+  --panel-bg: linear-gradient(160deg, #2a1306, #130502);
+}
+:root[data-contrast='high'][data-theme='friday'] {
+  --text: #fbf7ff;
+  --text-dim: rgb(251 247 255 / 0.96);
+  --text-faint: rgb(251 247 255 / 0.86);
+  --panel-bg: linear-gradient(160deg, #1d0e34, #0b0518);
+}
+:root[data-contrast='high'][data-theme='stealth'] {
+  --text: #ffffff;
+  --text-dim: rgb(255 255 255 / 0.96);
+  --text-faint: rgb(255 255 255 / 0.86);
+  --panel-bg: linear-gradient(160deg, #181d22, #090b0d);
+}
+
+/* Bordas, linhas e o brilho: as variáveis são declaradas de novo em cada escopo (global.css). */
+:root[data-contrast='high'],
+:root[data-contrast='high'] :is(.app, .btn--danger, .btn--muted) {
+  --line: rgb(var(--c-primary-rgb) / 0.7);
+  --line-strong: rgb(var(--c-primary-rgb) / 1);
+  --glow: none;
+}
+
+/* Sem scanlines, varredura, luz nas bordas da tela nem a moldura que respira. */
+:root[data-contrast='high'] :is(.fx--scanlines, .fx--sweep, .fx--ambient) {
+  display: none;
+}
+:root[data-contrast='high'] .fx--frame {
+  animation: none;
+  box-shadow: none;
+  opacity: 0.35;
+}
+:root[data-contrast='high'] .panel__head::after {
+  display: none;
+}
+
+/* Painéis opacos: o núcleo e o globo não aparecem por trás do texto. */
+:root[data-contrast='high'] :is(.panel, .chip, .tool-plate, .toast, .palette__box, .ambient__card, .cam__feed) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-contrast='high'] .panel {
+  background: var(--panel-bg);
+  border-color: var(--line-strong);
+  box-shadow: none;
+}
+:root[data-contrast='high'] .panel::before,
+:root[data-contrast='high'] .panel::after {
+  opacity: 1;
+}
+:root[data-contrast='high'] .panel__head {
+  background: rgb(var(--c-primary-rgb) / 0.2);
+  border-bottom-color: var(--line-strong);
+}
+:root[data-contrast='high'] .chip {
+  background: #03101a;
+  border-color: var(--line-strong);
+}
+:root[data-contrast='high'][data-theme='mark3'] .chip {
+  background: #180803;
+}
+:root[data-contrast='high'][data-theme='friday'] .chip {
+  background: #12071f;
+}
+:root[data-contrast='high'][data-theme='stealth'] .chip {
+  background: #0c0e10;
+}
+:root[data-contrast='high'] .tool-plate {
+  background: #03101a;
+  border-color: rgb(var(--plate-rgb) / 1);
+  box-shadow: none;
+}
+:root[data-contrast='high'] .caption {
+  background: rgb(0 0 0 / 0.82);
+}
+:root[data-contrast='high'] :is(.core-trigger__label, .dock__state) {
+  background: rgb(0 0 0 / 0.82);
+}
+/* Fora do Painel o núcleo fica quase apagado no fundo. */
+:root[data-contrast='high'] .app:not([data-view='home']) .scene {
+  opacity: 0.1;
+}
+
+/* Texto sem halo. */
+:root[data-contrast='high'] * {
+  text-shadow: none !important;
+}
+
+/* Botões e campos: contorno forte, fundo sólido, nada apagado demais. */
+:root[data-contrast='high'] :is(.btn, .chip-btn, .icon-btn, .select, input, textarea) {
+  border-color: var(--line-strong);
+}
+:root[data-contrast='high'] :is(input, textarea, .select) {
+  background: #000;
+  color: var(--text);
+}
+:root[data-contrast='high'] .btn,
+:root[data-contrast='high'] .chip-btn {
+  background: rgb(var(--c-primary-rgb) / 0.2);
+  color: var(--text);
+}
+:root[data-contrast='high'] .btn--ghost {
+  background: transparent;
+  color: var(--text);
+}
+:root[data-contrast='high'] :is(.btn, .chip-btn, .range, .composer input, .composer button, .eye__input, .mem__del):disabled {
+  opacity: 0.7;
+}
+:root[data-contrast='high'] .chip-btn--on,
+:root[data-contrast='high'] .theme-swatch--on {
+  background: var(--c-primary);
+  color: #000;
+}
+:root[data-contrast='high'] .nav__tab--on {
+  background: rgb(var(--c-primary-rgb) / 0.35);
+  color: var(--text);
+}
+:root[data-contrast='high'] .nav__tab--on::after {
+  box-shadow: none;
+}
+:root[data-contrast='high'] .nav__tab {
+  color: var(--text-dim);
+}
+
+/* O que era só mais fraco volta ao tamanho normal de leitura. */
+:root[data-contrast='high'] .transcript > .line:nth-last-child(n + 5),
+:root[data-contrast='high'] :is(.result__meta, .pointer__log time, .notes .icon-btn, .rot__step--skipped, .protocol--off) {
+  opacity: 1;
+}
+:root[data-contrast='high'] .line--user .line__who,
+:root[data-contrast='high'] .boot__addr {
+  color: var(--c-accent);
+}
+:root[data-contrast='high'] .empty__glyph,
+:root[data-contrast='high'] .log__item--info .log__mark {
+  color: var(--c-primary);
+}
+:root[data-contrast='high'] :is(.cam-alert__meta, .dict-alert__meta, .dict-alert__hint, .dict-alert__msg) {
+  color: var(--text);
+}
+:root[data-contrast='high'] .tok-comment {
+  color: var(--text-dim);
+}
+/* Pontos de estado: o brilho sai, a cor fica. */
+:root[data-contrast='high'] :is(.led--on, .led--busy, .led--off) {
+  box-shadow: none;
+}
+:root[data-contrast='high'] :is(.led, .led--on, .led--busy, .led--off) {
+  outline: 1px solid var(--text);
+}
+/* Animações de piscar só atrapalham a leitura. */
+:root[data-contrast='high'] :is(.chip--demo, .led--busy) {
+  animation: none;
+}

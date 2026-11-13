@@ -171,7 +171,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
+  /* Com o texto grande o código, o título e o contador não cabem numa linha: o contador desce. */
+  flex-wrap: wrap;
   padding: 9px 14px 8px calc(var(--cut) + 4px);
   overflow: hidden;
   border-bottom: 1px solid var(--line);
@@ -206,7 +208,7 @@
   border: 1px solid rgb(var(--c-accent-rgb) / 0.35);
   background: rgb(var(--c-accent-rgb) / 0.06);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   line-height: 1.4;
   color: var(--c-accent);
   letter-spacing: 0.08em;
@@ -215,7 +217,7 @@
   margin: 0;
   transition: color 0.6s, text-shadow 0.6s;
   font-family: var(--font-display);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ts, 1));
   font-weight: 600;
   letter-spacing: 0.24em;
   text-transform: uppercase;
@@ -228,7 +230,7 @@
   align-items: center;
   gap: 8px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   color: var(--text-faint);
 }
 .panel__body {
@@ -346,7 +348,7 @@
 .brand__name {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: calc(22px * var(--ts-big, 1));
   font-weight: 700;
   letter-spacing: 0.32em;
   color: var(--text);
@@ -354,7 +356,7 @@
 }
 .brand__tag {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   letter-spacing: 0.22em;
   color: var(--text-faint);
   text-transform: uppercase;
@@ -388,7 +390,7 @@
   border: 1px solid var(--line);
   background: var(--panel-bg), rgb(1 5 10 / 0.75);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ts, 1));
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -430,7 +432,7 @@
 }
 .clock__time {
   font-family: var(--font-mono);
-  font-size: 32px;
+  font-size: calc(32px * var(--ts-big, 1));
   line-height: 1;
   letter-spacing: 0.06em;
   color: var(--text);
@@ -460,7 +462,7 @@
 .clock__date {
   margin-top: 4px;
   font-family: var(--font-display);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   letter-spacing: 0.3em;
   color: var(--c-primary);
 }
@@ -475,14 +477,14 @@
 }
 .stat dt {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   letter-spacing: 0.14em;
   color: var(--text-faint);
   text-transform: uppercase;
 }
 .stat dd {
   margin: 2px 0 0;
-  font-size: 15px;
+  font-size: calc(15px * var(--ts, 1));
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -495,7 +497,7 @@
   padding: 6px 8px;
   border: 1px solid var(--line);
   background: rgb(0 8 14 / 0.75);
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--ts, 1));
   font-weight: 500;
   color: var(--text);
   cursor: pointer;
@@ -513,7 +515,7 @@
 .latency small {
   margin-left: 8px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   font-weight: 400;
   color: var(--text-faint);
 }
@@ -567,6 +569,13 @@
   margin-top: 4px;
   white-space: normal;
 }
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  white-space: normal;
+}
 .theme-swatch {
   display: flex;
   align-items: center;
@@ -575,7 +584,7 @@
   border: 1px solid var(--line);
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   letter-spacing: 0.06em;
   color: var(--text-dim);
   text-align: left;
@@ -599,7 +608,7 @@
 .quality-readout {
   flex: none;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   color: var(--text-faint);
 }
 .toggles {
@@ -607,7 +616,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 14px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   font-weight: 500;
 }
 .toggles .toggle {
@@ -624,7 +633,7 @@
   align-items: center;
   gap: 10px;
   margin-top: 4px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   font-weight: 500;
 }
 .toggle {
@@ -656,7 +665,7 @@
   border: 1px solid var(--line);
   background: transparent;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -689,7 +698,7 @@
   padding: 9px 11px;
   border-left: 2px solid var(--c-accent);
   background: rgb(var(--c-accent-rgb) / 0.08);
-  font-size: 14px;
+  font-size: calc(14px * var(--ts, 1));
   line-height: 1.35;
   color: var(--text-dim);
 }
@@ -699,7 +708,7 @@
 }
 .notice code {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: calc(13px * var(--ts, 1));
   color: var(--text);
 }
 
@@ -722,17 +731,17 @@
 }
 .protocol__code {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   color: var(--c-accent);
 }
 .protocol__label {
   font-weight: 600;
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--ts, 1));
   line-height: 1.1;
 }
 .protocol__hint {
   display: block;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   font-weight: 400;
   color: var(--text-faint);
 }
@@ -771,7 +780,7 @@
   display: flex;
   gap: 8px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   letter-spacing: 0.18em;
   color: var(--text-faint);
 }
@@ -782,7 +791,7 @@
 .line__text {
   margin-top: 3px;
   padding: 6px 10px;
-  font-size: 16px;
+  font-size: calc(16px * var(--ts, 1));
   line-height: 1.35;
 }
 .line--agent .line__who {
@@ -831,11 +840,11 @@
   min-height: 120px;
   text-align: center;
   color: var(--text-faint);
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--ts, 1));
 }
 .empty__glyph {
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   letter-spacing: 0.4em;
   color: rgb(var(--c-primary-rgb) / 0.5);
 }
@@ -871,7 +880,7 @@
   padding: 9px 12px;
   border: 1px solid var(--line);
   background: rgb(0 8 14 / 0.6);
-  font-size: 15px;
+  font-size: calc(15px * var(--ts, 1));
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -890,7 +899,7 @@
   border: 1px solid var(--line-strong);
   background: rgb(var(--c-primary-rgb) / 0.12);
   font-family: var(--font-display);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   letter-spacing: 0.2em;
   color: var(--c-primary);
   cursor: pointer;
@@ -912,7 +921,7 @@
   padding: 0;
   list-style: none;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: calc(13px * var(--ts, 1));
 }
 /* Timeline rule through the event marks. */
 .log__list::before {
@@ -948,7 +957,7 @@
   border: 1px solid currentColor;
   border-radius: 50%;
   background: #020d16;
-  font-size: 10px;
+  font-size: calc(10px * var(--ts, 1));
   line-height: 1;
   color: var(--text-faint);
 }
@@ -995,7 +1004,8 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  width: min(760px, 92vw);
+  /* Nunca mais larga que a coluna do meio: com o texto grande a legenda não passa por cima dos painéis. */
+  width: min(760px, 92vw, 100%);
   pointer-events: none;
 }
 
@@ -1034,7 +1044,7 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   background: radial-gradient(ellipse at center, rgb(1 4 9 / 0.62), transparent 72%);
-  font-size: 19px;
+  font-size: calc(19px * var(--ts, 1));
   font-weight: 500;
   line-height: 1.38;
   letter-spacing: 0.01em;
@@ -1064,7 +1074,7 @@
   padding: 1px 6px;
   border: 1px solid rgb(var(--plate-rgb) / 0.6);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   letter-spacing: 0.08em;
   color: rgb(var(--plate-rgb));
 }
@@ -1072,7 +1082,7 @@
   grid-area: label;
   overflow: hidden;
   font-family: var(--font-display);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ts, 1));
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -1084,7 +1094,7 @@
 .tool-plate__state {
   grid-area: state;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgb(var(--plate-rgb));
@@ -1095,7 +1105,7 @@
 .tool-plate__detail {
   grid-area: detail;
   overflow: hidden;
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--ts, 1));
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1137,7 +1147,7 @@
   align-items: center;
   gap: 12px;
   font-family: var(--font-display);
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   font-weight: 600;
   letter-spacing: 0.5em;
   text-transform: uppercase;
@@ -1160,7 +1170,7 @@
   gap: 14px;
 }
 .dock__hint {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   color: var(--text-faint);
   letter-spacing: 0.04em;
 }
@@ -1168,7 +1178,7 @@
   padding: 1px 6px;
   border: 1px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   color: var(--text-dim);
 }
 
@@ -1178,12 +1188,13 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  height: 44px;
-  padding: 0 22px;
+  /* Altura mínima: com o texto maior o rótulo quebra em duas linhas em vez de vazar do botão. */
+  min-height: 44px;
+  padding: 6px 22px;
   border: 1px solid var(--line-strong);
   background: rgb(var(--c-primary-rgb) / 0.08);
   font-family: var(--font-display);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ts, 1));
   font-weight: 600;
   letter-spacing: 0.26em;
   text-transform: uppercase;
@@ -1202,7 +1213,7 @@
 }
 .btn--primary {
   min-width: 230px;
-  height: 50px;
+  min-height: 50px;
   background: linear-gradient(90deg, rgb(var(--c-primary-rgb) / 0.25), rgb(var(--c-primary-rgb) / 0.08));
 }
 .btn--danger {
@@ -1255,7 +1266,7 @@
   opacity: 0;
 }
 .app[data-cinema] .caption {
-  font-size: clamp(22px, 2.2vw, 30px);
+  font-size: calc(clamp(22px, 2.2vw, 30px) * var(--ts-big, 1));
 }
 @media (max-width: 1080px) {
   /* Stacked columns would leave an empty page: in cinema mode they leave the flow. */
@@ -1295,7 +1306,7 @@
   translate: -50% 0;
   white-space: nowrap;
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   letter-spacing: 0.42em;
   color: var(--text);
   text-shadow: 0 0 10px rgb(var(--c-primary-rgb) / 0.9);
@@ -1394,10 +1405,10 @@
     display: none;
   }
   .brand__name {
-    font-size: 17px;
+    font-size: calc(17px * var(--ts-big, 1));
   }
   .clock__time {
-    font-size: 22px;
+    font-size: calc(22px * var(--ts, 1));
   }
   .btn--primary {
     min-width: 0;
@@ -1434,7 +1445,7 @@
   background: rgb(30 4 8 / 0.78);
   color: #ffd2d2;
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   font-weight: 600;
   letter-spacing: 0.24em;
   text-transform: uppercase;
@@ -1453,7 +1464,7 @@
 .cam-alert__meta {
   font-family: var(--font-mono);
   font-weight: 400;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   letter-spacing: 0.1em;
   color: rgb(255 210 210 / 0.65);
 }
@@ -1491,7 +1502,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   font-weight: 700;
   letter-spacing: 0.24em;
   text-transform: uppercase;
@@ -1511,7 +1522,7 @@
 .dict-alert__badge {
   padding: 1px 6px;
   border: 1px solid rgb(var(--c-accent-rgb) / 0.6);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--ts, 1));
   letter-spacing: 0.14em;
 }
 .dict-alert__meta {
@@ -1520,7 +1531,7 @@
   max-width: 50%;
   font-family: var(--font-mono);
   font-weight: 400;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   letter-spacing: 0.06em;
   text-transform: none;
   text-overflow: ellipsis;
@@ -1532,7 +1543,7 @@
   max-height: 4.8em;
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1556,7 +1567,7 @@
 .dict-alert__msg {
   margin: 4px 0 0;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   color: rgb(255 230 194 / 0.7);
 }
 
@@ -1630,7 +1641,7 @@
 }
 .toast__head strong {
   font-family: var(--font-display);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ts, 1));
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -1639,11 +1650,11 @@
 }
 .toast__code {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ts, 1));
   color: var(--text-faint);
 }
 .toast__message {
-  font-size: 15px;
+  font-size: calc(15px * var(--ts, 1));
   line-height: 1.3;
   color: var(--text);
 }
@@ -1700,7 +1711,7 @@
 }
 .ambient__clock {
   font-family: var(--font-mono);
-  font-size: clamp(64px, 15vh, 180px);
+  font-size: calc(clamp(64px, 15vh, 180px) * var(--ts-big, 1));
   line-height: 1;
   letter-spacing: 0.04em;
   color: var(--text);
@@ -1714,7 +1725,7 @@
 }
 .ambient__date {
   font-family: var(--font-display);
-  font-size: clamp(12px, 1.6vh, 16px);
+  font-size: calc(clamp(12px, 1.6vh, 16px) * var(--ts, 1));
   letter-spacing: 0.36em;
   text-transform: uppercase;
   color: var(--c-primary);
@@ -1740,25 +1751,25 @@
 }
 .ambient__value {
   font-family: var(--font-display);
-  font-size: 34px;
+  font-size: calc(34px * var(--ts-big, 1));
   line-height: 1.05;
   color: var(--text);
 }
 .ambient__value--event {
-  font-size: 22px;
+  font-size: calc(22px * var(--ts, 1));
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--c-accent);
 }
 .ambient__label {
   margin-top: 4px;
-  font-size: 15px;
+  font-size: calc(15px * var(--ts, 1));
   color: var(--text-dim);
 }
 .ambient__hint {
   margin-top: 18px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -1792,7 +1803,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 15px;
+  font-size: calc(15px * var(--ts, 1));
   font-weight: 600;
   color: var(--text);
 }
@@ -1816,7 +1827,7 @@
 .gestures__holding,
 .gestures__last {
   overflow: hidden;
-  font-size: 14px;
+  font-size: calc(14px * var(--ts, 1));
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-dim);
@@ -1839,13 +1850,13 @@
 .gestures__hint,
 .gestures__notice {
   margin: 0;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   line-height: 1.35;
   color: var(--text-faint);
 }
 .gestures__hint code {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ts, 1));
 }
 .gestures__notice {
   padding: 6px 9px;
@@ -1881,12 +1892,12 @@
   gap: 8px;
 }
 .gesture-row__glyph {
-  font-size: 16px;
+  font-size: calc(16px * var(--ts, 1));
   text-align: center;
 }
 .gesture-row__name {
   overflow: hidden;
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--ts, 1));
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1894,7 +1905,7 @@
 }
 .gesture-row__label {
   overflow: hidden;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-dim);
@@ -1904,7 +1915,7 @@
 }
 .gesture-row__warn {
   margin: 3px 0 0 30px;
-  font-size: 13px;
+  font-size: calc(13px * var(--ts, 1));
   color: var(--c-accent);
 }
 .binding-form {
@@ -1914,7 +1925,7 @@
 }
 .binding-form__how {
   margin: 0;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   line-height: 1.35;
   color: var(--text-faint);
 }
@@ -1925,7 +1936,7 @@
 }
 .binding-form__row .select {
   margin-top: 0;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
 }
 .binding-form__row--actions {
   display: flex;
@@ -1936,7 +1947,7 @@
   padding: 6px 8px;
   border: 1px solid var(--line);
   background: rgb(0 8 14 / 0.75);
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   color: var(--text);
   outline: none;
 }
@@ -1955,7 +1966,7 @@
   display: grid;
   gap: 6px;
   margin: 0;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   line-height: 1.35;
 }
 .gestures__fixed dt {
@@ -1980,7 +1991,7 @@
   padding: 7px 10px;
   border-left: 2px solid var(--c-primary);
   background: rgb(var(--c-primary-rgb) / 0.06);
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   line-height: 1.35;
   color: var(--text-dim);
 }
@@ -1990,14 +2001,14 @@
 }
 .health__stats .stat dd {
   white-space: normal;
-  font-size: 14px;
+  font-size: calc(14px * var(--ts, 1));
 }
 .health__alert {
   color: var(--c-accent);
 }
 .health__empty {
   margin: 0;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ts, 1));
   color: var(--text-faint);
 }
 .health__foot {

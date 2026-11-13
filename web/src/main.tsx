@@ -16,6 +16,8 @@ import './styles/cards.css';
 import './styles/boot.css';
 import './styles/mobile.css';
 import './styles/personas.css';
+import './styles/a11y.css';
+import './styles/contrast.css';
 
 import { StrictMode } from 'react';
 import { LazyMotion } from 'motion/react';

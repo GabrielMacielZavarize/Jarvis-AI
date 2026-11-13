@@ -168,3 +168,43 @@ describe('utilitários', () => {
     expect(examplePhrase('')).toBe('');
   });
 });
+
+describe('comandos de acessibilidade', () => {
+  it('muda o tamanho do texto um passo de cada vez, nos dois sentidos', () => {
+    const setPrefs = vi.fn();
+    const commands = buildCommands(context({ setPrefs, prefs: { ...DEFAULT_PREFS, textSize: 110 } }));
+    commands.find((command) => command.id === 'text:bigger')?.run();
+    commands.find((command) => command.id === 'text:smaller')?.run();
+    commands.find((command) => command.id === 'text:reset')?.run();
+    expect(setPrefs.mock.calls).toEqual([[{ textSize: 120 }], [{ textSize: 100 }], [{ textSize: 100 }]]);
+  });
+
+  it('apaga o comando que já não tem para onde ir', () => {
+    const max = buildCommands(context({ prefs: { ...DEFAULT_PREFS, textSize: 140 } }));
+    expect(max.find((command) => command.id === 'text:bigger')?.disabled).toMatch(/máximo/);
+    expect(max.find((command) => command.id === 'text:smaller')?.disabled).toBeUndefined();
+    const min = buildCommands(context({ prefs: { ...DEFAULT_PREFS, textSize: 90 } }));
+    expect(min.find((command) => command.id === 'text:smaller')?.disabled).toMatch(/mínimo/);
+    expect(buildCommands(context()).find((command) => command.id === 'text:reset')?.disabled).toBeTruthy();
+  });
+
+  it('liga, desliga e põe o alto contraste em automático', () => {
+    const setPrefs = vi.fn();
+    const commands = buildCommands(context({ setPrefs }));
+    expect(commands.find((command) => command.id === 'contrast:auto')?.disabled).toBeTruthy();
+    commands.find((command) => command.id === 'contrast:on')?.run();
+    commands.find((command) => command.id === 'contrast:off')?.run();
+    expect(setPrefs.mock.calls).toEqual([[{ contrast: 'on' }], [{ contrast: 'off' }]]);
+    const on = buildCommands(context({ prefs: { ...DEFAULT_PREFS, contrast: 'on' } }));
+    expect(on.find((command) => command.id === 'contrast:on')?.disabled).toBeTruthy();
+    expect(on.find((command) => command.id === 'contrast:auto')?.disabled).toBeUndefined();
+  });
+
+  it('a busca acha pelos nomes que a pessoa usaria', () => {
+    const commands = buildCommands(context());
+    expect(searchCommands(commands, 'fonte maior')[0]?.id).toBe('text:bigger');
+    expect(searchCommands(commands, 'contraste').map((command) => command.id)).toEqual(
+      expect.arrayContaining(['contrast:on', 'contrast:off', 'contrast:auto']),
+    );
+  });
+});

@@ -20,7 +20,7 @@
 .pairing__brand {
   margin: 4px 0 6px;
   font-family: var(--font-display);
-  font-size: 24px;
+  font-size: calc(24px * var(--ts, 1));
   letter-spacing: 0.3em;
   text-align: center;
   color: var(--c-primary);
@@ -29,12 +29,12 @@
 .pairing__hint,
 .pairing__foot {
   margin: 0;
-  font-size: 15px;
+  font-size: calc(15px * var(--ts, 1));
   line-height: 1.4;
   color: var(--text-dim);
 }
 .pairing__foot {
-  font-size: 13px;
+  font-size: calc(13px * var(--ts, 1));
 }
 .pairing__foot a {
   color: var(--c-primary);
@@ -42,7 +42,7 @@
 .pairing__label {
   margin-top: 6px;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: calc(11px * var(--ts, 1));
   letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--text-faint);
@@ -59,14 +59,14 @@
 .pairing__code {
   height: 64px;
   font-family: var(--font-mono);
-  font-size: 34px;
+  font-size: calc(34px * var(--ts-big, 1));
   letter-spacing: 0.4em;
   text-align: center;
 }
 .pairing__name {
   height: 46px;
   padding: 0 12px;
-  font-size: 17px;
+  font-size: calc(17px * var(--ts, 1));
 }
 .pairing__code:focus,
 .pairing__name:focus {
@@ -80,13 +80,13 @@
   border: 1px solid rgb(255 90 90 / 0.5);
   background: rgb(40 6 10 / 0.6);
   color: #ffd2d2;
-  font-size: 14px;
+  font-size: calc(14px * var(--ts, 1));
 }
 .pairing__submit {
   width: 100%;
   height: 56px;
   margin-top: 6px;
-  font-size: 14px;
+  font-size: calc(14px * var(--ts, 1));
 }
 
 /* ───────────────────────── Painel Celular (no PC) ───────────────────────── */
@@ -98,7 +98,7 @@
 }
 .lan__url {
   margin: 0;
-  font-size: 14px;
+  font-size: calc(14px * var(--ts, 1));
   color: var(--text-dim);
   word-break: break-all;
 }
@@ -124,14 +124,14 @@
 }
 .lan__code {
   font-family: var(--font-mono);
-  font-size: 30px;
+  font-size: calc(30px * var(--ts-big, 1));
   letter-spacing: 0.12em;
   color: var(--text);
   text-shadow: var(--glow);
 }
 .lan__left {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ts, 1));
   color: var(--text-faint);
 }
 .lan__start {
@@ -150,7 +150,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 14px;
+  font-size: calc(14px * var(--ts, 1));
 }
 .lan__device-name {
   flex: 1;
@@ -161,7 +161,7 @@
 }
 .lan__device-seen {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ts, 1));
   color: var(--text-faint);
 }
 .lan__revoke {
@@ -194,7 +194,7 @@
     top: 50vh;
   }
   .core-trigger__label {
-    font-size: 12px;
+    font-size: calc(12px * var(--ts, 1));
     letter-spacing: 0.2em;
     white-space: normal;
     width: 80vw;
@@ -219,16 +219,16 @@
     gap: 10px 12px;
   }
   .btn {
-    height: 52px;
-    font-size: 13px;
+    min-height: 52px;
+    font-size: calc(13px * var(--ts, 1));
   }
   .btn--primary {
     order: -1;
     flex: 1 1 60%;
     min-width: 0;
-    height: 60px;
-    padding: 0 14px;
-    font-size: 14px;
+    min-height: 60px;
+    padding: 6px 14px;
+    font-size: calc(14px * var(--ts, 1));
     letter-spacing: 0.18em;
   }
   .dock__controls .btn--round:first-child {
@@ -256,13 +256,13 @@
     max-height: 55vh;
   }
   .lan__code {
-    font-size: 26px;
+    font-size: calc(26px * var(--ts, 1));
   }
   /* Campos com menos de 16px fazem o iPhone dar zoom ao focar. */
   input,
   textarea,
   select {
-    font-size: 16px;
+    font-size: max(16px, calc(16px * var(--ts, 1)));
   }
 }
 

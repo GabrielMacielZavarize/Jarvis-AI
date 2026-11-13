@@ -94,6 +94,13 @@ export function TopBar({ mode, status, connected, micEnabled, demo, sessionStart
       <div className="topbar__center">
         <NavTabs variant="top" />
       <div className="chips">
+        <span className="sr-only" role="status">
+          {demo
+            ? 'Simulação ligada.'
+            : connected
+              ? `Link ${mode === 'connecting' ? 'sincronizando' : 'ativo'}, microfone ${micEnabled ? 'aberto' : 'mudo'}.`
+              : 'Link inativo.'}
+        </span>
         {demo && <div className="chip chip--demo">Simulação</div>}
         {focus.running && (
           <button

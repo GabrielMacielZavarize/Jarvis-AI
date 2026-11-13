@@ -18,7 +18,7 @@ As abas no topo (no celular, a barra de baixo) trocam o que o HUD mostra. O dock
 | Dia a dia | `2` | Tarefas e notas com caixa de marcar, a sessão de foco, as cotações e o teste da internet ([dia-a-dia.md](dia-a-dia.md)) |
 | Olho de Deus | `3` | Consultas em fontes públicas: um campo que reconhece IP, domínio, link, CNPJ, CEP, DDD, email ou usuário, a checagem de senha vazada e os resultados da sessão ([olho-de-deus.md](olho-de-deus.md)) |
 | Sistema | `4` | Estado do link e do modelo, tempo de resposta, voz, ativação por voz, presença, o painel de Saúde, o do Celular, os Gestos e a lista de Protocolos com o que está ligado no `.env` |
-| Ajustes | `5` | Aparência (persona, qualidade da cena, legenda, modo ambiente, som do reator), Áudio (microfone, medidores e sons da interface) e a lista de atalhos |
+| Ajustes | `5` | Aparência (persona, tamanho do texto, alto contraste, qualidade da cena, legenda, modo ambiente, som do reator), Áudio (microfone, medidores e sons da interface) e a lista de atalhos |
 
 Fora do Painel o núcleo recua para o fundo e os painéis da área ocupam a tela. `Esc` volta ao Painel.
 
@@ -38,7 +38,7 @@ Também tem a transcrição ao vivo da conversa (com hora), a linha de comando p
 
 ### Paleta de comandos
 
-`Ctrl+K` (ou a lupa nas abas e no dock) abre uma busca com tudo o que o HUD faz por clique: ir para uma área, iniciar e encerrar o link, microfone, simulação, as quatro personas, começar e encerrar o foco, modo cinema, legenda, modo ambiente, qualidade da cena e restaurar os painéis. Os protocolos ligados também aparecem, cada um com uma frase de exemplo que vai por texto ao Jarvis. Digitar um IP, domínio, link, CNPJ, CEP ou email oferece a consulta no Olho de Deus como primeira opção. Com o link aberto, o que você digitar e não for um comando vira "Enviar ao Jarvis". Setas navegam, `Enter` executa e `Esc` fecha. A busca ignora acentos.
+`Ctrl+K` (ou a lupa nas abas e no dock) abre uma busca com tudo o que o HUD faz por clique: ir para uma área, iniciar e encerrar o link, microfone, simulação, as quatro personas, começar e encerrar o foco, modo cinema, legenda, modo ambiente, qualidade da cena e restaurar os painéis, texto maior, menor e de volta a 100% e o alto contraste (ligar, desligar, automático). Os protocolos ligados também aparecem, cada um com uma frase de exemplo que vai por texto ao Jarvis. Digitar um IP, domínio, link, CNPJ, CEP ou email oferece a consulta no Olho de Deus como primeira opção. Com o link aberto, o que você digitar e não for um comando vira "Enviar ao Jarvis". Setas navegam, `Enter` executa e `Esc` fecha. A busca ignora acentos.
 
 ## Ajustes
 
@@ -47,6 +47,41 @@ Também tem a transcrição ao vivo da conversa (com hora), a linha de comando p
 ### Personas
 
 J.A.R.V.I.S. (o padrão), Mark III, F.R.I.D.A.Y. e Stealth. Cada persona muda a identidade inteira, não só as cores: quem responde e com que voz, o núcleo 3D, o formato dos painéis, as fontes, o boot e os sons. Detalhes em [O que cada persona muda](#o-que-cada-persona-muda), mais abaixo. Também dá para trocar por voz: "Jarvis, chama a Friday", "modo Mark III", "modo discreto", "volta ao normal", "deixa roxo".
+
+### Tamanho do texto
+
+Seis passos: 90%, 100% (o de fábrica), 110%, 120%, 130% e 140%. Escolha em Ajustes › Aparência (Tamanho do texto) ou na paleta (`Ctrl+K`: "texto maior", "texto menor", "tamanho do texto: 100%"). Vale para o HUD inteiro, no computador e no celular, e fica salvo neste navegador: o celular guarda o dele, separado do PC.
+
+Como funciona, para quem for mexer no CSS:
+
+- `prefs.ts` põe `--ts` (0,9 a 1,4) no `<html>`, e todo `font-size` dos arquivos de `web/src/styles/` é `calc(12px * var(--ts, 1))`. Texto novo no CSS segue a mesma forma, senão fica de fora da preferência.
+- O que é grande por enfeite cresce só metade (`--ts-big`): o nome da marca, o relógio, os títulos do boot e das áreas. Os rótulos da barra de baixo do celular crescem um quarto (`--ts-nav`), porque são seis em uma tela estreita, e nela o nome da aba usa a fonte de interface (Rajdhani, mais estreita) em todas as personas: com Orbitron, Teko ou Exo 2 o nome já saía cortado em telas de 360 px, mesmo a 100%. O número dentro dos medidores do diagnóstico (um SVG de tamanho fixo) não muda.
+- As colunas laterais do Painel alargam 40% da diferença (a 140%, uns 16% mais largas). A conta está em `--side`, em `global.css`.
+- Botões ganham altura em vez de cortar o rótulo quando ele quebra em duas linhas, o cabeçalho dos painéis passa o contador para a linha de baixo, e a legenda embaixo do núcleo nunca fica mais larga que a coluna do meio.
+- A partir de 120% (`data-text-large` no `<html>`) as abas do topo guardam o nome só da aberta, o resto vira ícone, e a frase da marca some, para a marca, as abas e o relógio caberem na mesma linha.
+- As colunas continuam rolando sozinhas. No celular os campos nunca passam a ficar abaixo de 16 px (o iPhone dá zoom em campo menor), mesmo a 90%.
+
+O teste `com o texto a 140% nada fica cortado…` (`web/e2e/acessibilidade.e2e.ts`) abre as cinco áreas nas quatro personas, em 1280×720 e em 360×740, e falha se achar uma caixa com o conteúdo passando da borda, a página rolando de lado, a marca por cima das abas ou do relógio, ou um nome de aba cortado na barra de baixo.
+
+### Alto contraste
+
+Três escolhas em Ajustes › Aparência (Alto contraste), ou na paleta (`Ctrl+K`: "alto contraste"):
+
+| Escolha | O que faz |
+| --- | --- |
+| Automático (o de fábrica) | Liga sozinho quando o sistema pede mais contraste (`prefers-contrast: more`: "Aumentar contraste" do macOS, do iOS e do Android; ou um tema de contraste do Windows, que aparece como `forced-colors`). Se a opção do sistema mudar com o HUD aberto, o HUD acompanha na hora. |
+| Ligado | Sempre em alto contraste. |
+| Desligado | Nunca, mesmo que o sistema peça. A escolha da pessoa vale mais que a do sistema. |
+
+O que muda (tudo em `web/src/styles/contrast.css`, ligado por `data-contrast="high"` no `<html>`):
+
+- **Texto**: branco com o tom da persona, e os níveis apagados (`--text-dim`, `--text-faint`) sobem para 96% e 86%. Sobre o painel, o texto principal passa de 12:1 e os dois apagados de 7:1 (o nível AAA).
+- **Painéis opacos**: sem o degradê translúcido, sem o desfoque do fundo e sem o pontilhado. O núcleo 3D e o globo não aparecem por trás do texto, e fora do Painel o núcleo fica a 10%. Chips e a placa do protocolo ganham fundo sólido, e a legenda e o texto da linha de status, um fundo escuro quase opaco.
+- **Bordas**: a cor cheia da persona, em painéis, cabeçalhos, botões e campos. Os cantos de moldura ficam acesos.
+- **Sem o que atrapalha**: scanlines, a varredura que desce a tela, a luz nas bordas, a moldura que respira (F.R.I.D.A.Y.), o traço de energia nos cabeçalhos, halos em texto e brilho nos pontos de estado e nas caixas. Nada pisca (o selo SIMULAÇÃO e o ponto "ocupado" ficam parados).
+- **Seleção**: a opção marcada (persona, tamanho, tipo de consulta) vira um bloco cheio com letra escura, e a aba aberta ganha fundo mais forte. Controles desativados ficam a 70% em vez de 45%.
+
+O que não muda: a cor primária e a de acento de cada persona, o formato dos painéis (placas de cantos cortados do Mark III, vidro arredondado da F.R.I.D.A.Y., traço fino do Stealth), as fontes e o núcleo 3D. Cada persona tem o próprio fundo opaco e o próprio tom de branco, então o Mark III continua âmbar e a F.R.I.D.A.Y. continua lilás. O estado também nunca depende só da cor: ✓, ! e ✕ nos veredictos, e texto nos chips.
 
 ### Legenda ao vivo
 
@@ -87,6 +122,21 @@ Um zumbido baixo que cresce com a voz do Jarvis enquanto o link está aberto. Ve
 ### Microfone
 
 O seletor de microfone e os medidores de voz ficam no painel Áudio. Se o microfone escolhido não entregar som, o Briefing e o painel Sistema mostram o aviso com um atalho para lá.
+
+## Acessibilidade
+
+Além do tamanho do texto e do alto contraste, o HUD segue estas regras (e `web/e2e/acessibilidade.e2e.ts` confere):
+
+- **Foco do teclado visível em todo lugar**: contorno de 2 px na cor da persona em botões, campos, caixas de marcar, abas e links. Os campos de texto que antes só trocavam a cor da borda ao focar (linha de comando, Nova tarefa, consulta do Olho de Deus, senha, nome do aparelho) ganharam o contorno. Os botões de forma recortada (`clip-path`: o dock, as abas, os chips, a câmera) levam o contorno por dentro da borda e fundo mais forte, porque por fora o recorte o cortaria.
+- **Pular para o conteúdo**: o primeiro `Tab` da página é um link que só aparece com o foco. `Enter` leva o foco ao primeiro painel da área aberta; o `Tab` seguinte cai no primeiro controle dele, sem passar de novo pelas abas e pelos chips.
+- **Ordem da tabulação**: topo (abas, chips), o conteúdo da área (coluna da esquerda, depois a do meio, depois a da direita, cada uma de cima para baixo) e o dock. Não há `tabindex` positivo. No Dia a dia: Tarefas (caixas de marcar, apagar, campos), Foco, Cotações e Rede. No Olho de Deus: Consulta, Senha, Aparelhos e Resultados.
+- **Nome em todo controle**: botões só de ícone têm `aria-label`, e os que se repetem dizem de quem são ("Esquecer Celular da Ana", "Salvar o nome de TV da sala", "192.168.0.50 é meu", "Apagar Fechar o relatório"). Todo campo tem rótulo.
+- **Avisos ao leitor de tela** (`aria-live`, sempre no modo educado):
+  - Dia a dia: o resumo das tarefas ("2 abertas · 1 atrasada") anuncia ao marcar, apagar ou adicionar; o Foco anuncia só a troca de bloco ("Bloco de foco 2 de 4", "Pausa 2 de 4", "parado"). A contagem que anda a cada segundo não é anunciada.
+  - Olho de Deus: "Consultando…" enquanto espera, o tipo reconhecido, o total de resultados da sessão, o veredito da senha vazada e os erros (`role="alert"`).
+  - Topo: o estado do link e do microfone ("Link ativo, microfone aberto.") em voz baixa, sem aparecer na tela.
+  - A transcrição, o registro, os avisos e o estado do dock já eram `aria-live`.
+- **Movimento reduzido**: com `prefers-reduced-motion`, as animações e as transições encurtam para quase zero (já era assim).
 
 ## Atalhos de teclado
 

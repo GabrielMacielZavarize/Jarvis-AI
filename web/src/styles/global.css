@@ -30,7 +30,12 @@
   --font-display: 'Orbitron', 'Rajdhani', sans-serif;
   --font-ui: 'Rajdhani', 'Segoe UI', sans-serif;
   --font-mono: 'Share Tech Mono', ui-monospace, monospace;
-  --side: clamp(320px, 25vw, 440px);
+  /* Tamanho do texto (Ajustes › Aparência): --ts vem do <html> (prefs.ts), 0.9 a 1.4. Os títulos grandes
+     (relógio, boot) crescem só metade, para não estourar a tela; as colunas laterais alargam um pouco. */
+  --ts: 1;
+  --ts-big: calc(1 + (var(--ts) - 1) * 0.5);
+  --ts-nav: calc(1 + (var(--ts) - 1) * 0.25);
+  --side: calc(clamp(320px, 25vw, 440px) * (1 + (var(--ts) - 1) * 0.4));
   --cut: 14px;
   color-scheme: dark;
 }
@@ -101,7 +106,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: calc(16px * var(--ts, 1));
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -132,7 +137,7 @@ a {
 }
 
 :focus-visible {
-  outline: 1px solid var(--c-primary);
+  outline: 2px solid var(--c-primary);
   outline-offset: 3px;
 }
 
@@ -276,7 +281,7 @@ a {
   border-left: 2px solid var(--c-primary);
   background: rgb(2 10 18 / 0.72);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ts, 1));
   line-height: 1.25;
   white-space: nowrap;
   color: var(--text);
@@ -285,7 +290,7 @@ a {
 }
 .globe-tag b {
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: calc(10px * var(--ts, 1));
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;

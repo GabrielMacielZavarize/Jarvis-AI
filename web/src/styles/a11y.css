@@ -1,0 +1,112 @@
+/*
+ * Acessibilidade: foco do teclado que aparece em qualquer persona, texto só para leitor de tela e o
+ * atalho "Pular para o conteúdo". O tamanho do texto fica em global.css (--ts) e o alto contraste em
+ * contrast.css.
+ */
+
+/* Só para leitores de tela: o texto existe, mas não ocupa lugar na tela. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Primeiro item da tabulação: leva direto para o conteúdo, sem passar pelas abas e pelos chips. */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 200;
+  padding: 8px 14px;
+  border: 2px solid var(--c-primary);
+  background: #02080d;
+  font-family: var(--font-mono);
+  font-size: calc(13.5px * var(--ts, 1));
+  color: var(--text);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/*
+ * Botões e campos de formas recortadas (clip-path) cortariam um contorno por fora: o foco vai por
+ * dentro da borda. Os campos que só trocavam a cor da borda ao focar ganham o contorno também.
+ */
+:root :is(.btn, .btn--round, .chip, .cam__btn, .cam-alert, .nav__tab, .chip-btn, .icon-btn, .toast, .palette__item):focus-visible {
+  outline-offset: -4px;
+  background-color: rgb(var(--c-primary-rgb) / 0.22);
+}
+:root .panel :is(a, button, summary, [tabindex]):focus-visible,
+:root .nav :is(a, button):focus-visible {
+  outline-offset: -3px;
+}
+:root :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+  border-color: var(--c-primary);
+}
+:root .panel :is(input, select, textarea):focus-visible {
+  outline-offset: -2px;
+}
+:root .panel input[type='checkbox']:focus-visible,
+:root .panel input[type='radio']:focus-visible {
+  outline-offset: 2px;
+}
+:root .palette__search input:focus-visible {
+  outline: none;
+}
+/* Os blocos da agenda e o gráfico eram só realçados: agora têm contorno. */
+:root .agd-line__block:focus-visible,
+:root .spark svg:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
+/* Alvo do "Pular para o conteúdo": recebe o foco por código, sem moldura. */
+#conteudo:focus {
+  outline: none;
+}
+
+/*
+ * Texto a partir de 120% (data-text-large, prefs.ts): a barra de áreas do topo guarda só o nome da
+ * aba aberta, o resto vira ícone, e a frase da marca sai. Sem isso a marca, as abas e o relógio
+ * disputariam a mesma linha.
+ */
+:root[data-text-large] .nav--top .nav__tab {
+  gap: 6px;
+  padding: 0 10px;
+  letter-spacing: 0.08em;
+}
+:root[data-text-large] .nav--top .nav__kbd,
+:root[data-text-large] .nav--top .nav__tab:not(.nav__tab--on) > span,
+:root[data-text-large] .brand__tag {
+  display: none;
+}
+@media (max-width: 560px) {
+  :root[data-text-large] .brand__name {
+    letter-spacing: 0.1em;
+  }
+}
+
+/*
+ * A barra de baixo (celular) tem seis abas em ~55 px cada. Os nomes em Orbitron, Teko ou Exo 2
+ * (as fontes das personas) já saíam cortados em telas estreitas; na barra o nome usa a fonte de
+ * interface, que é mais estreita, e cresce só um quarto do tamanho do texto. Os ícones e o resto
+ * do HUD continuam com a fonte da persona.
+ */
+@media (max-width: 1080px) {
+  :root .nav--bar .nav__tab {
+    font-family: var(--font-ui);
+    font-size: calc(11.5px * var(--ts-nav, 1));
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+}

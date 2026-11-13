@@ -4,8 +4,8 @@
  */
 import { PROTOCOLS } from './catalog';
 import { guessKind, kindLabel } from './osint';
-import type { HudPrefs, QualityPref } from './prefs';
-import { QUALITY_LABELS } from './prefs';
+import type { ContrastPref, HudPrefs, QualityPref } from './prefs';
+import { CONTRAST_LABELS, DEFAULT_TEXT_SIZE, QUALITY_LABELS, stepTextSize, TEXT_SIZES } from './prefs';
 import { THEMES, type ThemeId } from './themes';
 import { VIEWS, type ViewId } from './views';
 
@@ -31,7 +31,7 @@ export interface PaletteContext {
   busy: boolean;
   micEnabled: boolean;
   cinema: boolean;
-  prefs: Pick<HudPrefs, 'theme' | 'quality' | 'captions' | 'ambient' | 'reactorHum'>;
+  prefs: Pick<HudPrefs, 'theme' | 'quality' | 'captions' | 'ambient' | 'reactorHum' | 'textSize' | 'contrast'>;
   /** Ferramentas ligadas no servidor (null: servidor fora do ar, mostra todas). */
   enabledTools: string[] | null;
   hasCards: boolean;
@@ -186,6 +186,49 @@ export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
       keywords: 'fps desempenho lento graficos',
       disabled: ctx.prefs.quality === quality ? 'Em uso' : undefined,
       run: () => ctx.setPrefs({ quality }),
+    });
+  }
+  const size = ctx.prefs.textSize;
+  const sizeKeywords = 'fonte letra texto tamanho zoom acessibilidade leitura';
+  commands.push(
+    {
+      id: 'text:bigger',
+      group: 'Aparência',
+      label: 'Texto maior',
+      hint: size >= TEXT_SIZES[TEXT_SIZES.length - 1] ? undefined : `${size}% → ${stepTextSize(size, 1)}%`,
+      keywords: `${sizeKeywords} aumentar`,
+      disabled: size >= TEXT_SIZES[TEXT_SIZES.length - 1] ? `Já está no máximo (${size}%)` : undefined,
+      run: () => ctx.setPrefs({ textSize: stepTextSize(size, 1) }),
+    },
+    {
+      id: 'text:smaller',
+      group: 'Aparência',
+      label: 'Texto menor',
+      hint: size <= TEXT_SIZES[0] ? undefined : `${size}% → ${stepTextSize(size, -1)}%`,
+      keywords: `${sizeKeywords} diminuir reduzir`,
+      disabled: size <= TEXT_SIZES[0] ? `Já está no mínimo (${size}%)` : undefined,
+      run: () => ctx.setPrefs({ textSize: stepTextSize(size, -1) }),
+    },
+    {
+      id: 'text:reset',
+      group: 'Aparência',
+      label: `Tamanho do texto: ${DEFAULT_TEXT_SIZE}%`,
+      keywords: `${sizeKeywords} normal padrao restaurar`,
+      disabled: size === DEFAULT_TEXT_SIZE ? 'Em uso' : undefined,
+      run: () => ctx.setPrefs({ textSize: DEFAULT_TEXT_SIZE }),
+    },
+  );
+  const contrast = ctx.prefs.contrast;
+  const contrastKeywords = 'contraste acessibilidade leitura visao enxergar cores';
+  for (const value of ['on', 'off', 'auto'] as ContrastPref[]) {
+    commands.push({
+      id: `contrast:${value}`,
+      group: 'Aparência',
+      label: `Alto contraste: ${value === 'auto' ? 'automático' : value === 'on' ? 'ligar' : 'desligar'}`,
+      hint: value === 'auto' ? 'Segue o pedido de mais contraste do sistema' : undefined,
+      keywords: contrastKeywords,
+      disabled: contrast === value ? `${CONTRAST_LABELS[value].split(' ')[0]}: em uso` : undefined,
+      run: () => ctx.setPrefs({ contrast: value }),
     });
   }
   commands.push({

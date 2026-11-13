@@ -27,19 +27,19 @@
 }
 /* Teko is condensed and tall: larger sizes keep the same weight on screen. */
 :root[data-theme='mark3'] .panel__title {
-  font-size: 17px;
+  font-size: calc(17px * var(--ts, 1));
   font-weight: 600;
   letter-spacing: 0.16em;
 }
 :root[data-theme='mark3'] .brand__name {
-  font-size: 34px;
+  font-size: calc(34px * var(--ts-big, 1));
   font-weight: 600;
   letter-spacing: 0.22em;
   line-height: 1;
 }
 :root[data-theme='mark3'] .btn,
 :root[data-theme='mark3'] .dock__state {
-  font-size: 17px;
+  font-size: calc(17px * var(--ts, 1));
   letter-spacing: 0.2em;
 }
 :root[data-theme='mark3'] .btn {
@@ -104,7 +104,7 @@
   padding-left: 18px;
 }
 :root[data-theme='friday'] .panel__title {
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ts, 1));
   letter-spacing: 0.14em;
   text-transform: none;
 }
@@ -204,7 +204,7 @@
 /* Under the swatches in Ajustes: what the active persona changes. */
 .theme-hint {
   grid-column: 1 / -1;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ts, 1));
   line-height: 1.35;
   color: var(--text-dim);
 }

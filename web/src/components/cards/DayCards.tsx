@@ -43,7 +43,7 @@ export function TaskList({ data, editable = true, limit }: { data: TasksData; ed
   const shown = limit ? data.tasks.slice(0, limit) : data.tasks;
   if (shown.length === 0) return <p className="day__empty">Nenhuma tarefa aberta. Diga “anota aí” ou escreva abaixo.</p>;
   return (
-    <ul className="tasks">
+    <ul className="tasks" aria-label="Tarefas">
       {shown.map((task) => (
         <li key={task.id} className={`task ${task.done ? 'task--done' : ''} ${task.overdue ? 'task--late' : ''}`}>
           <label>
@@ -73,7 +73,9 @@ export function TasksBody({ data, compact = false }: { data: TasksData; compact?
   const current = live ?? data;
   return (
     <div className="day">
-      <div className="day__summary">{tasksSummary(current)}</div>
+      <div className="day__summary" role="status">
+        {tasksSummary(current)}
+      </div>
       <TaskList data={current} limit={compact ? 6 : undefined} />
       {!compact && <AddLine placeholder="Nova tarefa (ex.: fechar o relatório)" label="Nova tarefa" onAdd={(text) => add(text, 'task')} />}
       {(current.notes.length > 0 || !compact) && (
@@ -84,7 +86,7 @@ export function TasksBody({ data, compact = false }: { data: TasksData; compact?
           {current.notes.length === 0 ? (
             <p className="day__empty">Nenhuma nota. Diga “anota aí: …”.</p>
           ) : (
-            <ul className="notes">
+            <ul className="notes" aria-label="Notas">
               {current.notes.slice(0, compact ? 4 : 40).map((note) => (
                 <li key={note.id}>
                   <span>{note.text}</span>
@@ -306,6 +308,12 @@ export function FocusBody() {
           <circle cx="64" cy="64" r={radius} className="focus__track" />
           <circle cx="64" cy="64" r={radius} className="focus__arc" strokeDasharray={length} strokeDashoffset={length * (1 - progress)} transform="rotate(-90 64 64)" />
         </svg>
+        {/* Só a troca de bloco é anunciada: a contagem muda a cada segundo e não vai para o leitor de tela. */}
+        <span className="sr-only" role="status">
+          {focus.running
+            ? `${focus.phase === 'work' ? 'Bloco de foco' : 'Pausa'} ${focus.cycle} de ${focus.cycles}${focus.paused ? ', parado' : ''}.`
+            : 'Foco parado.'}
+        </span>
         <div className="focus__time" role="timer" aria-live="off">
           <b>{focus.running ? formatCountdown(remainingSeconds(focus, now)) : formatCountdown(config.work * 60)}</b>
           <span>

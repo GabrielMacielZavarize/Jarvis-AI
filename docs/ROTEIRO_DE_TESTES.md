@@ -643,7 +643,7 @@ O que o teste visual não alcança: o LiveKit de verdade, a voz, o microfone e a
 
 Voz e LiveKit (com `LIVEKIT_*` configurado no `.env`):
 
-- [ ] Abra o HUD (`Ctrl+F5` para limpar o cache) e confira no DevTools (aba Rede) que o `LiveSession-*.js` é pedido só depois do `/api/status`, e que o `index-*.js` não passa de uns 360 kB.
+- [ ] Abra o HUD (`Ctrl+F5` para limpar o cache) e confira no DevTools (aba Rede) que o `LiveSession-*.js` é pedido só depois do `/api/status`, e que o `index-*.js` não passa de uns 370 kB.
 - [ ] Clique em Inicializar (ou diga "Jarvis"): o link abre, você ouve o Jarvis e a conversa aparece na Transcrição como antes.
 - [ ] Fale e veja o anel de voz do núcleo e o medidor "Você" em Ajustes mexerem com a sua voz, e o medidor "Jarvis" mexer quando ele responde. O analisador de áudio agora é do próprio HUD (`lib/audio.ts`), não do LiveKit: confira nos dois sentidos.
 - [ ] Troque o microfone em Ajustes durante o link: os medidores continuam seguindo o microfone novo.
@@ -663,3 +663,31 @@ Celular (Wi-Fi do mesmo roteador, já pareado):
 - [ ] Abra o HUD no celular e troque de área pela barra de baixo: cada área entra sem piscar e a página não rola de lado.
 - [ ] Instale como app (PWA) e abra de novo: o HUD continua abrindo e os pedaços novos funcionam.
 - [ ] Com o HUD aberto, rode `npm run build` de novo (os nomes dos pedaços mudam) e abra uma área que ainda não tinha sido aberta: a página recarrega sozinha uma vez e a área abre, em vez de ficar em branco.
+
+## Acessibilidade: tamanho do texto e alto contraste
+
+O que o teste visual não alcança: o sistema operacional de verdade (temas de contraste do Windows, "Aumentar contraste"), leitor de tela, o zoom do navegador e telas de celular reais. Rode `npm run build` na pasta `web/` antes e abra o HUD pelo `python jarvis.py`.
+
+Tamanho do texto:
+
+- [ ] Em Ajustes › Aparência, passe por 90%, 100%, 110%, 120%, 130% e 140%: o texto de todas as áreas (Painel, Dia a dia, Olho de Deus, Sistema e Ajustes) cresce junto, nenhum botão ou título aparece cortado e a barra do topo não esconde a marca nem o relógio. A 120% ou mais, as abas fora da aberta viram só ícone.
+- [ ] A 140%, no Painel com o link aberto, peça o clima, "como está o PC?" e uma pesquisa: os painéis projetados cabem (a coluna rola se precisar) e a legenda embaixo do núcleo não passa por cima das colunas.
+- [ ] Combine 140% com o zoom do navegador em 150% e em 200% (`Ctrl` e `+`): o HUD continua usável e a página não rola de lado no computador.
+- [ ] No celular de verdade (um modelo pequeno, tipo iPhone SE ou Galaxy A), em 140%: as seis abas da barra de baixo mostram o nome inteiro, o botão Inicializar aparece inteiro e tocar num campo de texto não dá zoom na página. Troque a fonte do sistema do celular para "grande" também: o HUD não deve quebrar.
+- [ ] Recarregue a página e feche e abra o navegador: o tamanho escolhido continua. No celular o tamanho é separado do PC (cada navegador guarda o seu).
+
+Alto contraste:
+
+- [ ] Em Ajustes › Aparência, ligue o Alto contraste em cada uma das quatro personas (J.A.R.V.I.S., Mark III, F.R.I.D.A.Y., Stealth): as scanlines e a varredura somem, os painéis ficam opacos com borda cheia, o texto fica branco e a persona continua reconhecível (cor, formato dos painéis, fonte).
+- [ ] Com o link aberto, a legenda sob o núcleo e a placa do protocolo continuam legíveis em cima do núcleo 3D e do globo (têm fundo sólido).
+- [ ] Em Automático, ligue "Aumentar contraste" no macOS (Preferências do Sistema › Acessibilidade › Tela) ou o equivalente no iOS e no Android, com o HUD aberto: ele entra em alto contraste sozinho, sem recarregar. Desligue: volta ao normal.
+- [ ] No Windows, ative um tema de contraste (Configurações › Acessibilidade › Temas de contraste) com o HUD aberto no Chrome ou no Edge: confira que o texto, os botões, os campos e o foco continuam visíveis. O navegador troca as cores pelas do tema (`forced-colors`) e o HUD tem que seguir legível; se alguma coisa sumir, anote qual.
+- [ ] Escolha "Desligado" com o sistema pedindo mais contraste: o HUD fica no visual normal. Volte para "Automático": ele segue o sistema de novo.
+- [ ] Em ambiente claro (de dia, perto de uma janela) e com o brilho da tela baixo, compare o normal e o alto contraste: o texto menos forte (rótulos, horas, subtítulos) tem que ficar legível só no alto contraste.
+
+Teclado e leitor de tela (NVDA ou Narrador no Windows, VoiceOver no Mac e no iPhone, TalkBack no Android):
+
+- [ ] Logo depois de abrir o HUD, aperte `Tab`: aparece "Pular para o conteúdo". `Enter` leva o foco ao primeiro painel da área aberta.
+- [ ] No Dia a dia, percorra tudo só com `Tab` e `Shift+Tab`: o foco passa por Tarefas, Foco, Cotações e Rede na ordem da tela, e cada controle mostra o contorno. Marque e desmarque uma tarefa: o leitor anuncia o resumo ("1 aberta…"). Comece um foco curto: o leitor anuncia a troca de bloco e não lê a contagem a cada segundo.
+- [ ] No Olho de Deus, consulte um IP: o leitor diz "Consultando…", o tipo reconhecido e depois quantos resultados há. Com o aviso de aparelho novo ligado, `Tab` nos botões da lista: cada um fala o nome do aparelho ("Esquecer Celular da Ana").
+- [ ] Abra e feche o link: o leitor diz "Link ativo, microfone aberto." e depois "Link inativo.".

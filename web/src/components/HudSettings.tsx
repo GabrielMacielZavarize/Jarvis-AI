@@ -1,5 +1,17 @@
 import { useHud } from '../lib/hudStore';
-import { DEFAULT_LAYOUT, type HudPrefs, QUALITY_LABELS, type QualityPref, setPrefs, usePrefs } from '../lib/prefs';
+import {
+  CONTRAST_LABELS,
+  type ContrastPref,
+  DEFAULT_LAYOUT,
+  DEFAULT_TEXT_SIZE,
+  type HudPrefs,
+  QUALITY_LABELS,
+  type QualityPref,
+  setPrefs,
+  TEXT_SIZES,
+  useHighContrast,
+  usePrefs,
+} from '../lib/prefs';
 import { LEVEL_LABELS } from '../lib/quality';
 import { THEMES, themeInfo } from '../lib/themes';
 
@@ -14,6 +26,7 @@ export function HudSettings() {
   const prefs = usePrefs();
   const scene = useHud((s) => s.sceneQuality);
   const sameLayout = JSON.stringify(prefs.layout) === JSON.stringify(DEFAULT_LAYOUT);
+  const highContrast = useHighContrast();
 
   return (
     <>
@@ -35,6 +48,51 @@ export function HudSettings() {
             </button>
           ))}
           <small className="theme-hint">{themeInfo(prefs.theme).hint}</small>
+        </dd>
+      </div>
+      <div className="stat stat--setting" style={{ gridColumn: '1 / -1' }}>
+        <dt id="text-size-label" title="Aumenta ou diminui o texto de todo o HUD; as colunas rolam quando falta espaço">
+          Tamanho do texto
+        </dt>
+        <dd className="choices" role="radiogroup" aria-labelledby="text-size-label">
+          {TEXT_SIZES.map((size) => (
+            <button
+              key={size}
+              type="button"
+              role="radio"
+              aria-checked={prefs.textSize === size}
+              className={`chip-btn ${prefs.textSize === size ? 'chip-btn--on' : ''}`}
+              onClick={() => setPrefs({ textSize: size })}
+            >
+              {size}%
+            </button>
+          ))}
+          <small className="theme-hint">
+            {prefs.textSize === DEFAULT_TEXT_SIZE ? 'Tamanho de fábrica.' : `Texto a ${prefs.textSize}%.`} Também vale no celular.
+          </small>
+        </dd>
+      </div>
+      <div className="stat stat--setting" style={{ gridColumn: '1 / -1' }}>
+        <dt id="contrast-label" title="Texto mais forte, painéis opacos, bordas visíveis, sem scanlines nem brilhos">
+          Alto contraste
+        </dt>
+        <dd className="choices" role="radiogroup" aria-labelledby="contrast-label">
+          {(Object.keys(CONTRAST_LABELS) as ContrastPref[]).map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={prefs.contrast === value}
+              className={`chip-btn ${prefs.contrast === value ? 'chip-btn--on' : ''}`}
+              onClick={() => setPrefs({ contrast: value })}
+            >
+              {CONTRAST_LABELS[value]}
+            </button>
+          ))}
+          <small className="theme-hint" role="status">
+            {highContrast ? 'Alto contraste em uso.' : 'Contraste normal.'}
+            {prefs.contrast === 'auto' && ' Em Automático ele liga sozinho se o sistema pedir mais contraste.'}
+          </small>
         </dd>
       </div>
       <div className="stat stat--setting" style={{ gridColumn: '1 / -1' }}>

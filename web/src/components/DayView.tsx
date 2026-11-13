@@ -50,7 +50,7 @@ export function DayView({ server, local }: { server: ServerStatus | null; local:
           {briefing && briefing.quotes.length > 0 ? (
             <QuotesBody data={{ items: briefing.quotes, conversion: null }} />
           ) : (
-            <p className="day__empty">{enabled ? 'Buscando as cotações… Se não aparecerem, o serviço não respondeu.' : 'Desligado no .env.'}</p>
+            <p className="day__empty" role="status">{enabled ? 'Buscando as cotações… Se não aparecerem, o serviço não respondeu.' : 'Desligado no .env.'}</p>
           )}
           <p className="osint__note">Por voz: “quanto está o dólar?”, “quanto dá 150 dólares em reais?”, “10 milhas em quilômetros”.</p>
         </Panel>
@@ -67,7 +67,7 @@ export function DayView({ server, local }: { server: ServerStatus | null; local:
             ) : undefined
           }
         >
-          {speed.running && <p className="day__empty">Medindo latência, download e upload. Leva uns 15 segundos.</p>}
+          {speed.running && <p className="day__empty" role="status">Medindo latência, download e upload. Leva uns 15 segundos.</p>}
           {!speed.running && <SpeedBody data={speed.data ?? { last: null, verdict: null, history: [] }} />}
           {speed.error && (
             <div className="notice" role="alert">

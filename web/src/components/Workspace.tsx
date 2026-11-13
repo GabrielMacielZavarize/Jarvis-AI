@@ -5,7 +5,7 @@ import { viewInfo, type ViewId } from '../lib/views';
 export function Workspace({ view, children }: { view: ViewId; children: ReactNode }) {
   const info = viewInfo(view);
   return (
-    <section className="workspace" aria-label={info.label} data-view={view}>
+    <section className="workspace" id="conteudo" tabIndex={-1} aria-label={info.label} data-view={view}>
       <header className="workspace__head">
         <h2>{info.label}</h2>
         <p>{info.hint}</p>

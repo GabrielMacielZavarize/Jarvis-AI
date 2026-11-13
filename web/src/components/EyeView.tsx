@@ -106,11 +106,17 @@ function DeviceRow({ device, busy }: { device: NetworkDevice; busy: boolean }) {
           maxLength={40}
           autoComplete="off"
         />
-        <button type="submit" className="chip-btn" disabled={busy || name.trim() === device.name}>
+        <button type="submit" className="chip-btn" disabled={busy || name.trim() === device.name} aria-label={`Salvar o nome de ${deviceTitle(device)}`}>
           Salvar
         </button>
         {!device.known && (
-          <button type="button" className="chip-btn" disabled={busy} onClick={() => void setKnown(device.mac, true)}>
+          <button
+            type="button"
+            className="chip-btn"
+            disabled={busy}
+            aria-label={`${deviceTitle(device)} é meu`}
+            onClick={() => void setKnown(device.mac, true)}
+          >
             É meu
           </button>
         )}
@@ -118,6 +124,7 @@ function DeviceRow({ device, busy }: { device: NetworkDevice; busy: boolean }) {
           type="button"
           className="chip-btn"
           disabled={busy}
+          aria-label={`Esquecer ${deviceTitle(device)}`}
           title="Tira da lista. Se ele aparecer de novo, o Jarvis avisa como aparelho novo."
           onClick={() => void forget(device.mac)}
         >
@@ -247,7 +254,9 @@ export function EyeView({ server }: { server: ServerStatus | null }) {
             })}
           </div>
           <p className="eye__hint" aria-live="polite">
-            {personal
+            {pending
+              ? 'Consultando…'
+              : personal
               ? 'Isso parece um CPF ou telefone. O Olho de Deus só usa fontes públicas e não consulta dados pessoais de terceiros.'
               : picked
                 ? `Consultando como ${kindLabel(picked)}. Clique de novo no tipo para voltar ao reconhecimento automático.`
@@ -292,10 +301,10 @@ export function EyeView({ server }: { server: ServerStatus | null }) {
         ) : (
           <>
             <div className="eye__bar">
-              <span>
+              <span role="status">
                 {results.length} {results.length === 1 ? 'resultado' : 'resultados'} nesta sessão
               </span>
-              <button type="button" className="chip-btn" onClick={clear}>
+              <button type="button" className="chip-btn" onClick={clear} aria-label="Limpar os resultados">
                 Limpar
               </button>
             </div>
