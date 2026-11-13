@@ -29,6 +29,8 @@ O que tiver lugar conhecido (um IP, o servidor de um domínio, um CEP com coorde
 - O titular de um domínio. O registro (RDAP) às vezes traz o nome de quem registrou; o Jarvis mostra só o registrador e as datas.
 - O CPF dentro do nome de um MEI. Ele faz parte da razão social na Receita, mas sai mascarado.
 - Instagram, X, TikTok e Facebook na busca de usuário: bloqueiam consulta automática e dariam resposta errada.
+- No npm, só aparece quem mantém ao menos um pacote publicado: a API do npm não tem consulta pública de usuário. O PyPI e outros sites que respondem com uma página de verificação em vez do perfil ficam em "Não deu para saber".
+- Para conferir se essas fontes ainda respondem no formato certo, rode `python doctor.py --fontes` ([problemas.md](problemas.md#uma-fonte-externa-falha-no-doctor---fontes)).
 
 ## Como usar
 

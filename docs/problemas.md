@@ -88,6 +88,38 @@ Esse modo é `pipeline-first` e funciona no melhor esforço. Confirme se o endpo
 
 Confira o fim do `logs/jarvis.log`. Se lá diz que a porta já está em uso, outro Jarvis ficou aberto: feche pelo ícone dele ou pelo Gerenciador de Tarefas (processos `pythonw.exe`). O Windows às vezes esconde ícones novos na seta ao lado do relógio; arraste o do Jarvis para a barra. Se o item Iniciar com o Windows está marcado mas o Jarvis não abre no login, veja se ele não foi desativado em Configurações, Aplicativos, Inicialização. Detalhes em [bandeja.md](bandeja.md).
 
+## Uma fonte externa falha no `doctor --fontes`
+
+```bash
+python doctor.py --fontes
+```
+
+Consulta cada serviço de verdade, com um valor conhecido (o IP 8.8.8.8, o CNPJ 00.000.000/0001-91, o CEP 01310-100, o prefixo 5BAA6 da senha "password", um perfil que existe em cada site de perfis), pelas mesmas funções que o Jarvis usa. Cada fonte aparece com um destes estados:
+
+| Estado | O que significa | O que fazer |
+| --- | --- | --- |
+| `ok` | Respondeu e o formato é o esperado | Nada |
+| `FALHA` | O servidor respondeu, mas o formato mudou, o valor conhecido sumiu ou veio um erro (503, 403, 401...). O motivo vem na linha | Veja abaixo |
+| `sem rede` | Não deu para falar com o servidor: sem internet, tempo esgotado ou conexão recusada. Tenta duas vezes antes de desistir | Confira a internet, o proxy e o firewall e rode de novo |
+
+O código de saída é 0 quando tudo está ok, 1 se alguma fonte deu `FALHA` e 2 se nenhuma falhou mas alguma ficou `sem rede`. O teste de velocidade usa um volume mínimo (200 KB para baixar e 50 KB para enviar).
+
+Quando uma fonte dá `FALHA`:
+
+- **Campo que a leitura não achou mais** (por exemplo, "Razão social"): o serviço mudou o formato. Veja a resposta nova na documentação do serviço e ajuste a função que lê (`osint.py`, `quotes.py`, `weather.py`, `tools.py` ou `netcheck.py`). O teste do módulo, com a resposta falsa, vai precisar do formato novo.
+- **O servidor respondeu 401, 403, 429 ou 5xx**: o serviço passou a exigir chave, bloqueou consultas automáticas, pediu para esperar ou está fora do ar. Rode de novo mais tarde. Se persistir, é mudança do serviço.
+- **"O perfil de teste X não foi achado"**: a conta de teste de um site de perfis (lista `KNOWN_USERS` em `fontes.py`) foi apagada ou renomeada. Confira no navegador e troque por outra que exista.
+- **"O site não disse que um nome que ninguém tem não existe"**: o site passou a responder com bloqueio ou página de verificação para consultas automáticas. Enquanto isso, o Jarvis mostra esse site em "Não deu para saber" na busca de usuário, nunca como perfil encontrado.
+- **XposedOrNot respondendo 404 para o endereço de teste**: aparece como `ok` com a nota de que o formato da resposta 200 não foi visto. O 404 prova que o endereço responde, não o formato da lista de vazamentos.
+
+Para não contar uma fonte que você sabe que está fora (um site que bloqueia o seu provedor, por exemplo), use `--ignorar` com o nome ou um pedaço dele: `python doctor.py --fontes --ignorar pypi,reddit`. Ela continua aparecendo, marcada `ignorada` com o estado de verdade ao lado, e não conta no código de saída.
+
+### O job semanal no GitHub
+
+O `.github/workflows/fontes.yml` roda esse mesmo comando toda segunda-feira e quando você clicar em Actions, Fontes externas, Run workflow. Não roda em pull request nem em push, então nunca bloqueia um merge. Se alguma fonte falhar ou ficar fora do alcance, o job fica vermelho e o log mostra uma linha por fonte; não abre issue nem manda aviso. O GitHub desliga workflows agendados depois de 60 dias sem atividade no repositório: se o job parou de aparecer, reative em Actions.
+
+Os servidores do GitHub ficam em data center, e alguns sites bloqueiam esse tipo de endereço (Reddit, PyPI e a própria API do GitHub, quando o limite sem token acaba). Um site assim aparece no job como `FALHA` ou `sem rede` mesmo estando bem para quem usa em casa. Rode `python doctor.py --fontes` no seu PC para confirmar e, se for só o bloqueio do GitHub, acrescente `--ignorar` à linha do `fontes.yml`.
+
 ## Câmera em uso
 
 Os gestos ainda abrem a webcam por conta própria, fora do hub do servidor. Com presença e gestos ligados ao mesmo tempo, o Windows pode recusar a segunda abertura. Use um dos dois por vez se a sua webcam não aguentar.

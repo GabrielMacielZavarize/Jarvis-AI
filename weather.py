@@ -34,9 +34,9 @@ WEATHER_CODES = {
 }
 
 
-def current_conditions(latitude: float, longitude: float) -> dict[str, Any]:
+def current_conditions(latitude: float, longitude: float, http: Any = requests) -> dict[str, Any]:
     """Temperature now, today's range and the sky, for the ambient mode of the HUD."""
-    response = requests.get(
+    response = http.get(
         "https://api.open-meteo.com/v1/forecast",
         params={
             "latitude": latitude,

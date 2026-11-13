@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import shutil
 from pathlib import Path
@@ -13,7 +14,20 @@ def _print_section(title: str) -> None:
     print("-" * len(title))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Validação local e não destrutiva do projeto.")
+    parser.add_argument(
+        "--fontes",
+        action="store_true",
+        help="consulta de verdade cada serviço externo (IP, DNS, CNPJ, cotações, clima, teste de internet...) e mostra ok, falha ou sem rede",
+    )
+    parser.add_argument("--ignorar", default="", help="com --fontes: nomes (ou pedaços) de fontes a não contar, separados por vírgula, ex.: reddit,crt.sh")
+    args = parser.parse_args(argv)
+    if args.fontes:
+        import fontes
+
+        return fontes.run(ignore=args.ignorar.split(","))
+
     print("Jarvis Doctor")
     print("Validação local e não destrutiva do projeto.")
 

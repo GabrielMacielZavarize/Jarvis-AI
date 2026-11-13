@@ -1137,7 +1137,7 @@ SITES: tuple[tuple[str, str, str, str], ...] = (
     ("Codeberg", "https://codeberg.org/api/v1/users/{u}", "https://codeberg.org/{u}", "status"),
     ("Hugging Face", "https://huggingface.co/api/users/{u}/overview", "https://huggingface.co/{u}", "status"),
     ("Docker Hub", "https://hub.docker.com/v2/users/{u}/", "https://hub.docker.com/u/{u}", "status"),
-    ("npm", "https://registry.npmjs.org/-/user/org.couchdb.user:{u}", "https://www.npmjs.com/~{u}", "status"),
+    ("npm", "https://registry.npmjs.org/-/v1/search?text=maintainer:{u}&size=1", "https://www.npmjs.com/~{u}", "npmsearch"),
     ("PyPI", "https://pypi.org/user/{u}/", "https://pypi.org/user/{u}/", "status"),
     ("DEV", "https://dev.to/api/users/by_username?url={u}", "https://dev.to/{u}", "status"),
     ("Hacker News", "https://hacker-news.firebaseio.com/v0/user/{u}.json", "https://news.ycombinator.com/user?id={u}", "notnull"),
@@ -1160,12 +1160,18 @@ def _site_exists(rule: str, response: Any) -> bool | None:
         return False
     if status != 200:
         return None
+    # Alguns sites (PyPI) respondem 200 com uma página “Client Challenge” para quem não é navegador: não é perfil.
+    if "client challenge" in str(getattr(response, "text", "") or "")[:3000].lower():
+        return None
     if rule == "status":
         return True
     try:
         data = response.json()
     except ValueError:
         return None
+    if rule == "npmsearch":
+        # O npm não tem página pública de usuário na API: vale quem mantém ao menos um pacote publicado.
+        return bool(data.get("objects")) if isinstance(data, dict) else None
     if rule == "list":
         return bool(data) if isinstance(data, list) else None
     if rule == "notnull":
@@ -1178,23 +1184,28 @@ def _site_exists(rule: str, response: Any) -> bool | None:
     return None
 
 
+def check_site(site: tuple[str, str, str, str], username: str, http: Http = requests) -> tuple[str, str, bool | None]:
+    """Consulta um site da lista SITES: (nome, endereço do perfil, existe?). None: o site não deixou saber."""
+    name, api, profile, rule = site
+    slug = quote(username, safe="")
+    try:
+        response = http.get(
+            api.format(u=slug.lower() if name == "Chess.com" else slug),
+            timeout=SITE_TIMEOUT_S,
+            headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+            allow_redirects=False,
+        )
+        return name, profile.format(u=slug), _site_exists(rule, response)
+    except requests.RequestException:
+        return name, profile.format(u=slug), None
+
+
 def lookup_username(target: str, http: Http = requests) -> dict[str, Any]:
     """Em quais sites públicos existe um perfil com esse nome de usuário (só a existência do perfil)."""
     username = clean_username(target)
-    slug = quote(username, safe="")
 
     def check(site: tuple[str, str, str, str]) -> tuple[str, str, bool | None]:
-        name, api, profile, rule = site
-        try:
-            response = http.get(
-                api.format(u=slug.lower() if name == "Chess.com" else slug),
-                timeout=SITE_TIMEOUT_S,
-                headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-                allow_redirects=False,
-            )
-            return name, profile.format(u=slug), _site_exists(rule, response)
-        except requests.RequestException:
-            return name, profile.format(u=slug), None
+        return check_site(site, username, http)
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         checked = list(pool.map(check, SITES))

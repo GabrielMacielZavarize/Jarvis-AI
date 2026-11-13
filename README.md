@@ -62,7 +62,7 @@ E para subir:
 python jarvis.py
 ```
 
-Na primeira vez ele compila o HUD, sobe o agente e o servidor em `http://127.0.0.1:8000` e abre o navegador. Clique no núcleo (ou aperte Espaço) e fale. `python doctor.py` confere se a configuração está certa.
+Na primeira vez ele compila o HUD, sobe o agente e o servidor em `http://127.0.0.1:8000` e abre o navegador. Clique no núcleo (ou aperte Espaço) e fale. `python doctor.py` confere se a configuração está certa, e `python doctor.py --fontes` confere se os serviços da internet que o Jarvis consulta ainda respondem no formato esperado.
 
 Sem LiveKit dá para ver o HUD no modo simulação: `python jarvis.py --no-agent` e o botão Simulação.
 

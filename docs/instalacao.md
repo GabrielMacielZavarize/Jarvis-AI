@@ -190,6 +190,12 @@ python doctor.py
 
 Mostra o que está configurado, o que falta no `.env`, a fila de modelos do Gemini e o estado de cada recurso opcional.
 
+```bash
+python doctor.py --fontes
+```
+
+Consulta de verdade cada serviço da internet que o Jarvis usa (localização de IP, DNS, CNPJ, CEP, cotações, clima, teste de velocidade...) e diz se o formato da resposta continua o que o código lê. Não precisa de `.env` nem de chave. Veja [problemas.md](problemas.md#uma-fonte-externa-falha-no-doctor---fontes).
+
 ### Desenvolvendo o HUD com hot reload
 
 Em três terminais:

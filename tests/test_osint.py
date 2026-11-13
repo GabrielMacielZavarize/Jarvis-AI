@@ -603,6 +603,19 @@ class UsernameTests(unittest.TestCase):
         self.assertTrue(all(not kwargs.get("allow_redirects", True) for _, kwargs in http.calls))
         self.assertEqual(len(http.calls), len(osint.SITES))
 
+    def test_npm_counts_whoever_maintains_a_package(self) -> None:
+        npm = next(site for site in osint.SITES if site[0] == "npm")
+        self.assertEqual(osint.check_site(npm, "sindresorhus", FakeHttp({"registry.npmjs.org": FakeResponse({"objects": [{"package": {"name": "x"}}], "total": 1})}))[2], True)
+        self.assertEqual(osint.check_site(npm, "ninguem", FakeHttp({"registry.npmjs.org": FakeResponse({"objects": [], "total": 0})}))[2], False)
+        self.assertIsNone(osint.check_site(npm, "x", FakeHttp({"registry.npmjs.org": FakeResponse(["mudou"])}))[2])
+        self.assertIsNone(osint.check_site(npm, "x", FakeHttp({"registry.npmjs.org": FakeResponse({}, status=401)}))[2])
+
+    def test_a_challenge_page_is_not_a_profile(self) -> None:
+        pypi = next(site for site in osint.SITES if site[0] == "PyPI")
+        challenge = FakeResponse(text="<html><head><title>Client Challenge</title></head></html>")
+        self.assertIsNone(osint.check_site(pypi, "ninguem", FakeHttp({"pypi.org": challenge}))[2])
+        self.assertEqual(osint.check_site(pypi, "dstufft", FakeHttp({"pypi.org": FakeResponse(text="<html><title>dstufft · PyPI</title></html>")}))[2], True)
+
     def test_username_cannot_carry_a_path(self) -> None:
         http = FakeHttp({})
         for bad in ("../admin", "a b", "x?y=1", "nome#frag", ""):
@@ -612,7 +625,7 @@ class UsernameTests(unittest.TestCase):
 
     def test_every_site_has_a_known_rule_and_https(self) -> None:
         for name, api, profile, rule in osint.SITES:
-            self.assertIn(rule, {"status", "list", "notnull", "users", "keybase"}, name)
+            self.assertIn(rule, {"status", "list", "notnull", "users", "keybase", "npmsearch"}, name)
             self.assertTrue(api.startswith("https://") and profile.startswith("https://"), name)
             self.assertIn("{u}", api, name)
 

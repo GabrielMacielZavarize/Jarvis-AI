@@ -487,3 +487,19 @@ Detalhes em [instalacao.md](instalacao.md#dependências-e-versões-travadas) e [
 - [ ] Depois de um `git pull` que mexeu no `package-lock.json`, o `python jarvis.py` roda o `npm install` sozinho e recompila o HUD.
 - [ ] No GitHub, a aba Actions mostra os jobs `pip-audit (ubuntu-latest)`, `pip-audit (windows-latest)` e `npm audit` verdes. Um Dependabot em `Insights > Dependency graph > Dependabot` aparece com pip, npm e github-actions.
 - [ ] Um PR de teste que adiciona uma linha em `requirements.in` sem regenerar o `requirements.txt` faz o passo "Lock em dia" falhar.
+
+## Fontes externas (doctor --fontes)
+
+Os testes automáticos usam respostas falsas; aqui você consulta os serviços de verdade, no seu PC. Detalhes em [problemas.md](problemas.md#uma-fonte-externa-falha-no-doctor---fontes).
+
+- [ ] `python doctor.py --fontes` roda sem `.env` e mostra uma linha por fonte, em cinco grupos (Olho de Deus, Perfis de usuário, Cotações, Clima, Internet). Anote quais deram `FALHA` ou `sem rede`.
+- [ ] Olho de Deus: ipwho.is, dns.google, rdap.org, BrasilAPI (CNPJ, CEP e DDD) e Pwned Passwords dão `ok`. Se alguma der `FALHA`, o motivo diz qual campo a leitura não achou: esse é o formato que mudou (ou que foi escrito errado, já que essas consultas nasceram sem acesso à rede).
+- [ ] crt.sh costuma ser lento e instável: se der `FALHA` com 502 ou 503, rode de novo antes de concluir algo.
+- [ ] XposedOrNot: veja se a linha diz "N vazamento(s)" (o formato 200 foi lido) ou "sem vazamentos (404); o formato da resposta 200 não foi visto". No segundo caso, confira à mão com um email seu que você sabe que vazou (`python -c "import osint; print(osint.lookup_email('seu@email.com')['lists'])"`) que a lista de vazamentos vem preenchida.
+- [ ] Perfis: cada um dos 18 sites dá `ok` ("existe e um nome inventado não"). Para os que falharem com "o perfil de teste X não foi achado", abra o perfil no navegador: se a conta existe, a leitura do site mudou; se não, troque o usuário em `KNOWN_USERS` do `fontes.py`. As contas de Codeberg (Gusted), Duolingo (duolingo), Keybase (chris), Mastodon (Gargron), Bluesky (jay) e Scratch (griffpatch) foram escolhidas sem poder abrir os sites.
+- [ ] PyPI: dá `FALHA` se o site ainda responder com a página "Client Challenge"; nesse caso o Jarvis já mostra o PyPI em "Não deu para saber" na busca de usuário. Decida se vale tirá-lo da lista `SITES` do `osint.py`.
+- [ ] Cotações e Clima (AwesomeAPI e Open-Meteo): `ok`, com o dólar e o clima de São Paulo plausíveis.
+- [ ] Internet: latência, download e upload dão `ok`, e o comando termina em poucos segundos (baixa 200 KB e envia 50 KB, bem menos que o "como está a minha internet?").
+- [ ] Com o Wi-Fi desligado, todas as fontes dão `sem rede` (nenhuma `FALHA`), o comando termina com código 2 (`echo %ERRORLEVEL%`) e leva só alguns segundos a mais por causa da segunda tentativa.
+- [ ] `python doctor.py --fontes --ignorar pypi,reddit` mostra os dois como `ignorada` e o código de saída não conta o estado deles.
+- [ ] No GitHub, em Actions, o workflow "Fontes externas" aparece e, em "Run workflow", roda sem erro de instalação. Ele não aparece nos checks de um pull request. Anote quais fontes o GitHub não consegue alcançar ou que o bloqueiam (Reddit, PyPI e a API do GitHub são os suspeitos) e use `--ignorar` no `fontes.yml` para elas.

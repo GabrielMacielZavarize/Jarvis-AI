@@ -71,12 +71,12 @@ def measure_latency(targets: tuple[tuple[str, int], ...] = PING_TARGETS, *, conn
     return round(statistics.median(samples), 1) if samples else None
 
 
-def measure_download(http: Any = requests, *, clock: Callable[[], float] = time.perf_counter) -> float | None:
-    """Download em Mbps: lê até DOWN_BYTES ou MAX_SECONDS, o que vier primeiro."""
+def measure_download(http: Any = requests, *, size: int = DOWN_BYTES, clock: Callable[[], float] = time.perf_counter) -> float | None:
+    """Download em Mbps: lê até `size` bytes ou MAX_SECONDS, o que vier primeiro."""
     start = clock()
     received = 0
     try:
-        with http.get(DOWN_URL, params={"bytes": DOWN_BYTES}, stream=True, timeout=(4.0, MAX_SECONDS)) as response:
+        with http.get(DOWN_URL, params={"bytes": size}, stream=True, timeout=(4.0, MAX_SECONDS)) as response:
             if response.status_code != 200:
                 return None
             for chunk in response.iter_content(chunk_size=65536):
@@ -90,9 +90,9 @@ def measure_download(http: Any = requests, *, clock: Callable[[], float] = time.
     return round(received * 8 / elapsed / 1e6, 1) if elapsed > 0 and received > 0 else None
 
 
-def measure_upload(http: Any = requests, *, clock: Callable[[], float] = time.perf_counter) -> float | None:
-    """Upload em Mbps de UP_BYTES de zeros."""
-    payload = bytes(UP_BYTES)
+def measure_upload(http: Any = requests, *, size: int = UP_BYTES, clock: Callable[[], float] = time.perf_counter) -> float | None:
+    """Upload em Mbps de `size` bytes de zeros."""
+    payload = bytes(size)
     start = clock()
     try:
         response = http.post(UP_URL, data=payload, timeout=(4.0, MAX_SECONDS * 2), headers={"Content-Type": "application/octet-stream"})

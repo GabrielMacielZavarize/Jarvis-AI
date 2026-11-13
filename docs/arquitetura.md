@@ -41,7 +41,8 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `weather.py` | Clima do Open-Meteo: rótulos dos códigos e o resumo do modo ambiente |
 | `hud.py` | Ponte entre as ferramentas e o HUD (data channel `jarvis.hud`) e o tempo de resposta |
 | `server.py` | FastAPI: serve o `web/dist`, emite tokens do LiveKit e serve a câmera |
-| `doctor.py` | Checagem da configuração |
+| `doctor.py` | Checagem da configuração; com `--fontes`, chama o `fontes.py` |
+| `fontes.py` | Consulta de verdade cada serviço externo (Olho de Deus, cotações, clima, teste de internet) pelas mesmas funções de leitura dos módulos e mostra ok, falha ou sem rede |
 | `pc_control.py` | Ações seguras no computador: apps, sites, abas, janelas, mídia, volume e tela |
 | `win_desktop.py` | Monitores, janelas e captura de tela via Win32 |
 | `installer.py` | Busca e instalação de apps pelo winget, com confirmação por código |

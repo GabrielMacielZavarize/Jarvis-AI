@@ -200,8 +200,8 @@ def _format_utc_offset(moment: dt.datetime) -> str:
     return f"UTC{sign}{hours:02d}:{minutes:02d}"
 
 
-def _geocode(city: str) -> dict[str, Any]:
-    response = requests.get(
+def _geocode(city: str, http: Any = requests) -> dict[str, Any]:
+    response = http.get(
         "https://geocoding-api.open-meteo.com/v1/search",
         params={"name": city, "count": 1, "language": "pt"},
         timeout=15,
@@ -263,13 +263,13 @@ def _parse_hourly_forecast(hourly: Any) -> list[dict[str, Any]]:
     return points
 
 
-def _fetch_weather(city: str) -> tuple[str, dict[str, Any]]:
-    location = _geocode(city)
+def _fetch_weather(city: str, http: Any = requests) -> tuple[str, dict[str, Any]]:
+    location = _geocode(city, http)
     city_name = location.get("name", city)
     country = location.get("country")
     location_name = f"{city_name}, {country}" if country else city_name
 
-    weather_response = requests.get(
+    weather_response = http.get(
         "https://api.open-meteo.com/v1/forecast",
         params={
             "latitude": location["latitude"],
