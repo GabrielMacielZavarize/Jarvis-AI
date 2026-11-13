@@ -38,11 +38,25 @@ Menos de 10% livre (normal) ou de 3% (alta), em cada disco fixo, no máximo a ca
 
 Com o controle do PC ligado, "fica de olho no terminal" faz o Jarvis avisar quando aparece um erro novo naquela janela e oferecer a explicação. Prioridade normal: fala com o link aberto e fica só no HUD com o link fechado ou no silêncio. O assunto é `watch` ("para de me avisar dos erros"). Detalhes no [OLH-35](assistente-de-tela.md#fica-de-olho-numa-janela).
 
+### Tarefas do dia
+
+Uma vez por dia, no primeiro momento útil da manhã, o Jarvis resume as [tarefas](dia-a-dia.md#tarefas-e-notas-tar-43) que pedem atenção: "2 tarefas atrasadas e 1 para hoje: fechar o relatório; pagar o boleto; ir ao dentista." Lista até três e diz quantas ficaram de fora. Sem tarefa atrasada nem para hoje, ele não avisa. Tarefa sem prazo e nota não entram.
+
+"Momento útil" quer dizer, ao mesmo tempo:
+
+- entre 5h e 12h. Quem liga o PC depois do meio-dia fica sem o aviso daquele dia;
+- fora do horário de silêncio. Se o silêncio vai até as 7h, o aviso sai depois das 7h;
+- com você na frente do PC, se a [presença](camera-e-presenca.md) estiver ligada com a câmera. Sem presença (ou com a câmera desligada), essa condição não existe e o aviso não trava.
+
+O primeiro momento útil do dia gasta o aviso, mesmo que não houvesse tarefa: uma tarefa anotada às 10h não vira aviso das 10h. O dia fica registrado no `lembretes.json`, então reiniciar o Jarvis não repete.
+
+A prioridade é normal: com o link aberto o Jarvis fala; com o link fechado o aviso fica só no HUD (não abre o navegador nem acorda o Jarvis, tarefa não é urgência). O assunto é `tasks`: "para de me avisar sobre tarefas" silencia o assunto (continua no HUD, sem voz). O monitor só existe com `JARVIS_ENABLE_DAY=true` (o padrão), já que as tarefas fazem parte do [Dia a dia](dia-a-dia.md).
+
 ## Como ele avisa
 
 Quem vigia é o servidor do HUD, que sobe com o `jarvis.py` e fica de pé o tempo todo. Cada aviso tem uma prioridade:
 
-| Link | Baixa ou normal (download, CPU, carregador, disco) | Alta (lembrete, bateria em 20%) | Crítica (bateria em 10%, lembrete urgente) |
+| Link | Baixa ou normal (download, CPU, carregador, disco, tarefas) | Alta (lembrete, bateria em 20%) | Crítica (bateria em 10%, lembrete urgente) |
 | --- | --- | --- | --- |
 | Aberto | O Jarvis fala | O Jarvis fala | O Jarvis fala |
 | Fechado | Aviso no HUD | Abre o link pela mesma via do "Jarvis" e fala | Abre o link e fala |
@@ -56,7 +70,7 @@ Os avisos que ficam só no HUD aparecem como notificação e painel "Aviso" e en
 
 ## Por voz
 
-"Para de me avisar sobre bateria" silencia o assunto, que continua aparecendo no HUD, sem voz. "Por duas horas" põe prazo, e "pode voltar a avisar da bateria" desfaz.
+"Para de me avisar sobre bateria" silencia o assunto, que continua aparecendo no HUD, sem voz. Os assuntos são bateria, desempenho (CPU e RAM), downloads, disco, lembretes, erros na tela e tarefas. "Por duas horas" põe prazo, e "pode voltar a avisar da bateria" desfaz.
 
 "Horário de silêncio das 22h às 6h" ou "desliga o horário de silêncio" mudam o horário. O que você fala vale mais que o `.env` e fica guardado no `lembretes.json`.
 
@@ -80,3 +94,4 @@ No Windows, com `JARVIS_PROACTIVE=true` e `python jarvis.py --rebuild`:
 6. Download: baixe um PDF pelo Chrome e outro pelo Firefox. Deve vir um aviso por download, só depois de terminar (nada enquanto o `.crdownload` ou o `.part` existir).
 7. CPU: rode algo pesado por mais de 5 minutos (um benchmark, ou `python -c "while True: pass"` em vários terminais). O aviso cita o processo culpado.
 8. Silêncio: "horário de silêncio de agora até daqui a uma hora" (por exemplo "das 15h às 16h") e repita o passo 5: só HUD. Um lembrete urgente nesse horário ainda fala. No fim, "desliga o horário de silêncio".
+9. Tarefas: veja os itens de "Tarefas nos avisos proativos" no [roteiro de testes](ROTEIRO_DE_TESTES.md#tarefas-nos-avisos-proativos).

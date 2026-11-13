@@ -39,6 +39,10 @@ Prazos aceitos: hoje, amanhã, depois de amanhã, um dia da semana ("sexta" dito
 
 No HUD, o painel Tarefas marca com um clique, apaga no X e tem um campo para escrever tarefa e nota. O Briefing do Painel mostra as quatro primeiras abertas.
 
+### Aviso de manhã
+
+Com os [avisos proativos](avisos.md#tarefas-do-dia) ligados (`JARVIS_PROACTIVE=true`), o Jarvis avisa sozinho, uma vez por dia, no primeiro momento útil da manhã (entre 5h e 12h, fora do horário de silêncio e com você na frente do PC se a presença estiver ligada): "2 tarefas atrasadas e 1 para hoje: ...". Sem tarefa atrasada nem para hoje, ele fica quieto, e nunca repete no mesmo dia. "Para de me avisar sobre tarefas" silencia o aviso. Com `JARVIS_ENABLE_DAY=false` ele não existe.
+
 O que vale saber:
 
 - Tudo fica em `tarefas.json`, na pasta do projeto e fora do git. Nada vai para a nuvem.
@@ -108,7 +112,7 @@ Conversão de unidade é conta local, sem rede: comprimento, peso, volume, tempe
 
 | Variável | Padrão | O que faz |
 | --- | --- | --- |
-| `JARVIS_ENABLE_DAY` | `true` | Liga tarefas, notas, briefing, foco, cotações e teste de rede. `false` tira as ferramentas de voz e as rotas `/api/tasks` e `/api/network/test` |
+| `JARVIS_ENABLE_DAY` | `true` | Liga tarefas, notas, briefing, foco, cotações e teste de rede. `false` tira as ferramentas de voz, as rotas `/api/tasks` e `/api/network/test` e o aviso de tarefas da manhã |
 | `JARVIS_BRIEFING_NEWS` | `principais notícias do Brasil hoje` | Assunto das manchetes do briefing. Vazio ou `false`: sem manchetes |
 
 ## Arquivos

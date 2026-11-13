@@ -503,3 +503,18 @@ Os testes automáticos usam respostas falsas; aqui você consulta os serviços d
 - [ ] Com o Wi-Fi desligado, todas as fontes dão `sem rede` (nenhuma `FALHA`), o comando termina com código 2 (`echo %ERRORLEVEL%`) e leva só alguns segundos a mais por causa da segunda tentativa.
 - [ ] `python doctor.py --fontes --ignorar pypi,reddit` mostra os dois como `ignorada` e o código de saída não conta o estado deles.
 - [ ] No GitHub, em Actions, o workflow "Fontes externas" aparece e, em "Run workflow", roda sem erro de instalação. Ele não aparece nos checks de um pull request. Anote quais fontes o GitHub não consegue alcançar ou que o bloqueiam (Reddit, PyPI e a API do GitHub são os suspeitos) e use `--ignorar` no `fontes.yml` para elas.
+
+## Tarefas nos avisos proativos
+
+Detalhes em [avisos.md](avisos.md#tarefas-do-dia) e [dia-a-dia.md](dia-a-dia.md#aviso-de-manhã). Os testes automáticos usam um relógio falso; aqui você confere com o relógio, a voz e a câmera de verdade. Com `JARVIS_PROACTIVE=true`, `JARVIS_ENABLE_DAY=true` e `python jarvis.py`.
+
+- [ ] Prepare a lista: "tenho que fechar o relatório até ontem" (ou uma tarefa com prazo passado), "tenho que ir ao dentista hoje" e "anota aí: ideia do painel". Para não esperar a manhã seguinte, troque o valor de `tasks_notice_day` no `lembretes.json` por `null` (ou apague a linha), numa hora entre 5h e 12h. Pode ser com o Jarvis ligado: o monitor lê o arquivo a cada minuto. Repita isso sempre que o item pedir para "zerar o `tasks_notice_day`".
+- [ ] Com o link aberto, em até 1 minuto o Jarvis fala algo como "1 tarefa atrasada e 1 para hoje: fechar o relatório; ir ao dentista", sem ler a nota. O HUD mostra o aviso "Tarefas" e ele entra no registro de atividades.
+- [ ] Reinicie o `jarvis.py` no mesmo dia: o aviso não repete (o `lembretes.json` tem `tasks_notice_day` com a data de hoje).
+- [ ] Com o link fechado (diga "tchau, Jarvis" e zere o `tasks_notice_day`), o aviso aparece só no HUD: nada de bipe, o navegador não abre sozinho.
+- [ ] "Para de me avisar sobre tarefas", zere o `tasks_notice_day`: o aviso aparece só no HUD, sem voz. "Pode voltar a avisar sobre tarefas" desfaz.
+- [ ] Horário de silêncio: ponha um que cubra a hora atual (por exemplo `JARVIS_QUIET_HOURS` ou "horário de silêncio das 8h às 20h", de acordo com a hora) e zere o `tasks_notice_day`: nada é dito. Ao desligar o silêncio ("desliga o horário de silêncio"), o aviso sai em até 1 minuto.
+- [ ] Presença: com `JARVIS_PRESENCE=true` e a câmera ligada, saia da frente do PC até a presença marcar "ausente" e zere o `tasks_notice_day`: nada é dito. Volte para a frente da câmera: o aviso sai pouco depois.
+- [ ] Sem tarefa atrasada nem para hoje (marque as duas como feitas), zere o `tasks_notice_day` e espere 1 minuto: nenhum aviso, e `tasks_notice_day` volta com a data de hoje.
+- [ ] Depois do meio-dia (ou antes das 5h) o aviso não sai, mesmo com tarefas atrasadas.
+- [ ] Com `JARVIS_ENABLE_DAY=false` no `.env`, o aviso das tarefas nunca aparece, mesmo com o `tasks_notice_day` zerado e tarefas atrasadas. Os outros avisos (bateria, lembretes) continuam.

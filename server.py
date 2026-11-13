@@ -400,7 +400,18 @@ def create_app(
             return None
         # webbrowser.open pode demorar: fora do loop do servidor.
         opener = lambda url: threading.Thread(target=open_browser, args=(url,), daemon=True).start()  # noqa: E731
-        return ProactiveEngine.for_settings(settings, wake_hub, open_browser=opener)
+
+        def user_present() -> bool | None:
+            # TAR-43: o aviso das tarefas espera o usuário chegar. None = não dá para saber
+            # (presença desligada, sem câmera ou parada): aí o aviso não fica travado.
+            if not settings.presence_enabled:
+                return None
+            state = presence().state()
+            if not state["running"] or state["state"] == "off":
+                return None
+            return state["state"] == "present"
+
+        return ProactiveEngine.for_settings(settings, wake_hub, open_browser=opener, present=user_present)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:

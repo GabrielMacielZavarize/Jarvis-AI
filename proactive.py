@@ -5,7 +5,7 @@
   sobrevivendo a reinícios.
 - Monitores em segundo plano no servidor do HUD: bateria baixa ou carregador desconectado,
   CPU/RAM alta por muito tempo (citando o processo culpado), download concluído na pasta
-  Downloads e disco quase cheio.
+  Downloads, disco quase cheio e, uma vez por manhã, as tarefas atrasadas e as de hoje (TAR-43).
 
 Quem vigia é o servidor do HUD (``server.py``), que fica de pé o tempo todo; o worker do agente só
 existe enquanto o link está aberto. Cada aviso tem uma prioridade e vai por um caminho (``route``):
@@ -41,6 +41,7 @@ import requests
 from fastapi import APIRouter, HTTPException, Request
 from livekit.agents import RunContext, function_tool
 
+import tasks as tasks_module
 from confirmation import strip_accents
 from hud import show_card, tool_status
 from settings import Settings, parse_clock_range
@@ -52,7 +53,7 @@ API_PREFIX = "/api/proactive"
 
 Priority = Literal["low", "normal", "high", "critical"]
 PRIORITY_ORDER: dict[str, int] = {"low": 0, "normal": 1, "high": 2, "critical": 3}
-Topic = Literal["reminders", "battery", "performance", "downloads", "disk", "watch"]
+Topic = Literal["reminders", "battery", "performance", "downloads", "disk", "watch", "tasks"]
 TOPIC_LABELS: dict[str, str] = {
     "reminders": "Lembretes",
     "battery": "Bateria",
@@ -60,6 +61,7 @@ TOPIC_LABELS: dict[str, str] = {
     "downloads": "Downloads",
     "disk": "Disco",
     "watch": "Erros na tela",
+    "tasks": "Tarefas",
 }
 Route = Literal["speak", "wake", "hud"]
 
@@ -94,6 +96,10 @@ DISK_COOLDOWN_S = 12 * 3600.0
 PARTIAL_SUFFIXES = (".crdownload", ".part", ".partial", ".download", ".opdownload", ".tmp", ".!ut", ".aria2")
 IGNORED_FILES = {"desktop.ini", "thumbs.db", ".ds_store"}
 DOWNLOADS_PER_NOTICE = 3
+# Aviso das tarefas (TAR-43): uma vez por dia, no primeiro momento útil entre estas horas.
+TASKS_MORNING_START_H = 5
+TASKS_MORNING_END_H = 12
+TASKS_LISTED = 3
 
 # ───────────────────────── quando ─────────────────────────
 
@@ -340,7 +346,7 @@ def _path(path: Path | None) -> Path:
 
 
 def _empty_state() -> dict[str, Any]:
-    return {"version": 1, "reminders": [], "muted": {}, "quiet_hours": None}
+    return {"version": 1, "reminders": [], "muted": {}, "quiet_hours": None, "tasks_notice_day": None}
 
 
 def _valid_reminder(item: Any) -> dict[str, Any] | None:
@@ -385,6 +391,10 @@ def _read(path: Path) -> tuple[dict[str, Any], bool]:
     quiet = raw.get("quiet_hours")
     if quiet == "off" or (isinstance(quiet, str) and parse_clock_range(quiet)):
         state["quiet_hours"] = quiet
+    notice_day = raw.get("tasks_notice_day")
+    if isinstance(notice_day, str):
+        with contextlib.suppress(ValueError):
+            state["tasks_notice_day"] = dt.date.fromisoformat(notice_day).isoformat()
     return state, True
 
 
@@ -913,6 +923,77 @@ class DiskMonitor:
         return notices
 
 
+def _count(number: int, singular: str, plural: str) -> str:
+    return f"{number} {singular if number == 1 else plural}"
+
+
+def tasks_summary(items: list[dict[str, Any]], today: dt.date) -> str | None:
+    """"2 tarefas atrasadas e 1 para hoje: relatório, dentista." Without overdue or due-today tasks: None."""
+    day = today.isoformat()
+    pending = tasks_module.open_tasks(items)
+    overdue = [item for item in pending if item["due"] and item["due"] < day]
+    due_today = [item for item in pending if item["due"] == day]
+    if not overdue and not due_today:
+        return None
+    parts = []
+    if overdue:
+        parts.append(_count(len(overdue), "tarefa atrasada", "tarefas atrasadas"))
+    if due_today:
+        parts.append(f"{len(due_today)} para hoje" if overdue else _count(len(due_today), "tarefa para hoje", "tarefas para hoje"))
+    listed = [item["text"] for item in overdue + due_today]
+    names = "; ".join(listed[:TASKS_LISTED]) + (f" e mais {len(listed) - TASKS_LISTED}" if len(listed) > TASKS_LISTED else "")
+    return f"{' e '.join(parts)}: {names}."
+
+
+class TasksMonitor:
+    """Uma vez por dia, no primeiro momento útil da manhã: as tarefas atrasadas e as de hoje.
+
+    "Momento útil" = entre 5h e 12h, fora do horário de silêncio e, com a presença ligada, com o
+    usuário na frente do PC. O primeiro momento útil gasta o dia mesmo sem tarefas: uma tarefa
+    anotada depois não vira aviso de manhã. O dia fica no ``lembretes.json``, então reiniciar o
+    Jarvis não repete o aviso.
+    """
+
+    topic = "tasks"
+    interval = 60.0
+
+    def __init__(
+        self,
+        *,
+        path: Path | None = None,
+        tasks_path: Path | None = None,
+        quiet_hours: tuple[int, int] | None = None,
+        present: Callable[[], bool | None] = lambda: None,
+    ) -> None:
+        self.path = path
+        self.tasks_path = tasks_path
+        self.default_quiet = quiet_hours
+        self.present = present
+
+    def _user_here(self) -> bool:
+        try:
+            return self.present() is not False  # None: presença desligada ou sem câmera, não dá para saber
+        except Exception:
+            logger.exception("Não consegui saber se há alguém no PC.")
+            return True
+
+    def check(self, now: dt.datetime, clock: float) -> list[Notice]:
+        if not TASKS_MORNING_START_H <= now.hour < TASKS_MORNING_END_H:
+            return []
+        today = now.date().isoformat()
+        state = load_state(self.path)
+        if state.get("tasks_notice_day") == today:
+            return []
+        if in_quiet_hours(now, quiet_window(state, self.default_quiet)) or not self._user_here():
+            return []
+        with _editing(self.path) as editing:
+            editing["tasks_notice_day"] = today
+        message = tasks_summary(tasks_module.load_items(self.tasks_path), now.date())
+        if message is None:
+            return []
+        return [Notice("tasks", "normal", "Tarefas", message, id=f"t-{today}")]
+
+
 # ───────────────────────── motor (servidor do HUD) ─────────────────────────
 
 
@@ -961,6 +1042,8 @@ class ProactiveEngine:
     def for_settings(cls, settings: Settings, hub: WakeTarget, **kwargs: Any) -> ProactiveEngine:
         probe = PsutilProbe()
         folder = default_downloads_dir(settings.downloads_dir)
+        present = kwargs.pop("present", None)
+        tasks_path = kwargs.pop("tasks_path", None)
         monitors: list[Monitor] = [
             ReminderMonitor(kwargs.get("path")),
             BatteryMonitor(probe),
@@ -968,6 +1051,15 @@ class ProactiveEngine:
             DownloadsMonitor(probe, folder),
             DiskMonitor(probe),
         ]
+        if settings.day_enabled:  # TAR-43: as tarefas fazem parte do Dia a dia
+            monitors.append(
+                TasksMonitor(
+                    path=kwargs.get("path"),
+                    tasks_path=tasks_path,
+                    quiet_hours=settings.quiet_hours,
+                    present=present or (lambda: None),
+                )
+            )
         logger.info("Avisos proativos ligados (Downloads em %s).", folder)
         return cls(hub, monitors, quiet_hours=settings.quiet_hours, hud_url=settings.hud_url, **kwargs)
 
@@ -1133,6 +1225,7 @@ TOPIC_ALIASES = {
     "processador": "performance", "download": "downloads", "downloads": "downloads", "disco": "disk",
     "armazenamento": "disk", "espaco": "disk", "lembrete": "reminders", "lembretes": "reminders",
     "erro": "watch", "erros": "watch", "vigia": "watch", "terminal": "watch",
+    "tarefa": "tasks", "tarefas": "tasks", "pendencia": "tasks", "pendencias": "tasks",
 }
 ALL_WORDS = {"tudo", "todos", "todas", "all"}
 
@@ -1297,14 +1390,15 @@ def _settings_quiet_hours() -> tuple[int, int] | None:
 async def configure_alerts(
     context: RunContext,
     action: Literal["mute", "unmute", "quiet_hours", "status"],
-    topic: Literal["battery", "performance", "downloads", "disk", "reminders", "watch", "all"] | None = None,
+    topic: Literal["battery", "performance", "downloads", "disk", "reminders", "watch", "tasks", "all"] | None = None,
     hours: float | None = None,
     quiet_start: str | None = None,
     quiet_end: str | None = None,
 ) -> str:
-    """Control Jarvis's spontaneous notices (battery, CPU/RAM, downloads, disk, reminders).
+    """Control Jarvis's spontaneous notices (battery, CPU/RAM, downloads, disk, reminders, tasks).
 
     - "para de me avisar sobre bateria" → mute, topic battery ("por hoje" → hours until midnight).
+    - "para de me avisar sobre tarefas" → mute, topic tasks (the morning summary of overdue and due-today tasks).
     - "pode voltar a avisar da bateria" → unmute.
     - "horário de silêncio das 22h às 6h" → quiet_hours with quiet_start "22:00", quiet_end "06:00";
       "desliga o horário de silêncio" → quiet_hours with quiet_start "off".
@@ -1314,7 +1408,7 @@ async def configure_alerts(
     Args:
         action: mute, unmute, quiet_hours or status.
         topic: battery, performance (CPU/RAM), downloads, disk, reminders, watch (errors in the
-            window watched by watch_screen) or all.
+            window watched by watch_screen), tasks (morning summary of tasks) or all.
         hours: Mute only for this many hours; omit to mute until the user lifts it.
         quiet_start: Start of the quiet hours ("23:00"), or "off" to turn them off.
         quiet_end: End of the quiet hours ("07:00").
@@ -1326,7 +1420,7 @@ async def configure_alerts(
         topics = _topics(topic)
         if not topics:
             await tool_status("configure_alerts", "error")
-            return f"Assunto desconhecido: '{topic}'. Use battery, performance, downloads, disk, reminders, watch ou all."
+            return f"Assunto desconhecido: '{topic}'. Use battery, performance, downloads, disk, reminders, watch, tasks ou all."
         labels = ", ".join(TOPIC_LABELS[name].lower() for name in topics)
         if action == "mute":
             until = now + dt.timedelta(hours=hours) if hours and hours > 0 else None
@@ -1366,7 +1460,7 @@ async def configure_alerts(
         {
             "title": "Avisos proativos",
             "content": (
-                "Vigiando: bateria, CPU/RAM, downloads, disco e lembretes.\n"
+                "Vigiando: bateria, CPU/RAM, downloads, disco, lembretes e tarefas.\n"
                 f"Silenciados: {muted_text}\nHorário de silêncio: {format_window(window)}\n"
                 f"Lembretes marcados: {len(state['reminders'])}"
             ),
@@ -1375,7 +1469,7 @@ async def configure_alerts(
     await tool_status("configure_alerts", "done")
     return (
         "Vigio bateria (baixa e carregador), CPU/RAM alta por mais de 5 minutos, downloads concluídos, "
-        f"disco quase cheio e os lembretes. Silenciados: {muted_text}. Horário de silêncio: "
+        f"disco quase cheio, os lembretes e, de manhã, as tarefas atrasadas e as de hoje. Silenciados: {muted_text}. Horário de silêncio: "
         f"{format_window(window)}{' (agora)' if in_quiet_hours(now, window) else ''}. "
         f"Lembretes marcados: {len(state['reminders'])}."
     )
