@@ -8,15 +8,15 @@ O nome vem dos painéis de "consulta" que circulam pelo Telegram, que puxam CPF,
 
 | Consulta | O que volta | De onde vem |
 | --- | --- | --- |
-| IP | País, região e cidade aproximados, provedor, organização e ASN. Sem alvo, o IP público deste PC | ipwho.is |
+| IP | País, região e cidade aproximados, provedor, organização e ASN, mais o que o Shodan já viu daquele IP: portas abertas, nomes de host, tags e CVEs conhecidos. Sem alvo, o IP público deste PC | ipwho.is e InternetDB (Shodan, sem chave) |
 | Domínio | Endereços, servidores de nome, email (MX), SPF e DMARC, data de criação e de vencimento, registrador, certificado HTTPS, proteções do site (HSTS, CSP...), onde está hospedado e subdomínios que já apareceram em certificados públicos | dns.google, rdap.org, crt.sh, ipwho.is e o próprio site |
-| Link | Para onde o link leva (cada redirecionamento), a idade do domínio de destino e os sinais de golpe: sem HTTPS, IP no lugar do nome, "@" no endereço, letras de outro alfabeto, terminação suspeita, nome de banco ou loja num domínio que não é dela, certificado inválido | o próprio site e rdap.org |
+| Link | Para onde o link leva (cada redirecionamento), a idade do domínio de destino e os sinais de golpe: sem HTTPS, IP no lugar do nome, "@" no endereço, letras de outro alfabeto, terminação suspeita, nome de banco ou loja num domínio que não é dela, certificado inválido. Com a chave do URLhaus, também se o endereço está na lista de malware do abuse.ch | o próprio site, rdap.org e, com chave, URLhaus |
 | CNPJ | Razão social, situação, abertura, atividade, porte, capital, endereço e quadro societário | BrasilAPI (cadastro público da Receita) |
 | CEP | Rua, bairro, cidade e, quando existe, o ponto no globo | BrasilAPI |
 | DDD | Estado e cidades | BrasilAPI |
 | Email | Em quais vazamentos conhecidos o endereço apareceu (só os nomes dos vazamentos) | XposedOrNot |
 | Senha | Se a senha já apareceu em vazamentos e quantas vezes. Só no HUD | Pwned Passwords |
-| Usuário | Em quais sites públicos existe um perfil com aquele nome: GitHub, GitLab, Codeberg, Hugging Face, Docker Hub, npm, PyPI, DEV, Hacker News, Codewars, Keybase, Reddit, Bluesky, Mastodon, Lichess, Chess.com, Duolingo e Scratch | a API pública de cada site |
+| Usuário | Em quais sites públicos existe um perfil com aquele nome: GitHub, GitLab, Codeberg, Hugging Face, Docker Hub, npm, DEV, Hacker News, Codewars, Keybase, Reddit, Bluesky, Mastodon, Lichess, Chess.com, Duolingo e Scratch | a API pública de cada site |
 | Minha rede | IP público e provedor, o IP na rede local, as portas em que este PC aceita conexão (separando as abertas para a rede das que são só dele) e os aparelhos que ele viu na rede | ipwho.is, `psutil` e a tabela ARP |
 
 O que tiver lugar conhecido (um IP, o servidor de um domínio, um CEP com coordenada) ganha um arco no globo 3D e um globo pequeno no painel do resultado.
@@ -29,7 +29,8 @@ O que tiver lugar conhecido (um IP, o servidor de um domínio, um CEP com coorde
 - O titular de um domínio. O registro (RDAP) às vezes traz o nome de quem registrou; o Jarvis mostra só o registrador e as datas.
 - O CPF dentro do nome de um MEI. Ele faz parte da razão social na Receita, mas sai mascarado.
 - Instagram, X, TikTok e Facebook na busca de usuário: bloqueiam consulta automática e dariam resposta errada.
-- No npm, só aparece quem mantém ao menos um pacote publicado: a API do npm não tem consulta pública de usuário. O PyPI e outros sites que respondem com uma página de verificação em vez do perfil ficam em "Não deu para saber".
+- No npm, só aparece quem mantém ao menos um pacote publicado: a API do npm não tem consulta pública de usuário.
+- O PyPI não está na lista: o site responde 200 com uma página de verificação de navegador ("Client Challenge") para qualquer nome, e a API pública do PyPI cobre pacotes, não usuários, então não há jeito confiável de saber se um perfil existe. Um site que passe a se comportar assim cai em "Não deu para saber", nunca em "encontrado".
 - Para conferir se essas fontes ainda respondem no formato certo, rode `python doctor.py --fontes` ([problemas.md](problemas.md#uma-fonte-externa-falha-no-doctor---fontes)).
 
 ## Como usar
@@ -70,8 +71,41 @@ A senha só se confere no HUD, no painel "Senha vazada?". Ela não passa pelo Ja
 | --- | --- | --- |
 | `JARVIS_ENABLE_OSINT` | `true` | Liga as consultas. `false` tira a ferramenta de voz e as rotas `/api/osint` |
 | `JARVIS_OSINT_NETWORK` | `false` | Libera "Minha rede": portas deste PC e aparelhos na rede local |
+| `JARVIS_URLHAUS_KEY` | vazio | Chave grátis do URLhaus. Sem ela a consulta de link só não mostra a parte do URLhaus ([como conseguir](#urlhaus-chave-grátis)) |
+| `JARVIS_OSINT_WATCH_DOMAINS` | vazio | Domínios seus (separados por vírgula) cujo certificado HTTPS o Jarvis confere uma vez por dia ([vigia de certificados](#vigia-de-certificados)). Precisa de `JARVIS_PROACTIVE=true` |
 
 A consulta da rede vem desligada porque mostra coisas da sua casa (os aparelhos conectados) a quem estiver olhando o HUD, inclusive um celular pareado.
+
+### InternetDB (portas e CVEs de um IP)
+
+A consulta de IP pergunta ao [InternetDB](https://internetdb.shodan.io/) do Shodan (gratuito, sem chave) o que a última varredura dele viu naquele endereço, e mostra numa seção "Exposição (InternetDB)": portas abertas, nomes de host, tags e, numa lista à parte, os CVEs conhecidos. Com CVE na lista, o resultado leva um aviso amarelo. O Jarvis não faz varredura nenhuma: só lê o que o Shodan já tem.
+
+- IP que o Shodan nunca viu é a resposta 404 do serviço. Aparece como "Nada conhecido", não como erro.
+- É uma foto da última varredura, que pode ter meses, e os CVEs vêm do que os serviços anunciam: podem estar corrigidos ou nunca ter valido. Trate como pista, não como diagnóstico.
+- Só IP público é perguntado. Se o InternetDB não responder, o resto da consulta de IP aparece normalmente, com um aviso.
+
+### URLhaus (chave grátis)
+
+A consulta de link também pergunta ao [URLhaus](https://urlhaus.abuse.ch/) (abuse.ch), a lista de endereços que distribuem malware, tanto pelo endereço que você mandou quanto pelo destino final depois dos redirecionamentos. Listado vira "Suspeito: melhor não abrir", com o estado do link (no ar ou fora do ar), a ameaça, os marcadores e a ficha no site deles.
+
+A API do URLhaus exige uma chave (cabeçalho `Auth-Key`) desde 2025. Ela é gratuita:
+
+1. Crie a conta (ou entre) em [auth.abuse.ch](https://auth.abuse.ch/), o portal de autenticação do abuse.ch.
+2. Gere a Auth-Key ali e copie.
+3. No `.env`, `JARVIS_URLHAUS_KEY=a-sua-chave`, e reinicie o Jarvis.
+
+Sem a chave a consulta de link funciona igual, só sem a parte do URLhaus. Com a chave recusada ou o serviço fora do ar, a consulta segue e uma nota diz o que houve; um problema no URLhaus nunca vira "link suspeito". A chave fica só no `.env`: não vai para o HUD, para o resultado, para o modelo nem para o log. O endereço consultado é enviado ao abuse.ch, inclusive o que vem depois do `?`: se o link tiver um código pessoal (redefinição de senha, convite), pense antes de consultá-lo com a chave ligada.
+
+### Vigia de certificados
+
+Com `JARVIS_PROACTIVE=true` e domínios em `JARVIS_OSINT_WATCH_DOMAINS`, o motor de [avisos](avisos.md#certificados-dos-seus-domínios) confere uma vez por dia o certificado HTTPS de cada um deles, pela mesma `osint.fetch_certificate` (a trava de IP público vale também aqui), e avisa quando o certificado vence em menos de 14 dias, está inválido ou vencido, ou o site não responde. Com tudo em ordem, ele fica quieto.
+
+```env
+JARVIS_PROACTIVE=true
+JARVIS_OSINT_WATCH_DOMAINS=meusite.com.br,loja.meusite.com.br
+```
+
+Use domínios seus (ou que você administra). Aceita até 20, separados por vírgula, espaço ou ponto e vírgula; um endereço colado inteiro (`https://meusite.com.br/`) vira só o nome. Um valor que não é domínio (um IP, `localhost`) faz o Jarvis recusar a subir, dizendo qual.
 
 ## Cuidados de segurança
 
@@ -81,6 +115,7 @@ A consulta da rede vem desligada porque mostra coisas da sua casa (os aparelhos 
 - De um site consultado só se leem o status e os cabeçalhos. O corpo da página nunca é baixado.
 - Os textos que voltam de fora (nome de registrador, cidade, razão social) saem sem caracteres de controle, cortados e marcados como conteúdo externo na resposta ao modelo, que não segue instruções vindas deles.
 - "Minha rede" só lê: a tabela ARP que o sistema já tem e as portas do próprio PC. Não manda pacote para nenhum aparelho.
+- A chave do URLhaus nunca é gravada em arquivo pelo Jarvis (só lida do `.env`) e não aparece em resultado, log nem na tela do HUD.
 - As rotas `/api/osint` só atendem o próprio PC ou um celular pareado, como as outras.
 
 ## Limites
@@ -89,11 +124,12 @@ A consulta da rede vem desligada porque mostra coisas da sua casa (os aparelhos 
 - "Nenhum sinal de golpe conhecido" não quer dizer que o link é seguro: só que os sinais mais comuns não apareceram.
 - Um perfil com o mesmo nome de usuário não é necessariamente da mesma pessoa.
 - As fontes são serviços gratuitos de terceiros. Podem ficar lentas, limitar pedidos ou mudar. Quando uma parte da consulta de domínio falha, as outras continuam e a parte que faltou simplesmente não aparece.
-- O serviço que recebe a consulta fica sabendo do alvo (o ipwho.is vê o IP consultado, o XposedOrNot vê o email). Nenhum dado seu além disso é enviado.
+- O serviço que recebe a consulta fica sabendo do alvo (o ipwho.is e o InternetDB veem o IP consultado, o XposedOrNot vê o email, o URLhaus vê o link). Nenhum dado seu além disso é enviado.
 
 ## Arquivos
 
 - `osint.py`: as consultas, a ferramenta `osint_lookup` e as rotas do HUD.
 - `web/src/lib/osint.ts`: o reconhecimento do tipo no campo, o SHA-1 da senha e os resultados da sessão.
 - `web/src/components/EyeView.tsx` e `web/src/components/cards/OsintCard.tsx`: a área e o painel do resultado.
-- Testes: `tests/test_osint.py`, `web/src/lib/osint.test.ts` e os testes visuais em `web/e2e/hud.e2e.ts`.
+- `proactive.py` (`CertsMonitor`): o vigia de certificados.
+- Testes: `tests/test_osint.py`, `tests/test_proactive.py` (vigia), `web/src/lib/osint.test.ts` e os testes visuais em `web/e2e/hud.e2e.ts`.

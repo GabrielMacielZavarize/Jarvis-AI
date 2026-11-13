@@ -1418,7 +1418,7 @@ def build_tools(settings: Settings) -> list[Any]:
     if settings.osint_enabled:
         from osint import build_osint_tools
 
-        tools.extend(build_osint_tools(settings.osint_network_enabled))
+        tools.extend(build_osint_tools(settings.osint_network_enabled, settings.urlhaus_key))
     if settings.day_enabled:
         from briefing import build_day_tools
         from netcheck import build_net_tools

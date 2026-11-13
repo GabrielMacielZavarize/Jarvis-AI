@@ -3,6 +3,36 @@ import unittest
 from settings import SettingsError, load_settings
 
 
+class OsintSettingsTests(unittest.TestCase):
+    def test_urlhaus_key_is_optional_and_never_printed(self) -> None:
+        self.assertIsNone(load_settings({"GOOGLE_API_KEY": "k"}).urlhaus_key)
+        self.assertIsNone(load_settings({"GOOGLE_API_KEY": "k", "JARVIS_URLHAUS_KEY": "  "}).urlhaus_key)
+        self.assertIsNone(load_settings({"GOOGLE_API_KEY": "k", "JARVIS_URLHAUS_KEY": "sua-chave-do-urlhaus"}).urlhaus_key)
+        settings = load_settings({"GOOGLE_API_KEY": "k", "JARVIS_URLHAUS_KEY": " abc123 "})
+        self.assertEqual(settings.urlhaus_key, "abc123")
+        self.assertNotIn("abc123", repr(settings))
+
+    def test_watch_domains_default_to_none(self) -> None:
+        self.assertEqual(load_settings({"GOOGLE_API_KEY": "k"}).osint_watch_domains, ())
+        self.assertEqual(load_settings({"GOOGLE_API_KEY": "k", "JARVIS_OSINT_WATCH_DOMAINS": " "}).osint_watch_domains, ())
+
+    def test_watch_domains_accept_commas_spaces_urls_and_accents(self) -> None:
+        raw = "Exemplo.com.br, loja.exemplo.com.br;https://www.outro.com/pagina?x=1  exemplo.com.br. bücher.example"
+        settings = load_settings({"GOOGLE_API_KEY": "k", "JARVIS_OSINT_WATCH_DOMAINS": raw})
+        self.assertEqual(
+            settings.osint_watch_domains,
+            ("exemplo.com.br", "loja.exemplo.com.br", "www.outro.com", "xn--bcher-kva.example"),
+        )
+
+    def test_watch_domains_reject_what_is_not_a_domain(self) -> None:
+        for bad in ("localhost", "192.168.0.1", "192.168.0.10", "exemplo", "-ruim.com", "a b@c.com", "http://", "nome_com_underscore.com"):
+            with self.assertRaisesRegex(SettingsError, "JARVIS_OSINT_WATCH_DOMAINS", msg=bad):
+                load_settings({"GOOGLE_API_KEY": "k", "JARVIS_OSINT_WATCH_DOMAINS": f"ok.com,{bad}"})
+        many = ",".join(f"site{index}.com" for index in range(21))
+        with self.assertRaisesRegex(SettingsError, "até 20"):
+            load_settings({"GOOGLE_API_KEY": "k", "JARVIS_OSINT_WATCH_DOMAINS": many})
+
+
 class SettingsTests(unittest.TestCase):
     def test_defaults_to_gemini_backend(self) -> None:
         settings = load_settings({"GOOGLE_API_KEY": "test-key"})

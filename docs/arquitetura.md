@@ -63,7 +63,7 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `routines.py` | Rotinas (`rotinas.json`): passos, execução com falhas parciais, ferramentas e agendador |
 | `context_triggers.py` | Rotinas por contexto: gatilhos, sondas (processos, foco, áudio, Wi-Fi, presença) e o vigia no servidor |
 | `calendar_tools.py` | Google Agenda (AGD-27): login OAuth, datas em português, ferramentas e avisos de reunião |
-| `proactive.py` | Avisos proativos (PRO-28): `lembretes.json`, monitores, prioridade, silêncio e ferramentas |
+| `proactive.py` | Avisos proativos (PRO-28): `lembretes.json`, monitores (incluindo o vigia de certificados do ODD-42), prioridade, silêncio e ferramentas |
 | `camera.py` | Dono único da webcam (`CameraHub`): captura, feed MJPEG e fotos |
 | `vision.py` | Ferramentas de visão: `look_at_camera`, `camera_view` e envio de imagens ao modelo |
 | `presence.py` | Presença (PRS-25): chegou e saiu pela webcam, boas-vindas, pausa, bloqueio e cadastro do rosto |

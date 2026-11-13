@@ -30,5 +30,9 @@ jobs:
         run: pip install -r requirements.txt
       # Sai com 0 (tudo ok), 1 (alguma fonte falhou) ou 2 (nenhuma falhou, mas alguma não foi alcançada).
       # Qualquer código diferente de 0 deixa o job vermelho.
+      # A checagem do URLhaus só entra se existir o segredo JARVIS_URLHAUS_KEY (a chave grátis de auth.abuse.ch,
+      # em Settings, Secrets and variables, Actions). Sem ele o segredo vem vazio e essa linha simplesmente não aparece.
       - name: Fontes externas
+        env:
+          JARVIS_URLHAUS_KEY: ${{ secrets.JARVIS_URLHAUS_KEY }}
         run: python doctor.py --fontes

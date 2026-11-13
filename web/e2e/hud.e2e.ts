@@ -234,6 +234,41 @@ test('o Olho de Deus reconhece o que foi digitado, consulta e recusa dados pesso
   expect(errors).toEqual([]);
 });
 
+// Respostas reais do Python (osint.lookup_ip / lookup_url) com as fontes falsas: o painel é genérico e
+// tem que mostrar as seções novas (InternetDB e URLhaus) sem desenho próprio.
+const IP_WITH_EXPOSURE = {"kind": "ip", "label": "IP", "target": "8.8.8.8", "title": "8.8.8.8", "summary": "Mountain View, Califórnia, Estados Unidos · Google LLC", "verdict": {"level": "warn", "label": "2 vulnerabilidades conhecidas em serviços deste IP"}, "sections": [{"title": "Localização aproximada", "rows": [["País", "Estados Unidos"], ["Região", "Califórnia"], ["Cidade", "Mountain View"], ["Fuso", "America/Los_Angeles (UTC-07:00)"]]}, {"title": "Rede", "rows": [["Provedor", "Google LLC"], ["Organização", "Google LLC"], ["ASN", "AS15169"], ["Domínio", "google.com"], ["Tipo", "IPv4"]]}, {"title": "Exposição (InternetDB)", "rows": [["Portas abertas", "22, 80, 443 (3)"], ["Nomes de host", "dns.google"], ["Tags", "cloud, self-signed"], ["CVEs conhecidos", "2"]]}], "lists": [{"title": "CVEs conhecidos", "items": ["CVE-2023-38408", "CVE-2018-15473"], "total": 2}], "point": {"name": "Mountain View", "lat": 37.386, "lon": -122.0838}, "notes": ["A localização de um IP é a do provedor, não a de uma pessoa: costuma acertar a cidade, nunca a casa.", "O InternetDB é uma foto da última varredura do Shodan, que pode ter meses. Os CVEs vêm do que os serviços anunciam e podem não valer mais."], "sources": ["ipwho.is", "internetdb.shodan.io"], "ts": 1800000000};
+const URL_LISTED = {"kind": "url", "label": "Link", "target": "https://exemplo.com/baixar", "title": "exemplo.com", "summary": "Suspeito: melhor não abrir", "verdict": {"level": "danger", "label": "Suspeito: melhor não abrir"}, "sections": [{"title": "Destino", "rows": [["Endereço final", "https://exemplo.com/baixar"], ["Domínio registrado", "exemplo.com"], ["Idade do domínio", "6 anos"], ["Resposta", "HTTP 200"]]}, {"title": "URLhaus (abuse.ch)", "rows": [["Situação", "Listado como distribuidor de malware"], ["Link", "no ar"], ["Ameaça", "malware_download"], ["Marcadores", "elf, Mozi"], ["Adicionado em", "2019-01-19 12:00:00 UTC"], ["Listas de bloqueio", "spamhaus_dbl: not listed; surbl: listed"], ["Ficha", "https://urlhaus.abuse.ch/url/2/"]]}], "lists": [{"title": "Sinais", "items": ["Listado no URLhaus (abuse.ch): o link distribui malware"], "levels": ["danger"], "total": 1}], "point": null, "notes": [], "sources": ["rdap.org", "urlhaus-api.abuse.ch"], "ts": 1800000000};
+
+test('o Olho de Deus mostra a exposição do IP (InternetDB) e o link listado no URLhaus', async ({ page }) => {
+  const errors = await openHud(page, 'jarvis');
+  let answer: unknown = IP_WITH_EXPOSURE;
+  await page.route('**/api/osint', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    await route.fulfill({ json: answer });
+  });
+
+  await page.keyboard.press('3');
+  const field = page.getByRole('textbox', { name: 'O que consultar' });
+  await field.fill('8.8.8.8');
+  await page.getByRole('button', { name: 'Consultar' }).click();
+  const ip = page.getByRole('region', { name: 'IP', exact: true });
+  await expect(ip.locator('.osint__verdict--warn')).toContainText('2 vulnerabilidades conhecidas');
+  await expect(ip.locator('.osint__section').filter({ hasText: 'Exposição (InternetDB)' })).toContainText('22, 80, 443 (3)');
+  await expect(ip.locator('.osint__list').filter({ hasText: 'CVEs conhecidos' })).toContainText('CVE-2023-38408');
+  await expect(ip).toContainText('internetdb.shodan.io');
+
+  answer = URL_LISTED;
+  await field.fill('https://exemplo.com/baixar');
+  await page.getByRole('button', { name: 'Consultar' }).click();
+  const link = page.getByRole('region', { name: 'Link', exact: true }).first();
+  await expect(link.locator('.osint__verdict--danger')).toBeVisible();
+  const urlhaus = link.locator('.osint__section').filter({ hasText: 'URLhaus (abuse.ch)' });
+  await expect(urlhaus).toContainText('Listado como distribuidor de malware');
+  await expect(urlhaus).toContainText('malware_download');
+  await expect(link).toContainText('Listado no URLhaus');
+  expect(errors).toEqual([]);
+});
+
 test('a senha é conferida sem sair do navegador', async ({ page }) => {
   const errors = await openHud(page, 'jarvis');
   const requested: string[] = [];

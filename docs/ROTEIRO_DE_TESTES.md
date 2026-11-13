@@ -493,16 +493,19 @@ Detalhes em [instalacao.md](instalacao.md#dependências-e-versões-travadas) e [
 Os testes automáticos usam respostas falsas; aqui você consulta os serviços de verdade, no seu PC. Detalhes em [problemas.md](problemas.md#uma-fonte-externa-falha-no-doctor---fontes).
 
 - [ ] `python doctor.py --fontes` roda sem `.env` e mostra uma linha por fonte, em cinco grupos (Olho de Deus, Perfis de usuário, Cotações, Clima, Internet). Anote quais deram `FALHA` ou `sem rede`.
-- [ ] Olho de Deus: ipwho.is, dns.google, rdap.org, BrasilAPI (CNPJ, CEP e DDD) e Pwned Passwords dão `ok`. Se alguma der `FALHA`, o motivo diz qual campo a leitura não achou: esse é o formato que mudou (ou que foi escrito errado, já que essas consultas nasceram sem acesso à rede).
+- [ ] Olho de Deus: ipwho.is, InternetDB (Shodan), dns.google, rdap.org, BrasilAPI (CNPJ, CEP e DDD) e Pwned Passwords dão `ok`. Se alguma der `FALHA`, o motivo diz qual campo a leitura não achou: esse é o formato que mudou (ou que foi escrito errado, já que essas consultas nasceram sem acesso à rede).
 - [ ] crt.sh costuma ser lento e instável: se der `FALHA` com 502 ou 503, rode de novo antes de concluir algo.
 - [ ] XposedOrNot: veja se a linha diz "N vazamento(s)" (o formato 200 foi lido) ou "sem vazamentos (404); o formato da resposta 200 não foi visto". No segundo caso, confira à mão com um email seu que você sabe que vazou (`python -c "import osint; print(osint.lookup_email('seu@email.com')['lists'])"`) que a lista de vazamentos vem preenchida.
-- [ ] Perfis: cada um dos 18 sites dá `ok` ("existe e um nome inventado não"). Para os que falharem com "o perfil de teste X não foi achado", abra o perfil no navegador: se a conta existe, a leitura do site mudou; se não, troque o usuário em `KNOWN_USERS` do `fontes.py`. As contas de Codeberg (Gusted), Duolingo (duolingo), Keybase (chris), Mastodon (Gargron), Bluesky (jay) e Scratch (griffpatch) foram escolhidas sem poder abrir os sites.
-- [ ] PyPI: dá `FALHA` se o site ainda responder com a página "Client Challenge"; nesse caso o Jarvis já mostra o PyPI em "Não deu para saber" na busca de usuário. Decida se vale tirá-lo da lista `SITES` do `osint.py`.
+- [ ] Perfis: cada um dos 17 sites dá `ok` ("existe e um nome inventado não"). Para os que falharem com "o perfil de teste X não foi achado", abra o perfil no navegador: se a conta existe, a leitura do site mudou; se não, troque o usuário em `KNOWN_USERS` do `fontes.py`. As contas de Codeberg (Gusted), Duolingo (duolingo), Keybase (chris), Mastodon (Gargron), Bluesky (jay) e Scratch (griffpatch) foram escolhidas sem poder abrir os sites.
+- [ ] O PyPI não aparece mais nem aqui nem na busca de usuário (saiu da lista `SITES`: respondia 200 com a página "Client Challenge" para qualquer nome). Confira no navegador anônimo que `https://pypi.org/user/dstufft/` ainda pede verificação; se algum dia abrir o perfil sem verificação e com 404 para um nome inventado, dá para recolocá-lo.
+- [ ] Contas de teste (`KNOWN_USERS`): as que o job semanal reprovar com "o perfil de teste X não foi achado" mostram qual conta sumiu. Confira à mão as que mais mudam de dono: Bluesky (a consulta é `jay.bsky.social`; a conta da Jay Graber migrou para `jay.bsky.team`, então essa pode ter ficado sem dono ou com outro), Keybase (`chris`) e Duolingo (`duolingo`). Troque por outra conta pública e estável se uma delas falhar.
+- [ ] InternetDB: a linha `internetdb.shodan.io` dá `ok` com portas e nomes de host do 8.8.8.8. Se der `FALHA` dizendo que o campo "ports" mudou, o formato do JSON mudou (a leitura foi escrita pela documentação, sem ver a resposta de verdade).
+- [ ] URLhaus: sem `JARVIS_URLHAUS_KEY` a linha do URLhaus nem aparece. Com a chave no `.env` aparece `urlhaus-api.abuse.ch · link na lista de malware` com `ok` ("chave aceita; ... não listado"). Com uma chave errada dá `FALHA` com "recusou a chave".
 - [ ] Cotações e Clima (AwesomeAPI e Open-Meteo): `ok`, com o dólar e o clima de São Paulo plausíveis.
 - [ ] Internet: latência, download e upload dão `ok`, e o comando termina em poucos segundos (baixa 200 KB e envia 50 KB, bem menos que o "como está a minha internet?").
 - [ ] Com o Wi-Fi desligado, todas as fontes dão `sem rede` (nenhuma `FALHA`), o comando termina com código 2 (`echo %ERRORLEVEL%`) e leva só alguns segundos a mais por causa da segunda tentativa.
-- [ ] `python doctor.py --fontes --ignorar pypi,reddit` mostra os dois como `ignorada` e o código de saída não conta o estado deles.
-- [ ] No GitHub, em Actions, o workflow "Fontes externas" aparece e, em "Run workflow", roda sem erro de instalação. Ele não aparece nos checks de um pull request. Anote quais fontes o GitHub não consegue alcançar ou que o bloqueiam (Reddit, PyPI e a API do GitHub são os suspeitos) e use `--ignorar` no `fontes.yml` para elas.
+- [ ] `python doctor.py --fontes --ignorar reddit,crt.sh` mostra os dois como `ignorada` e o código de saída não conta o estado deles.
+- [ ] No GitHub, em Actions, o workflow "Fontes externas" aparece e, em "Run workflow", roda sem erro de instalação. Ele não aparece nos checks de um pull request. Anote quais fontes o GitHub não consegue alcançar ou que o bloqueiam (Reddit e a API do GitHub são os suspeitos). Se quiser a linha do URLhaus no job, crie o segredo `JARVIS_URLHAUS_KEY` em Settings, Secrets and variables, Actions; sem ele a linha some e o job não reclama e use `--ignorar` no `fontes.yml` para elas.
 
 ## Tarefas nos avisos proativos
 
@@ -557,3 +560,37 @@ Avisos esperam o bloco:
 - [ ] Tire o carregador do notebook durante o bloco: nada. Com a bateria em 10% (ou simulada): o aviso crítico fala na hora.
 - [ ] "Encerra o foco" com avisos esperando: eles saem em até uns 5 segundos.
 - [ ] Com `JARVIS_ENABLE_DAY=false`, os avisos nunca esperam (e o painel Foco não responde).
+
+## Olho de Deus: InternetDB, URLhaus e vigia de certificados
+
+Detalhes em [olho-de-deus.md](olho-de-deus.md). Os testes automáticos usam respostas falsas, escritas pela documentação dos serviços (que não deu para abrir na sessão que implementou isto): aqui você confere o formato de verdade, no seu PC e com internet. Para o URLhaus, crie a chave grátis em auth.abuse.ch e ponha `JARVIS_URLHAUS_KEY=...` no `.env`.
+
+InternetDB (sem chave):
+
+- [ ] No HUD (tecla `3`), consulte `8.8.8.8`: aparece a seção "Exposição (InternetDB)" com portas (53 e 443 costumam estar lá), o nome de host `dns.google` e uma linha "CVEs conhecidos". Nas fontes do painel entra `internetdb.shodan.io`.
+- [ ] Confira no navegador `https://internetdb.shodan.io/8.8.8.8`: as portas, hosts, tags e CVEs do painel batem com o JSON (campos `ports`, `hostnames`, `tags`, `vulns`). Se o JSON tiver outros nomes, a leitura em `osint.internetdb` precisa ser ajustada.
+- [ ] Consulte o IP público de um servidor seu ou de uma casa (sem nada aberto): o InternetDB responde 404 e o painel diz "Nada conhecido: o Shodan não tem varredura deste IP", sem erro. Confira o 404 no navegador.
+- [ ] Consulte um IP com serviços antigos conhecidos (um que apareça no site do Shodan com CVEs): o painel mostra o aviso amarelo "N vulnerabilidades conhecidas" e a lista de CVEs.
+- [ ] "Jarvis, de onde é o IP 8.8.8.8?": ele fala o resumo e cita portas ou CVEs sem inventar nada além do painel.
+- [ ] IPv6: consulte o IPv6 de um provedor conhecido (`2606:4700:4700::1111`). Anote se o InternetDB responde ou dá 404 (os dois são aceitos; só não pode dar erro na tela).
+- [ ] Sem internet (Wi-Fi desligado) a consulta de IP falha como sempre; com o InternetDB bloqueado (por exemplo no `hosts`) a consulta de IP continua, com o aviso "O InternetDB (Shodan) não respondeu agora".
+
+URLhaus (com a chave):
+
+- [ ] Consulte um link comum (`https://github.com`): a seção "URLhaus (abuse.ch)" diz "Não listado como distribuidor de malware" e o veredito continua o de antes.
+- [ ] Procure em `https://urlhaus.abuse.ch/browse/` um endereço listado e que esteja "offline" (nunca abra o link; copie só o texto) e consulte-o no HUD: o veredito vira "Suspeito: melhor não abrir", com situação, estado do link, ameaça, marcadores, data e a ficha. Confira se os campos batem com a ficha no site do URLhaus. Anote os campos que vieram vazios ou com nome diferente (é o formato da resposta `ok`, que não deu para ver).
+- [ ] Com uma chave errada no `.env`: o link ainda é analisado e aparece a nota "O URLhaus recusou a chave. Crie a chave grátis em auth.abuse.ch...". Sem a chave (linha vazia) a seção do URLhaus nem aparece e nenhuma nota é mostrada.
+- [ ] Um link encurtado que leva a um endereço listado: o sinal diz "o destino final do link distribui malware".
+- [ ] Veja no `python jarvis.py` e no console do navegador: a chave não aparece em nenhum log nem na resposta de `/api/osint`.
+
+Vigia de certificados (com `JARVIS_PROACTIVE=true`):
+
+- [ ] Ponha no `.env` `JARVIS_OSINT_WATCH_DOMAINS=expired.badssl.com` e suba o Jarvis (fora do horário de silêncio, com o link aberto): em até 1 minuto ele fala "Certificado HTTPS: expired.badssl.com está com o certificado vencido/inválido (...)". O HUD mostra o aviso "Certificado" e ele entra no registro de atividades.
+- [ ] Reinicie no mesmo dia: não repete. Troque `certs_check_day` no `lembretes.json` por `null` e ele confere de novo em até 1 minuto.
+- [ ] Domínio com certificado em ordem (`github.com`): ele não diz nada, e `certs_check_day` passa a ter a data de hoje.
+- [ ] Um domínio seu com certificado a menos de 14 dias de vencer (ou, para testar, um de teste com validade curta): o aviso diz "vence em N dias".
+- [ ] Domínio que não existe (`nao-existe-jarvis-teste.com`): "não respondeu", depois de duas tentativas (leva uns segundos).
+- [ ] Com o Wi-Fi desligado na hora da conferência: nenhum aviso falso de "não respondeu"; ao religar, em até uns 10 minutos a conferência acontece.
+- [ ] Com o link fechado, um aviso de certificado inválido ou vencido (prioridade alta) acorda o Jarvis como um lembrete; "vence em N dias" fica só no HUD. "Para de me avisar sobre certificados" silencia a voz e o aviso segue no HUD.
+- [ ] Horário de silêncio cobrindo a hora atual: nada acontece e `certs_check_day` não é gravado; ao acabar o silêncio, o aviso sai.
+- [ ] Com `JARVIS_OSINT_WATCH_DOMAINS=192.168.0.1` ou `localhost` o Jarvis recusa subir dizendo que o domínio é inválido. Com `JARVIS_ENABLE_OSINT=false` ou sem `JARVIS_PROACTIVE`, o vigia não existe.

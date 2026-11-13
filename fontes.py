@@ -18,12 +18,14 @@ rede. Os volumes são mínimos: o teste de velocidade baixa 200 KB e sobe 50 KB.
 from __future__ import annotations
 
 import ipaddress
+import os
 import re
 import socket
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -52,7 +54,6 @@ KNOWN_USERS: dict[str, str] = {
     "Hugging Face": "julien-c",
     "Docker Hub": "jpetazzo",
     "npm": "sindresorhus",
-    "PyPI": "dstufft",
     "DEV": "ben",
     "Hacker News": "pg",
     "Codewars": "jhoffner",
@@ -189,6 +190,40 @@ def check_ip(probe: Probe) -> str:
     _need(rows["ASN"] == "AS15169", f"o ASN do 8.8.8.8 devia ser AS15169, veio {rows['ASN']}")
     _need(result.get("point"), "a resposta não trouxe latitude e longitude")
     return f"{rows['Provedor']}, {rows['ASN']}, {rows['País']}"
+
+
+def check_internetdb(probe: Probe) -> str:
+    import osint
+
+    info = osint.internetdb(probe, "8.8.8.8")
+    _need(info["known"], "o InternetDB respondeu 404 para o 8.8.8.8, que sempre teve varredura: o endereço da API pode ter mudado")
+    _need(info["ports"], "nenhuma porta lida na resposta do InternetDB: o formato do campo “ports” pode ter mudado")
+    return f"{len(info['ports'])} porta(s), {len(info['hostnames'])} nome(s) de host, {len(info['vulns'])} CVE(s) para o 8.8.8.8"
+
+
+def urlhaus_key() -> str | None:
+    """A chave do URLhaus: JARVIS_URLHAUS_KEY no ambiente (o job semanal) ou no .env deste PC."""
+    key = os.environ.get("JARVIS_URLHAUS_KEY")
+    if key is None:
+        try:
+            from dotenv import dotenv_values
+
+            key = dotenv_values(Path(__file__).resolve().parent / ".env").get("JARVIS_URLHAUS_KEY")
+        except Exception:
+            key = None
+    key = (key or "").strip()
+    return None if not key or key.lower().startswith(("your-", "sua-", "seu-")) else key
+
+
+def check_urlhaus(probe: Probe, key: str) -> str:
+    import osint
+
+    # example.com não é malware: a resposta certa é "no_results". Prova que a chave vale e que o
+    # formato do status ainda é o que a leitura espera; o formato de um endereço listado não dá para provar aqui.
+    found = osint.urlhaus_check(probe, "https://example.com/", key)
+    if found["listed"]:
+        return "chave aceita; o endereço de teste veio listado (inesperado), mas o formato foi lido"
+    return "chave aceita; o endereço de teste (example.com) veio “não listado”; o formato de um endereço listado não foi visto"
 
 
 def check_dns(probe: Probe) -> str:
@@ -404,6 +439,7 @@ def all_checks() -> list[Check]:
     ODD = "Olho de Deus (ODD-42)"
     checks: list[Check] = [
         (ODD, "ipwho.is · localização de IP", check_ip),
+        (ODD, "internetdb.shodan.io · portas, hosts e CVEs de um IP", check_internetdb),
         (ODD, "dns.google · registros DNS", check_dns),
         (ODD, "rdap.org · registro do domínio", check_rdap),
         (ODD, "crt.sh · subdomínios por certificado", check_crtsh),
@@ -413,6 +449,10 @@ def all_checks() -> list[Check]:
         (ODD, "XposedOrNot · vazamentos de email", check_breaches),
         (ODD, "Pwned Passwords · senha por prefixo", check_pwned),
     ]
+    # O URLhaus só entra com a chave (como no Jarvis: sem a chave a checagem de link não existe).
+    key = urlhaus_key()
+    if key:
+        checks.append((ODD, "urlhaus-api.abuse.ch · link na lista de malware", lambda probe, key=key: check_urlhaus(probe, key)))
     checks += [("Perfis de usuário (osint.SITES)", f"{site[0]}", check_profile(site)) for site in osint.SITES]
     checks += [
         ("Cotações (COT-44)", "AwesomeAPI · cotações", check_quotes),

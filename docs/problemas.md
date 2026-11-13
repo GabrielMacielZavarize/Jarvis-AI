@@ -110,15 +110,16 @@ Quando uma fonte dá `FALHA`:
 - **O servidor respondeu 401, 403, 429 ou 5xx**: o serviço passou a exigir chave, bloqueou consultas automáticas, pediu para esperar ou está fora do ar. Rode de novo mais tarde. Se persistir, é mudança do serviço.
 - **"O perfil de teste X não foi achado"**: a conta de teste de um site de perfis (lista `KNOWN_USERS` em `fontes.py`) foi apagada ou renomeada. Confira no navegador e troque por outra que exista.
 - **"O site não disse que um nome que ninguém tem não existe"**: o site passou a responder com bloqueio ou página de verificação para consultas automáticas. Enquanto isso, o Jarvis mostra esse site em "Não deu para saber" na busca de usuário, nunca como perfil encontrado.
+- **URLhaus fora da lista**: a linha do URLhaus só existe se `JARVIS_URLHAUS_KEY` estiver no `.env` (no job semanal, no segredo `JARVIS_URLHAUS_KEY` do repositório; sem ele a linha some, não falha). Ela consulta `example.com`, que tem que voltar "não listado": prova que a chave vale e que o `query_status` ainda é lido, mas não o formato de um endereço listado. "O URLhaus recusou a chave" é chave errada, revogada ou expirada ([olho-de-deus.md](olho-de-deus.md#urlhaus-chave-grátis)).
 - **XposedOrNot respondendo 404 para o endereço de teste**: aparece como `ok` com a nota de que o formato da resposta 200 não foi visto. O 404 prova que o endereço responde, não o formato da lista de vazamentos.
 
-Para não contar uma fonte que você sabe que está fora (um site que bloqueia o seu provedor, por exemplo), use `--ignorar` com o nome ou um pedaço dele: `python doctor.py --fontes --ignorar pypi,reddit`. Ela continua aparecendo, marcada `ignorada` com o estado de verdade ao lado, e não conta no código de saída.
+Para não contar uma fonte que você sabe que está fora (um site que bloqueia o seu provedor, por exemplo), use `--ignorar` com o nome ou um pedaço dele: `python doctor.py --fontes --ignorar reddit,crt.sh`. Ela continua aparecendo, marcada `ignorada` com o estado de verdade ao lado, e não conta no código de saída.
 
 ### O job semanal no GitHub
 
 O `.github/workflows/fontes.yml` roda esse mesmo comando toda segunda-feira e quando você clicar em Actions, Fontes externas, Run workflow. Não roda em pull request nem em push, então nunca bloqueia um merge. Se alguma fonte falhar ou ficar fora do alcance, o job fica vermelho e o log mostra uma linha por fonte; não abre issue nem manda aviso. O GitHub desliga workflows agendados depois de 60 dias sem atividade no repositório: se o job parou de aparecer, reative em Actions.
 
-Os servidores do GitHub ficam em data center, e alguns sites bloqueiam esse tipo de endereço (Reddit, PyPI e a própria API do GitHub, quando o limite sem token acaba). Um site assim aparece no job como `FALHA` ou `sem rede` mesmo estando bem para quem usa em casa. Rode `python doctor.py --fontes` no seu PC para confirmar e, se for só o bloqueio do GitHub, acrescente `--ignorar` à linha do `fontes.yml`.
+Os servidores do GitHub ficam em data center, e alguns sites bloqueiam esse tipo de endereço (Reddit e a própria API do GitHub, quando o limite sem token acaba). Um site assim aparece no job como `FALHA` ou `sem rede` mesmo estando bem para quem usa em casa. Rode `python doctor.py --fontes` no seu PC para confirmar e, se for só o bloqueio do GitHub, acrescente `--ignorar` à linha do `fontes.yml`.
 
 ## Câmera em uso
 

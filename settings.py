@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Mapping
 
 from dotenv import load_dotenv
@@ -231,6 +231,35 @@ def _parse_csv(raw_value: str | None) -> tuple[str, ...]:
     return tuple(values)
 
 
+MAX_WATCH_DOMAINS = 20
+_WATCH_DOMAIN = re.compile(r"^(?:(?!-)[a-z0-9-]{1,63}(?<!-)\.)+(?!-)[a-z0-9-]{2,63}(?<!-)$")
+
+
+def _parse_watch_domains(raw_value: str | None) -> tuple[str, ...]:
+    """JARVIS_OSINT_WATCH_DOMAINS: domínios separados por vírgula, espaço ou ponto e vírgula."""
+    domains: list[str] = []
+    for part in re.split(r"[,;\s]+", raw_value or ""):
+        candidate = part.strip().lower()
+        if "://" in candidate:
+            candidate = candidate.split("://", 1)[1]
+        candidate = candidate.split("/")[0].split("?")[0].rstrip(".")
+        if not candidate:
+            if part.strip():
+                raise SettingsError(f"Domínio inválido em JARVIS_OSINT_WATCH_DOMAINS: {part!r}. Use só o nome, como exemplo.com.br.")
+            continue
+        try:
+            ascii_name = candidate.encode("idna").decode("ascii")
+        except UnicodeError:
+            ascii_name = ""
+        if len(ascii_name) > 253 or not _WATCH_DOMAIN.match(ascii_name) or ascii_name.rsplit(".", 1)[-1].isdigit():  # IP não é nome
+            raise SettingsError(f"Domínio inválido em JARVIS_OSINT_WATCH_DOMAINS: {part!r}. Use só o nome, como exemplo.com.br.")
+        if ascii_name not in domains:
+            domains.append(ascii_name)
+    if len(domains) > MAX_WATCH_DOMAINS:
+        raise SettingsError(f"JARVIS_OSINT_WATCH_DOMAINS aceita até {MAX_WATCH_DOMAINS} domínios (vieram {len(domains)}).")
+    return tuple(domains)
+
+
 def _is_google_live_model(model_name: str | None) -> bool:
     if not model_name:
         return True
@@ -308,6 +337,10 @@ class Settings:
     # ODD-42: consultas em fontes públicas (IP, domínio, link, CNPJ...) e, à parte, a rede do próprio PC.
     osint_enabled: bool = True
     osint_network_enabled: bool = False
+    # Chave grátis do URLhaus (abuse.ch, cabeçalho Auth-Key); sem ela a checagem de link no URLhaus não aparece.
+    urlhaus_key: str | None = field(default=None, repr=False)
+    # Domínios cujo certificado HTTPS o motor de avisos confere uma vez por dia (precisa de JARVIS_PROACTIVE).
+    osint_watch_domains: tuple[str, ...] = ()
     # Dia a dia: tarefas e notas (TAR-43), cotações (COT-44), teste de rede (RED-45), briefing (BRF-46) e foco (FOC-47).
     day_enabled: bool = True
     # Assunto das manchetes do briefing; vazio tira as manchetes.
@@ -479,6 +512,8 @@ class Settings:
             diary_enabled=_parse_bool(env_map.get("JARVIS_DIARY"), "JARVIS_DIARY", default=True),
             osint_enabled=_parse_bool(env_map.get("JARVIS_ENABLE_OSINT"), "JARVIS_ENABLE_OSINT", default=True),
             osint_network_enabled=_parse_bool(env_map.get("JARVIS_OSINT_NETWORK"), "JARVIS_OSINT_NETWORK", default=False),
+            urlhaus_key=_clean_optional(env_map.get("JARVIS_URLHAUS_KEY")),
+            osint_watch_domains=_parse_watch_domains(env_map.get("JARVIS_OSINT_WATCH_DOMAINS")),
             day_enabled=_parse_bool(env_map.get("JARVIS_ENABLE_DAY"), "JARVIS_ENABLE_DAY", default=True),
             briefing_news=_briefing_news(env_map.get("JARVIS_BRIEFING_NEWS")),
             health_enabled=_parse_bool(env_map.get("JARVIS_HEALTH"), "JARVIS_HEALTH", default=True),

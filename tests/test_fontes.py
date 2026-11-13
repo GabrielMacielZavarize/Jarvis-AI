@@ -29,6 +29,8 @@ GOOD: dict[str, Any] = {
         "connection": {"asn": 15169, "org": "Google LLC", "isp": "Google LLC", "domain": "google.com"},
         "timezone": {"id": "America/Los_Angeles", "utc": "-07:00"},
     },
+    "internetdb": {"cpes": ["cpe:/a:isc:bind"], "hostnames": ["dns.google"], "ip": "8.8.8.8", "ports": [53, 443], "tags": ["cloud"], "vulns": []},
+    "urlhaus": {"query_status": "no_results"},
     "dns": {"Status": 0, "Answer": [{"name": "google.com.", "type": 1, "TTL": 300, "data": "142.250.78.14"}]},
     "rdap": {
         "events": [
@@ -129,6 +131,8 @@ class FakeInternet:
     def _key(self, url: str, params: dict[str, Any]) -> str | None:
         table = (
             ("ipwho.is/8.8.8.8", "ip"),
+            ("internetdb.shodan.io/8.8.8.8", "internetdb"),
+            ("urlhaus-api.abuse.ch/v1/url/", "urlhaus"),
             ("dns.google/resolve", "dns"),
             ("rdap.org/domain/google.com", "rdap"),
             ("crt.sh/", "crtsh"),
@@ -208,8 +212,9 @@ class FakeInternet:
 
 
 @pytest.fixture(autouse=True)
-def clean_quotes_cache():
+def clean_quotes_cache(monkeypatch):
     quotes._cache.clear()
+    monkeypatch.setattr(fontes, "urlhaus_key", lambda: None)  # a chave do URLhaus só entra nos testes que a pedem
     yield
     quotes._cache.clear()
 
@@ -249,13 +254,72 @@ def test_every_source_named_in_the_task_is_checked() -> None:
     run_all(net)
     hosts = {url.split("/")[2] for url, _ in net.calls}
     for host in (
-        "ipwho.is", "dns.google", "rdap.org", "crt.sh", "brasilapi.com.br", "api.xposedornot.com", "api.pwnedpasswords.com",
+        "ipwho.is", "internetdb.shodan.io", "dns.google", "rdap.org", "crt.sh", "brasilapi.com.br", "api.xposedornot.com", "api.pwnedpasswords.com",
         "economia.awesomeapi.com.br", "geocoding-api.open-meteo.com", "api.open-meteo.com", "speed.cloudflare.com",
     ):  # fmt: skip
         assert host in hosts, host
     # Um host de cada API de perfil de osint.SITES.
     for site in osint.SITES:
         assert site[1].split("/")[2] in hosts, site[0]
+
+
+def test_pypi_is_not_a_profile_source_anymore() -> None:
+    # O PyPI responde 200 com uma página de verificação para qualquer nome: não há como saber, então saiu da lista.
+    assert "PyPI" not in {site[0] for site in osint.SITES}
+    assert "PyPI" not in fontes.KNOWN_USERS
+    assert "PyPI" not in run_all(FakeInternet())
+
+
+def test_internetdb_without_scan_data_or_with_a_changed_format_is_a_failure() -> None:
+    net = FakeInternet()
+    net.statuses["internetdb"] = 404
+    result = run_all(net)["internetdb.shodan.io · portas, hosts e CVEs de um IP"]
+    assert result.status == fontes.FAILED and "404" in result.detail
+    net = FakeInternet()
+    net.payloads["internetdb"]["ports"] = "53,443"  # o campo mudou de tipo
+    result = run_all(net)["internetdb.shodan.io · portas, hosts e CVEs de um IP"]
+    assert result.status == fontes.FAILED and "ports" in result.detail
+
+
+URLHAUS_CHECK = "urlhaus-api.abuse.ch · link na lista de malware"
+
+
+def test_urlhaus_is_only_checked_with_a_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    net = FakeInternet()
+    assert URLHAUS_CHECK not in run_all(net)
+    assert not any("urlhaus" in url for url, _ in net.calls)
+    monkeypatch.setattr(fontes, "urlhaus_key", lambda: "chave-de-teste")
+    net = FakeInternet()
+    results = run_all(net)
+    assert results[URLHAUS_CHECK].status == fontes.OK
+    assert any("urlhaus-api.abuse.ch" in url for url, _ in net.calls)
+
+
+def test_urlhaus_with_a_refused_key_or_a_new_status_is_a_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(fontes, "urlhaus_key", lambda: "chave-de-teste")
+    net = FakeInternet()
+    net.statuses["urlhaus"] = 401
+    result = run_all(net)[URLHAUS_CHECK]
+    assert result.status == fontes.FAILED and "recusou a chave" in result.detail
+    net = FakeInternet()
+    net.payloads["urlhaus"] = {"query_status": "coisa_nova"}
+    result = run_all(net)[URLHAUS_CHECK]
+    assert result.status == fontes.FAILED and "coisa_nova" in result.detail
+
+
+def test_urlhaus_key_comes_from_the_environment_or_the_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.undo()  # o autouse trocou a função; aqui vale a de verdade
+    monkeypatch.delenv("JARVIS_URLHAUS_KEY", raising=False)
+    monkeypatch.setattr(fontes, "__file__", str(tmp_path / "fontes.py"))
+    assert fontes.urlhaus_key() is None
+    (tmp_path / ".env").write_text("JARVIS_URLHAUS_KEY=abc123\n", encoding="utf-8")
+    assert fontes.urlhaus_key() == "abc123"
+    monkeypatch.setenv("JARVIS_URLHAUS_KEY", "")  # o segredo vazio do workflow não vira chave
+    assert fontes.urlhaus_key() is None
+    monkeypatch.setenv("JARVIS_URLHAUS_KEY", "sua-chave-aqui")
+    assert fontes.urlhaus_key() is None
+    monkeypatch.setenv("JARVIS_URLHAUS_KEY", "xyz")
+    assert fontes.urlhaus_key() == "xyz"
 
 
 def test_the_speed_test_uses_a_minimum_volume() -> None:
@@ -385,18 +449,18 @@ def test_a_profile_that_disappeared_or_a_site_answering_yes_to_everything() -> N
 
 def test_a_site_answering_with_a_challenge_page_is_not_trusted() -> None:
     net = FakeInternet()
-    net.challenge.add("site:PyPI:absent")
-    result = run_all(net)["PyPI"]
+    net.challenge.add("site:Docker Hub:absent")
+    result = run_all(net)["Docker Hub"]
     assert result.status == fontes.FAILED
     assert "verificação" in result.detail
 
 
 def test_a_site_that_blocks_the_query_is_a_failure_with_the_status() -> None:
     net = FakeInternet()
-    net.statuses["site:PyPI:present"] = 403
+    net.statuses["site:Docker Hub:present"] = 403
     results = run_all(net)
-    assert results["PyPI"].status == fontes.FAILED
-    assert "403" in results["PyPI"].detail
+    assert results["Docker Hub"].status == fontes.FAILED
+    assert "403" in results["Docker Hub"].detail
 
 
 def test_the_breach_service_answering_404_is_ok_and_says_what_was_not_seen() -> None:

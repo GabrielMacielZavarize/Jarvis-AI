@@ -532,6 +532,72 @@ def _place(data: dict[str, Any]) -> str:
     return ", ".join(dict.fromkeys(part for part in parts if part))
 
 
+INTERNETDB_URL = "https://internetdb.shodan.io/{ip}"
+MAX_VULNS = 30
+CVE_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,9}$", re.IGNORECASE)
+
+
+def _text_list(value: Any, limit: int = 80) -> list[str]:
+    """Lista de textos vinda de fora: só o que é texto, limpo e sem repetição."""
+    if not isinstance(value, list):
+        return []
+    return list(dict.fromkeys(text for text in (clean_text(item, limit) for item in value if isinstance(item, str)) if text))
+
+
+def internetdb(http: Http, ip: str) -> dict[str, Any]:
+    """O que o InternetDB (Shodan, sem chave) sabe de um IP público: portas, hosts, tags e CVEs.
+
+    404 quer dizer "nada conhecido" e não é erro: devolve ``{"known": False}``. O resto que não for 200
+    levanta ``OsintError``. Campos que faltam ou vêm com outro tipo viram listas vazias.
+    """
+    status, data = _get_json(http, INTERNETDB_URL.format(ip=quote(ip)))
+    if status == 404:
+        return {"known": False, "ports": [], "hostnames": [], "tags": [], "vulns": []}
+    if not isinstance(data, dict):
+        raise OsintError(f"O InternetDB respondeu {status}.")
+    ports = sorted({port for port in data.get("ports") or [] if isinstance(port, int) and not isinstance(port, bool) and 0 < port < 65536})
+    vulns = [cve.upper() for cve in _text_list(data.get("vulns"), 30) if CVE_PATTERN.match(cve)]
+    return {
+        "known": True,
+        "ports": ports,
+        "hostnames": [name.lower() for name in _text_list(data.get("hostnames"), 100)],
+        "tags": _text_list(data.get("tags"), 30),
+        "vulns": sorted(vulns, reverse=True),
+    }
+
+
+def _exposure(http: Http, ip: str) -> tuple[dict[str, Any] | None, list[str]]:
+    """InternetDB de um IP público; se o serviço falhar, a consulta de IP segue sem ele (com um aviso)."""
+    if not is_public_address(ip):
+        return None, []
+    try:
+        info = internetdb(http, ip)
+    except (OsintError, requests.RequestException, ValueError) as exc:
+        logger.debug("Olho de Deus: InternetDB falhou: %s", exc)
+        return None, ["O InternetDB (Shodan) não respondeu agora: a parte de portas abertas e CVEs ficou de fora."]
+    notes = []
+    if info["known"]:
+        notes.append("O InternetDB é uma foto da última varredura do Shodan, que pode ter meses. Os CVEs vêm do que os serviços anunciam e podem não valer mais.")
+    return info, notes
+
+
+def _exposure_section(info: dict[str, Any] | None) -> dict[str, Any] | None:
+    if info is None:
+        return None
+    if not info["known"]:
+        return _section("Exposição (InternetDB)", [_row("Situação", "Nada conhecido: o Shodan não tem varredura deste IP")])
+    ports = info["ports"]
+    return _section(
+        "Exposição (InternetDB)",
+        [
+            _row("Portas abertas", f"{', '.join(str(port) for port in ports[:20])}{' …' if len(ports) > 20 else ''} ({len(ports)})" if ports else ""),
+            _row("Nomes de host", ", ".join(info["hostnames"][:4]) + (f" (e mais {len(info['hostnames']) - 4})" if len(info["hostnames"]) > 4 else "")),
+            _row("Tags", ", ".join(info["tags"])),
+            _row("CVEs conhecidos", str(len(info["vulns"])) if info["vulns"] else "nenhum"),
+        ],
+    )
+
+
 def lookup_ip(target: str, http: Http = requests) -> dict[str, Any]:
     """De onde é um IP: lugar aproximado, provedor e rede. Sem alvo, o IP público deste PC."""
     ip = clean_ip(target) if target.strip() else ""
@@ -541,11 +607,14 @@ def lookup_ip(target: str, http: Http = requests) -> dict[str, Any]:
     timezone = data.get("timezone") or {}
     place = _place(data)
     provider = clean_text(connection.get("isp") or connection.get("org"), 80)
+    exposure, exposure_notes = _exposure(http, address)
+    vulns = (exposure or {}).get("vulns") or []
     return _result(
         "ip",
         address,
         address,
         " · ".join(part for part in (place, provider) if part) or "Sem localização conhecida",
+        verdict=_verdict("warn", f"{len(vulns)} {'vulnerabilidade conhecida' if len(vulns) == 1 else 'vulnerabilidades conhecidas'} em serviços deste IP") if vulns else None,
         sections=[
             _section(
                 "Localização aproximada",
@@ -566,10 +635,12 @@ def lookup_ip(target: str, http: Http = requests) -> dict[str, Any]:
                     _row("Tipo", data.get("type")),
                 ],
             ),
+            _exposure_section(exposure),
         ],
+        lists=[{"title": "CVEs conhecidos", "items": vulns[:MAX_VULNS], "total": len(vulns)}],
         point=_point(data.get("city") or data.get("country"), data.get("latitude"), data.get("longitude")),
-        notes=["A localização de um IP é a do provedor, não a de uma pessoa: costuma acertar a cidade, nunca a casa."],
-        sources=["ipwho.is"],
+        notes=["A localização de um IP é a do provedor, não a de uma pessoa: costuma acertar a cidade, nunca a casa.", *exposure_notes],
+        sources=["ipwho.is", *(["internetdb.shodan.io"] if exposure is not None else [])],
     )
 
 
@@ -865,13 +936,101 @@ def follow_redirects(url: str, head: Callable[[str], dict[str, Any]] = head_requ
     return chain
 
 
+URLHAUS_URL = "https://urlhaus-api.abuse.ch/v1/url/"
+URLHAUS_KEY_HELP = "Crie a chave grátis em auth.abuse.ch e ponha em JARVIS_URLHAUS_KEY no .env."
+
+
+def urlhaus_check(http: Http, url: str, key: str) -> dict[str, Any]:
+    """Pergunta ao URLhaus (abuse.ch) se um endereço está na lista de distribuição de malware.
+
+    A API exige uma chave no cabeçalho ``Auth-Key``. Devolve ``{"listed": False}`` quando ele diz
+    ``no_results`` e, quando acha (``query_status`` ``ok``), o estado do link, a ameaça, os marcadores,
+    a data, a ficha e as listas de bloqueio. Qualquer outra resposta levanta ``OsintError``. A chave
+    nunca entra no resultado nem nos logs.
+    """
+    response = http.post(
+        URLHAUS_URL,
+        data={"url": url},
+        headers={"User-Agent": USER_AGENT, "Accept": "application/json", "Auth-Key": key},
+        timeout=API_TIMEOUT_S,
+        allow_redirects=False,
+    )
+    if response.status_code in (401, 403):
+        raise OsintError(f"O URLhaus recusou a chave. {URLHAUS_KEY_HELP}")
+    if response.status_code != 200:
+        raise OsintError(f"O URLhaus respondeu {response.status_code}.")
+    try:
+        data = response.json()
+    except ValueError:
+        raise OsintError("O URLhaus respondeu algo que não entendi.") from None
+    if not isinstance(data, dict):
+        raise OsintError("O URLhaus respondeu algo que não entendi.")
+    status = clean_text(data.get("query_status"), 40)
+    if status == "no_results":
+        return {"listed": False}
+    if status != "ok":
+        raise OsintError(f"O URLhaus não aceitou a consulta ({status or 'sem status'}).")
+    blacklists = data.get("blacklists")
+    return {
+        "listed": True,
+        "state": clean_text(data.get("url_status"), 20).lower(),
+        "threat": clean_text(data.get("threat"), 40),
+        "tags": _text_list(data.get("tags"), 30)[:8],
+        "added": clean_text(data.get("date_added"), 40),
+        "reference": clean_text(data.get("urlhaus_reference"), 120),
+        "blacklists": {clean_text(name, 30): clean_text(value, 30) for name, value in blacklists.items() if isinstance(name, str)} if isinstance(blacklists, dict) else {},
+    }
+
+
+def _urlhaus_report(http: Http, urls: list[str], key: str) -> tuple[dict[str, Any] | None, str | None]:
+    """(achado, aviso): o primeiro endereço listado, ou None com o aviso do que deu errado."""
+    problem = None
+    clean = False
+    for url in urls:
+        try:
+            found = urlhaus_check(http, url, key)
+        except OsintError as exc:
+            problem = str(exc)
+            continue
+        except (requests.RequestException, ValueError):
+            problem = "O URLhaus não respondeu agora."
+            continue
+        if found["listed"]:
+            return {**found, "url": url}, None
+        clean = True
+    return (None, None) if clean and problem is None else (None, problem)
+
+
+def _urlhaus_section(found: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not found:
+        return _section("URLhaus (abuse.ch)", [_row("Situação", "Não listado como distribuidor de malware")])
+    lists = [f"{name}: {value}" for name, value in found["blacklists"].items()]
+    return _section(
+        "URLhaus (abuse.ch)",
+        [
+            _row("Situação", "Listado como distribuidor de malware"),
+            _row("Link", {"online": "no ar", "offline": "fora do ar"}.get(found["state"], found["state"])),
+            _row("Ameaça", found["threat"]),
+            _row("Marcadores", ", ".join(found["tags"])),
+            _row("Adicionado em", found["added"]),
+            _row("Listas de bloqueio", "; ".join(lists[:4])),
+            _row("Ficha", found["reference"]),
+        ],
+    )
+
+
 def lookup_url(
     target: str,
     http: Http = requests,
     *,
     head: Callable[[str], dict[str, Any]] = head_request,
+    urlhaus_key: str | None = None,
 ) -> dict[str, Any]:
-    """Confere um link sem abri-lo no navegador: para onde ele leva e que sinais de golpe ele tem."""
+    """Confere um link sem abri-lo no navegador: para onde ele leva e que sinais de golpe ele tem.
+
+    Com ``urlhaus_key`` (JARVIS_URLHAUS_KEY), também pergunta ao URLhaus se o endereço (e o destino final,
+    se for outro) está na lista de malware. Sem a chave essa parte simplesmente não aparece.
+    """
     url = clean_url(target)
     notes: list[str] = []
     try:
@@ -910,6 +1069,18 @@ def lookup_url(
     elif age is not None and age < 180:
         signals.append(_signal("warn", f"O domínio de destino é recente: {_span(age)}"))
 
+    urlhaus: dict[str, Any] | None = None
+    urlhaus_checked = False
+    if urlhaus_key:
+        asked = list(dict.fromkeys([url, final]))
+        urlhaus, urlhaus_problem = _urlhaus_report(http, asked, urlhaus_key)
+        urlhaus_checked = urlhaus is not None or urlhaus_problem is None
+        if urlhaus_problem:
+            notes.append(urlhaus_problem)
+        if urlhaus:
+            where = "o link" if urlhaus["url"] == url else "o destino final do link"
+            signals.append(_signal("danger", f"Listado no URLhaus (abuse.ch): {where} distribui malware"))
+
     levels = {signal["level"] for signal in signals}
     if "danger" in levels:
         verdict = _verdict("danger", "Suspeito: melhor não abrir")
@@ -934,14 +1105,15 @@ def lookup_url(
                     _row("Idade do domínio", _span(age) if age is not None else ""),
                     _row("Resposta", f"HTTP {chain[-1]['status']}" if chain[-1]["status"] else ""),
                 ],
-            )
+            ),
+            _urlhaus_section(urlhaus) if urlhaus_checked else None,
         ],
         lists=[
             {"title": "Sinais", "items": [signal["text"] for signal in signals], "levels": [signal["level"] for signal in signals], "total": len(signals)},
             {"title": "Caminho do link", "items": hops, "total": len(hops)} if len(hops) > 1 else None,
         ],
         notes=notes,
-        sources=["rdap.org"],
+        sources=["rdap.org", *(["urlhaus-api.abuse.ch"] if urlhaus_checked else [])],
     )
 
 
@@ -1138,7 +1310,6 @@ SITES: tuple[tuple[str, str, str, str], ...] = (
     ("Hugging Face", "https://huggingface.co/api/users/{u}/overview", "https://huggingface.co/{u}", "status"),
     ("Docker Hub", "https://hub.docker.com/v2/users/{u}/", "https://hub.docker.com/u/{u}", "status"),
     ("npm", "https://registry.npmjs.org/-/v1/search?text=maintainer:{u}&size=1", "https://www.npmjs.com/~{u}", "npmsearch"),
-    ("PyPI", "https://pypi.org/user/{u}/", "https://pypi.org/user/{u}/", "status"),
     ("DEV", "https://dev.to/api/users/by_username?url={u}", "https://dev.to/{u}", "status"),
     ("Hacker News", "https://hacker-news.firebaseio.com/v0/user/{u}.json", "https://news.ycombinator.com/user?id={u}", "notnull"),
     ("Codewars", "https://www.codewars.com/api/v1/users/{u}", "https://www.codewars.com/users/{u}", "status"),
@@ -1160,7 +1331,8 @@ def _site_exists(rule: str, response: Any) -> bool | None:
         return False
     if status != 200:
         return None
-    # Alguns sites (PyPI) respondem 200 com uma página “Client Challenge” para quem não é navegador: não é perfil.
+    # Um site que põe uma verificação de navegador na frente (o PyPI fazia isso e por isso saiu da lista) responde
+    # 200 com uma página “Client Challenge” para qualquer nome: isso não é perfil.
     if "client challenge" in str(getattr(response, "text", "") or "")[:3000].lower():
         return None
     if rule == "status":
@@ -1380,7 +1552,7 @@ LOOKUPS: dict[str, Callable[..., dict[str, Any]]] = {
 }
 # Serviços que cada consulta chama, para os arcos do globo no HUD.
 HOSTS = {
-    "ip": ["ipwho.is"],
+    "ip": ["ipwho.is", "internetdb.shodan.io"],
     "domain": ["dns.google", "rdap.org", "crt.sh"],
     "url": ["rdap.org"],
     "cnpj": ["brasilapi.com.br"],
@@ -1392,7 +1564,14 @@ HOSTS = {
 }
 
 
-def run_lookup(kind: str | None, target: str, *, network_enabled: bool = False, http: Http = requests) -> dict[str, Any]:
+def run_lookup(
+    kind: str | None,
+    target: str,
+    *,
+    network_enabled: bool = False,
+    http: Http = requests,
+    urlhaus_key: str | None = None,
+) -> dict[str, Any]:
     """Valida, escolhe a consulta e roda. Levanta OsintError com a mensagem para o usuário."""
     target = (target or "").strip()
     if len(target) > 2000:
@@ -1416,6 +1595,8 @@ def run_lookup(kind: str | None, target: str, *, network_enabled: bool = False, 
     if resolved != "ip" and not target:
         raise OsintError(f"Faltou dizer o que consultar em {KIND_LABELS[resolved]}.")
     try:
+        if resolved == "url":
+            return lookup_url(target, http, urlhaus_key=urlhaus_key)
         return LOOKUPS[resolved](target, http)
     except requests.RequestException:
         raise OsintError("A fonte pública não respondeu (falha de rede). Tente de novo em instantes.") from None
@@ -1442,7 +1623,7 @@ def speak(result: dict[str, Any]) -> str:
 # ───────────────────────── ferramenta de voz ─────────────────────────
 
 
-def build_osint_tools(network_enabled: bool) -> list[Any]:
+def build_osint_tools(network_enabled: bool, urlhaus_key: str | None = None) -> list[Any]:
     @function_tool()
     async def osint_lookup(context: RunContext, kind: str, target: str = "") -> str:
         """Olho de Deus: consulta em fontes públicas. Use quando o usuário pedir para localizar um IP,
@@ -1459,9 +1640,9 @@ def build_osint_tools(network_enabled: bool) -> list[Any]:
         resolved = normalize_kind(kind) or detect_kind(target) or "ip"
         detail = clean_text(target, 60) or KIND_LABELS.get(resolved, "")
         await tool_status(TOOL_NAME, "running", detail)
-        await net_activity(HOSTS.get(resolved, []))
+        await net_activity([*HOSTS.get(resolved, []), *(["urlhaus-api.abuse.ch"] if resolved == "url" and urlhaus_key else [])])
         try:
-            result = await asyncio.to_thread(run_lookup, kind, target, network_enabled=network_enabled)
+            result = await asyncio.to_thread(run_lookup, kind, target, network_enabled=network_enabled, urlhaus_key=urlhaus_key)
         except OsintError as exc:
             await tool_status(TOOL_NAME, "error", detail)
             return str(exc)
@@ -1509,7 +1690,7 @@ def build_osint_router(current_settings: Callable[[], Any], require_local: Calla
     def lookup(body: LookupRequest, request: Request) -> dict[str, Any]:
         settings = settings_or_403(request)
         try:
-            return run_lookup(body.kind, body.target, network_enabled=settings.osint_network_enabled, http=http())
+            return run_lookup(body.kind, body.target, network_enabled=settings.osint_network_enabled, http=http(), urlhaus_key=settings.urlhaus_key)
         except OsintError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

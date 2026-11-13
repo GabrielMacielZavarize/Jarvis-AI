@@ -34,6 +34,8 @@ import logging
 import os
 import re
 import secrets
+import socket
+import ssl
 import threading
 import time
 from collections import deque
@@ -57,7 +59,7 @@ API_PREFIX = "/api/proactive"
 
 Priority = Literal["low", "normal", "high", "critical"]
 PRIORITY_ORDER: dict[str, int] = {"low": 0, "normal": 1, "high": 2, "critical": 3}
-Topic = Literal["reminders", "battery", "performance", "downloads", "disk", "watch", "tasks", "focus"]
+Topic = Literal["reminders", "battery", "performance", "downloads", "disk", "watch", "tasks", "focus", "certs"]
 TOPIC_LABELS: dict[str, str] = {
     "reminders": "Lembretes",
     "battery": "Bateria",
@@ -67,6 +69,7 @@ TOPIC_LABELS: dict[str, str] = {
     "watch": "Erros na tela",
     "tasks": "Tarefas",
     "focus": "Foco",
+    "certs": "Certificados",
 }
 Route = Literal["speak", "wake", "hud"]
 
@@ -105,6 +108,9 @@ DOWNLOADS_PER_NOTICE = 3
 TASKS_MORNING_START_H = 5
 TASKS_MORNING_END_H = 12
 TASKS_LISTED = 3
+# Vigia de certificados (ODD-42): avisa quando o certificado de um domínio seu vence em menos de CERT_WARN_DAYS.
+CERT_WARN_DAYS = 14
+CERT_RETRY_S = 600.0
 # Avisos que esperam o fim do bloco de foco (FOC-47): passando disso, os mais antigos caem.
 MAX_HELD = 30
 
@@ -353,7 +359,7 @@ def _path(path: Path | None) -> Path:
 
 
 def _empty_state() -> dict[str, Any]:
-    return {"version": 1, "reminders": [], "muted": {}, "quiet_hours": None, "tasks_notice_day": None}
+    return {"version": 1, "reminders": [], "muted": {}, "quiet_hours": None, "tasks_notice_day": None, "certs_check_day": None}
 
 
 def _valid_reminder(item: Any) -> dict[str, Any] | None:
@@ -402,6 +408,10 @@ def _read(path: Path) -> tuple[dict[str, Any], bool]:
     if isinstance(notice_day, str):
         with contextlib.suppress(ValueError):
             state["tasks_notice_day"] = dt.date.fromisoformat(notice_day).isoformat()
+    certs_day = raw.get("certs_check_day")
+    if isinstance(certs_day, str):
+        with contextlib.suppress(ValueError):
+            state["certs_check_day"] = dt.date.fromisoformat(certs_day).isoformat()
     return state, True
 
 
@@ -1001,6 +1011,117 @@ class TasksMonitor:
         return [Notice("tasks", "normal", "Tarefas", message, id=f"t-{today}")]
 
 
+def _internet_up() -> bool:
+    """Há internet? Um TCP até o DNS da Cloudflare. Sem isso "o site não responde" seria falso alarme."""
+    try:
+        socket.create_connection(("1.1.1.1", 443), timeout=3.0).close()
+        return True
+    except OSError:
+        return False
+
+
+def certificate_problem(domain: str, cert: dict[str, Any] | None, error: str | None = None) -> tuple[str, bool] | None:
+    """O que está errado com o certificado de um domínio: (frase, grave) ou None se está tudo bem.
+
+    Grave = já não vale (inválido, vencido ou o site não responde); o resto (vence em breve) é só um aviso.
+    """
+    if error is not None:
+        return f"{domain} não respondeu ({error})", True
+    cert = cert or {}
+    if not cert.get("valid"):
+        return f"{domain} está com o certificado inválido ({cert.get('problem') or 'motivo não informado'})", True
+    days = cert.get("days_left")
+    if not isinstance(days, int):
+        return None
+    if days < 0:
+        return f"{domain} está com o certificado vencido há {-days} {'dia' if days == -1 else 'dias'}", True
+    if days < CERT_WARN_DAYS:
+        return f"{domain} vence em {days} {'dia' if days == 1 else 'dias'}" if days else f"{domain} vence hoje", False
+    return None
+
+
+class CertsMonitor:
+    """Uma vez por dia confere o certificado HTTPS dos domínios de ``JARVIS_OSINT_WATCH_DOMAINS``.
+
+    Usa ``osint.fetch_certificate``, que só conecta em IP público e no IP conferido (a mesma trava do
+    Olho de Deus). Avisa, num aviso só, os domínios que vencem em menos de 14 dias, estão com o
+    certificado inválido ou não respondem (depois de uma segunda tentativa). Sem internet no PC não conclui
+    nada: não gasta o dia e tenta de novo em 10 minutos. Nos horários de silêncio, ou com o usuário longe
+    do PC (presença ligada), espera. O dia checado fica no ``lembretes.json``, então reiniciar o Jarvis não
+    repete a checagem; quando está tudo em ordem o monitor não diz nada.
+    """
+
+    topic = "certs"
+    interval = 60.0
+
+    def __init__(
+        self,
+        domains: tuple[str, ...] | list[str],
+        *,
+        path: Path | None = None,
+        quiet_hours: tuple[int, int] | None = None,
+        present: Callable[[], bool | None] = lambda: None,
+        fetch: Callable[[str], dict[str, Any]] | None = None,
+        online: Callable[[], bool] = _internet_up,
+    ) -> None:
+        self.domains = tuple(domains)
+        self.path = path
+        self.default_quiet = quiet_hours
+        self.present = present
+        self._fetch = fetch
+        self.online = online
+        self._retry_at = 0.0
+
+    def _user_here(self) -> bool:
+        try:
+            return self.present() is not False
+        except Exception:
+            logger.exception("Não consegui saber se há alguém no PC.")
+            return True
+
+    def _certificate(self, domain: str) -> tuple[dict[str, Any] | None, str | None]:
+        """(certificado, erro): tenta duas vezes antes de dizer que o site não responde."""
+        import osint
+
+        fetch = self._fetch or osint.fetch_certificate
+        error = "sem resposta"
+        for _ in range(2):
+            try:
+                return fetch(domain), None
+            except osint.OsintError as exc:
+                error = str(exc)
+            except (OSError, ssl.SSLError) as exc:
+                error = type(exc).__name__
+        return None, error
+
+    def check(self, now: dt.datetime, clock: float) -> list[Notice]:
+        if not self.domains or clock < self._retry_at:
+            return []
+        today = now.date().isoformat()
+        state = load_state(self.path)
+        if state.get("certs_check_day") == today:
+            return []
+        if in_quiet_hours(now, quiet_window(state, self.default_quiet)) or not self._user_here():
+            return []
+        if not self.online():
+            self._retry_at = clock + CERT_RETRY_S
+            return []
+        problems = []
+        for domain in self.domains:
+            cert, error = self._certificate(domain)
+            problem = certificate_problem(domain, cert, error)
+            if problem:
+                problems.append(problem)
+        with _editing(self.path) as editing:
+            editing["certs_check_day"] = today
+        if not problems:
+            logger.info("Vigia de certificados: %d domínio(s) em ordem.", len(self.domains))
+            return []
+        message = "Certificado HTTPS: " + "; ".join(text for text, _ in problems) + "."
+        priority: Priority = "high" if any(severe for _, severe in problems) else "normal"
+        return [Notice("certs", priority, "Certificado", message, id=f"c-{today}")]
+
+
 # ───────────────────────── motor (servidor do HUD) ─────────────────────────
 
 
@@ -1067,6 +1188,15 @@ class ProactiveEngine:
                 TasksMonitor(
                     path=kwargs.get("path"),
                     tasks_path=tasks_path,
+                    quiet_hours=settings.quiet_hours,
+                    present=present or (lambda: None),
+                )
+            )
+        if settings.osint_enabled and settings.osint_watch_domains:  # ODD-42: vigia de certificados
+            monitors.append(
+                CertsMonitor(
+                    settings.osint_watch_domains,
+                    path=kwargs.get("path"),
                     quiet_hours=settings.quiet_hours,
                     present=present or (lambda: None),
                 )
@@ -1272,6 +1402,7 @@ TOPIC_ALIASES = {
     "erro": "watch", "erros": "watch", "vigia": "watch", "terminal": "watch",
     "tarefa": "tasks", "tarefas": "tasks", "pendencia": "tasks", "pendencias": "tasks",
     "foco": "focus", "pomodoro": "focus",
+    "certificado": "certs", "certificados": "certs", "https": "certs", "ssl": "certs",
 }
 ALL_WORDS = {"tudo", "todos", "todas", "all"}
 
@@ -1436,7 +1567,7 @@ def _settings_quiet_hours() -> tuple[int, int] | None:
 async def configure_alerts(
     context: RunContext,
     action: Literal["mute", "unmute", "quiet_hours", "status"],
-    topic: Literal["battery", "performance", "downloads", "disk", "reminders", "watch", "tasks", "focus", "all"] | None = None,
+    topic: Literal["battery", "performance", "downloads", "disk", "reminders", "watch", "tasks", "focus", "certs", "all"] | None = None,
     hours: float | None = None,
     quiet_start: str | None = None,
     quiet_end: str | None = None,
@@ -1455,7 +1586,7 @@ async def configure_alerts(
         action: mute, unmute, quiet_hours or status.
         topic: battery, performance (CPU/RAM), downloads, disk, reminders, watch (errors in the
             window watched by watch_screen), tasks (morning summary of tasks), focus (the focus session's
-            block changes) or all.
+            block changes), certs (the daily check of the HTTPS certificates of the user's own domains) or all.
         hours: Mute only for this many hours; omit to mute until the user lifts it.
         quiet_start: Start of the quiet hours ("23:00"), or "off" to turn them off.
         quiet_end: End of the quiet hours ("07:00").
@@ -1467,7 +1598,7 @@ async def configure_alerts(
         topics = _topics(topic)
         if not topics:
             await tool_status("configure_alerts", "error")
-            return f"Assunto desconhecido: '{topic}'. Use battery, performance, downloads, disk, reminders, watch, tasks, focus ou all."
+            return f"Assunto desconhecido: '{topic}'. Use battery, performance, downloads, disk, reminders, watch, tasks, focus, certs ou all."
         labels = ", ".join(TOPIC_LABELS[name].lower() for name in topics)
         if action == "mute":
             until = now + dt.timedelta(hours=hours) if hours and hours > 0 else None
@@ -1507,7 +1638,7 @@ async def configure_alerts(
         {
             "title": "Avisos proativos",
             "content": (
-                "Vigiando: bateria, CPU/RAM, downloads, disco, lembretes, tarefas e o foco.\n"
+                "Vigiando: bateria, CPU/RAM, downloads, disco, lembretes, tarefas, o foco e certificados.\n"
                 f"Silenciados: {muted_text}\nHorário de silêncio: {format_window(window)}\n"
                 f"Lembretes marcados: {len(state['reminders'])}"
             ),
@@ -1516,7 +1647,7 @@ async def configure_alerts(
     await tool_status("configure_alerts", "done")
     return (
         "Vigio bateria (baixa e carregador), CPU/RAM alta por mais de 5 minutos, downloads concluídos, "
-        f"disco quase cheio, os lembretes e, de manhã, as tarefas atrasadas e as de hoje. Silenciados: {muted_text}. Horário de silêncio: "
+        f"disco quase cheio, os lembretes e, de manhã, as tarefas atrasadas e as de hoje, e, uma vez por dia, o certificado HTTPS dos domínios que o usuário pediu para vigiar. Silenciados: {muted_text}. Horário de silêncio: "
         f"{format_window(window)}{' (agora)' if in_quiet_hours(now, window) else ''}. "
         f"Lembretes marcados: {len(state['reminders'])}."
     )

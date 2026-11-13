@@ -52,6 +52,21 @@ O primeiro momento útil do dia gasta o aviso, mesmo que não houvesse tarefa: u
 
 A prioridade é normal: com o link aberto o Jarvis fala; com o link fechado o aviso fica só no HUD (não abre o navegador nem acorda o Jarvis, tarefa não é urgência). O assunto é `tasks`: "para de me avisar sobre tarefas" silencia o assunto (continua no HUD, sem voz). O monitor só existe com `JARVIS_ENABLE_DAY=true` (o padrão), já que as tarefas fazem parte do [Dia a dia](dia-a-dia.md).
 
+### Certificados dos seus domínios
+
+Uma vez por dia o Jarvis confere o certificado HTTPS dos domínios que você listar no `.env` ([Olho de Deus](olho-de-deus.md#vigia-de-certificados)):
+
+```env
+JARVIS_OSINT_WATCH_DOMAINS=meusite.com.br,loja.meusite.com.br
+```
+
+Avisa, num aviso só, os que vencem em menos de 14 dias ("loja.meusite.com.br vence em 9 dias"), os com certificado inválido ou vencido e os que não responderam (tenta duas vezes antes de dizer isso). Com tudo em ordem, não diz nada. A consulta passa pela mesma trava do Olho de Deus: só conecta em IP público.
+
+- Prioridade normal para "vence em breve" (fala com o link aberto, HUD com o link fechado) e alta para inválido, vencido ou sem resposta (com o link fechado, acorda o Jarvis como um lembrete).
+- Espera o horário de silêncio acabar e, com a presença ligada, você estar na frente do PC. Sem internet no PC ele não conclui nada (para não acusar o seu site à toa) e tenta de novo em 10 minutos.
+- O dia da última conferência fica no `lembretes.json` (`certs_check_day`), então reiniciar o Jarvis não repete. Para conferir de novo no mesmo dia, troque esse valor por `null`.
+- O assunto é `certs`: "para de me avisar sobre certificados" silencia a voz (continua no HUD).
+
 ### Troca de bloco do foco
 
 A [sessão de foco](dia-a-dia.md#foco-foc-47) também avisa pelo motor, com o assunto `focus`: "Hora da pausa", "De volta ao foco", "Sessão de foco concluída" e, com a presença ligada, "Foco retomado" quando você volta. A prioridade é normal: com o link aberto o Jarvis fala; com o link fechado o aviso fica no HUD e, com o [ícone da bandeja](bandeja.md#avisos-do-jarvis-na-bandeja), vira notificação do Windows. Nunca abre o navegador. O assunto é `focus` ("para de me avisar sobre o foco"). Vale também com `JARVIS_PROACTIVE=false`: sem o motor, o aviso vai só para a bandeja e para a aba aberta.

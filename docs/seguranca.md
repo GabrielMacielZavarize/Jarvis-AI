@@ -226,7 +226,7 @@ O `saude.db` fica só no PC e não guarda texto da conversa: nomes de ferramenta
 
 ## Olho de Deus
 
-As consultas do ODD-42 só usam fontes públicas e recusam CPF, telefone e outros dados pessoais de terceiros. O que vai a um endereço escolhido por você (um link, o certificado de um domínio) só conecta em IP público, no IP que foi conferido e nas portas 80, 443, 8080 e 8443, e nunca lê o corpo da página: a consulta não serve para alcançar o roteador nem outro serviço da sua rede. A senha é conferida sem sair do navegador (só os 5 primeiros caracteres do SHA-1 vão ao servidor). A consulta da rede local vem desligada e só lê o que o sistema já sabe. Detalhes em [olho-de-deus.md](olho-de-deus.md#cuidados-de-segurança).
+As consultas do ODD-42 só usam fontes públicas e recusam CPF, telefone e outros dados pessoais de terceiros. O que vai a um endereço escolhido por você (um link, o certificado de um domínio) só conecta em IP público, no IP que foi conferido e nas portas 80, 443, 8080 e 8443, e nunca lê o corpo da página: a consulta não serve para alcançar o roteador nem outro serviço da sua rede. O InternetDB e o URLhaus só recebem o IP ou o link que você consultou; a chave do URLhaus fica só no `.env` e nunca aparece em resultado, log ou HUD, e o vigia de certificados usa a mesma trava de IP público. A senha é conferida sem sair do navegador (só os 5 primeiros caracteres do SHA-1 vão ao servidor). A consulta da rede local vem desligada e só lê o que o sistema já sabe. Detalhes em [olho-de-deus.md](olho-de-deus.md#cuidados-de-segurança).
 
 ## Celular na rede
 
