@@ -33,7 +33,7 @@ Quase tudo que mexe no PC vem desligado e liga por variável no `.env`. A lista 
 
 ## Começando
 
-Precisa de Python 3.10 ou mais novo, Node.js 20 ou mais novo, uma conta no [LiveKit Cloud](https://cloud.livekit.io) e uma chave do Gemini (grátis no [AI Studio](https://aistudio.google.com/apikey)).
+Precisa de Python 3.11 ou mais novo, Node.js 20 ou mais novo, uma conta no [LiveKit Cloud](https://cloud.livekit.io) e uma chave do Gemini (grátis no [AI Studio](https://aistudio.google.com/apikey)).
 
 No Windows:
 
@@ -42,7 +42,7 @@ git clone https://github.com/GabrielMacielZavarize/Jarvis-AI.git
 cd Jarvis-AI
 py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt   # versões travadas (docs/instalacao.md)
 copy .env.example .env
 python agent.py download-files
 ```

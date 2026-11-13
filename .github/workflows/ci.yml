@@ -32,7 +32,7 @@ jobs:
       # xvfb e tk: o pyautogui do pc_control não importa sem tela. libegl1: o detector real do MediaPipe.
       - name: Pacotes do sistema
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb python3-tk libegl1 libgles2
-      # No Linux o requirements.txt já deixa o openwakeword de fora e traz o opencv-contrib que o mediapipe usa.
+      # O requirements.txt é o lock (gerado do requirements.in). No Linux ele já deixa o openwakeword de fora.
       - name: Dependências
         run: pip install -r requirements.txt pytest
       - uses: actions/cache@v4
@@ -102,3 +102,51 @@ jobs:
             web/playwright-report
             web/test-results
           retention-days: 7
+
+  # Auditoria de vulnerabilidades conhecidas nas dependências travadas. Quebra o CI quando acha algo:
+  # atualize a dependência ou registre a exceção com motivo (docs/instalacao.md, "Auditoria").
+  auditoria-python:
+    name: pip-audit (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # O pip-audit só confere o que vale para o sistema onde roda (pycaw, comtypes e pywin32 só existem
+        # no Windows; openwakeword só fora do Linux). Rodar nos dois cobre o lock inteiro.
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ferramentas
+        run: python -m pip install pip-audit uv
+      # Um lock que não bate com o requirements.in esconde dependência nova da auditoria.
+      - name: Lock em dia com o requirements.in
+        if: runner.os == 'Linux'
+        run: |
+          uv pip compile requirements.in --universal --python-version 3.11 -o requirements.txt
+          git diff --exit-code requirements.txt
+      # --no-deps: o lock já traz tudo, com versão exata. --disable-pip: não instala nada para auditar.
+      # Exceções (se houver) vão como --ignore-vuln ID, cada uma com o motivo em docs/instalacao.md.
+      - name: pip-audit
+        run: pip-audit -r requirements.txt --no-deps --disable-pip
+
+  auditoria-npm:
+    name: npm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # Só as dependências de produção; o que é só de build e de teste não vai para quem usa o HUD.
+      - name: npm audit
+        run: npm audit --omit=dev --audit-level=high

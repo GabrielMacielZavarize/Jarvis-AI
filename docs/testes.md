@@ -32,6 +32,7 @@ Tudo roda com mocks: os testes não instalam, não tocam, não abrem, não clica
 | Voz | `tests/test_voices.py` confere `JARVIS_VOICE`, a lista de vozes contra a do plugin, o `voz.json` (uma voz por persona, e o arquivo antigo valendo para o J.A.R.V.I.S.), a ferramenta `change_voice` (troca na hora depois da resposta) e o tom do prompt |
 | Personas | `tests/test_personas.py` confere o `persona.json`, o prompt do J.A.R.V.I.S. intacto, a persona e a saudação de cada uma, a troca que mantém memórias e contexto, a espera pela conversa quieta, a troca ao vivo (instruções, voz e apresentação) e o `/api/persona` |
 | Gestos no HUD | `tests/test_gesture_management.py` confere o catálogo, os gestos que fazem a mesma coisa, a API `/api/gestures` com as recusas da voz e outros sites barrados, e os botões pelo RPC do agente |
+| Dependências | `tests/test_requirements.py` confere o lock: versão exata em toda linha, dependências diretas presentes e marcadores de plataforma preservados |
 | Build do HUD | `tests/test_web_build.py` confere que o `--rebuild` roda o `npm install` quando o `package-lock.json` mudou |
 | Agenda | Datas em português com relógio fixo, busca do evento falado ("a reunião das 10"), criar, alterar e apagar só com "confirmar agenda" e o código, erros de login e de rede, aviso antes das reuniões (janela, uma vez só, fila no servidor e despertar do HUD), com a API do Google falsa |
 | Avisos | Horários em português ("amanhã às 10h", "daqui a 2h30", "segunda às 9") com relógio falso, `lembretes.json` entre reinícios e com trava, bateria, CPU, RAM e disco com sondas falsas, pasta Downloads falsa (parciais do Chrome e do Firefox), rota de cada prioridade com o link aberto e fechado, silêncio, assuntos silenciados, abertura do link pela via da palavra de ativação e as ferramentas de voz |
@@ -51,19 +52,35 @@ No HUD (vitest, em `web/`): o som de cada evento, o volume salvo no navegador e 
 
 ## CI no GitHub Actions
 
-O `.github/workflows/ci.yml` roda a cada push na `main` e em cada pull request. São três jobs em paralelo no Ubuntu.
+O `.github/workflows/ci.yml` roda a cada push na `main` e em cada pull request. São três jobs de teste em paralelo no Ubuntu e os de auditoria das dependências.
 
 | Job | O que roda |
 | --- | --- |
 | pytest | Python 3.12, `TZ=America/Sao_Paulo`, `PYTHONDONTWRITEBYTECODE=1`, `xvfb-run -a python -m pytest -q -rs tests`. Instala `xvfb`, `python3-tk` e `libegl1` e baixa o modelo do detector de rosto do MediaPipe (fica no cache) |
 | vitest e build do HUD | Node 22, `npm ci`, `npm test` e `npm run build` em `web/` |
 | testes visuais do HUD | Playwright com Chromium contra `python jarvis.py --no-agent` |
+| auditoria-python | `pip-audit` no `requirements.txt` travado, no Ubuntu e no Windows. No Ubuntu confere antes que o lock bate com o `requirements.in` |
+| auditoria-npm | `npm audit --omit=dev --audit-level=high` em `web/` |
 
-O cache do pip usa o `requirements.txt` e o do npm usa o `web/package-lock.json`. No Linux o `requirements.txt` já deixa o openwakeword de fora (não tem wheel para o Python 3.12) e traz o `opencv-contrib-python` que o mediapipe precisa. Os dois testes pulados são esperados, porque só existem no Windows. O do detector de rosto real roda porque o CI baixa o modelo do MediaPipe.
+O cache do pip usa o `requirements.txt` (o lock, gerado do `requirements.in`; veja [instalacao.md](instalacao.md#dependências-e-versões-travadas)) e o do npm usa o `web/package-lock.json`. No Linux o `requirements.txt` já deixa o openwakeword de fora (não tem wheel para o Python 3.12) e traz o `opencv-contrib-python` que o mediapipe precisa. Os dois testes pulados são esperados, porque só existem no Windows. O do detector de rosto real roda porque o CI baixa o modelo do MediaPipe.
 
 Quando um teste visual falha, o relatório do Playwright fica nos artefatos da execução por 7 dias.
 
 Sem o `PYTHONDONTWRITEBYTECODE=1`, a primeira execução num checkout novo travava no `test_dictation.py` e terminava em segmentation fault: o Python gravando os `.pyc` no meio da suíte. Com os `.pyc` já compilados ou sem gravar nenhum, passa. Um teste parado por mais de 60 s despeja a pilha de todas as threads no log (`faulthandler_timeout=60`) e o passo para em 10 minutos.
+
+### Auditoria das dependências
+
+Os dois jobs de auditoria falham o CI quando acham uma vulnerabilidade conhecida (no npm, de severidade alta ou crítica, só nas dependências de produção). Servem para avisar cedo, e não dependem do resto da suíte.
+
+| Passo | O que confere |
+| --- | --- |
+| Lock em dia (só no Ubuntu) | Regenera o `requirements.txt` com `uv pip compile requirements.in --universal --python-version 3.11` e falha se o arquivo mudou: alguém editou o `.in` e esqueceu o lock, ou editou o lock à mão. O uv mantém as versões já travadas, então ele só reclama de diferença de verdade |
+| `pip-audit` | Audita as versões exatas do lock, sem instalar nada (`--no-deps --disable-pip`). Roda no Windows também, porque o `pip-audit` só olha os pacotes que valem para o sistema onde roda (`pycaw`, `comtypes` e `pywin32` só no Windows) |
+| `npm audit` | `npm audit --omit=dev --audit-level=high` em `web/` |
+
+`tests/test_requirements.py` confere o mesmo localmente, sem rede: toda linha do lock tem versão exata, toda dependência do `requirements.in` está no lock e os marcadores do `pycaw`, `comtypes` e `openwakeword` continuam lá. Alerta, exceção e como atualizar estão em [instalacao.md](instalacao.md#auditoria).
+
+O `.github/dependabot.yml` abre os PRs semanais de atualização; o CI normal roda neles como em qualquer PR.
 
 ### Testes visuais do HUD
 

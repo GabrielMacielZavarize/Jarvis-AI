@@ -1,0 +1,37 @@
+# Dependências DIRETAS do Jarvis. É a lista que você edita.
+# O requirements.txt é gerado a partir dela e trava a versão de tudo (veja docs/instalacao.md):
+#   uv pip compile requirements.in --universal --python-version 3.11 -o requirements.txt
+# Não edite o requirements.txt à mão. Os marcadores de plataforma (sys_platform) ficam aqui e o lock os preserva.
+
+# [mcp]: integrações por servidores MCP (MCP-32), ligadas com JARVIS_ENABLE_MCP=true
+# 1.8.11 ou mais novo: antes disso a troca de ferramentas (FER-33) retomava a sessão do Gemini com as antigas
+livekit-agents[mcp]>=1.8.11
+livekit-plugins-openai
+livekit-plugins-silero
+livekit-plugins-google>=1.8.11
+livekit-plugins-noise-cancellation
+ddgs
+requests
+python-dotenv
+psutil
+tzdata
+fastapi
+uvicorn[standard]
+httpx
+pyautogui
+pycaw; sys_platform == "win32"
+comtypes; sys_platform == "win32"
+# Gestos das mãos (opcional): mediapipe já traz o opencv-contrib; não instale opencv-python junto
+mediapipe
+opencv-contrib-python
+# Palavra de ativação "Jarvis" (WAK-22). No Linux o openwakeword exige tflite-runtime, sem wheel para o Python 3.12.
+openwakeword; sys_platform != "linux"
+sounddevice
+
+# Google Agenda (AGD-27): login OAuth de app desktop e a API do Calendar
+google-auth-oauthlib
+google-api-python-client
+
+# Celular na rede de casa (LAN-26): certificado HTTPS local e QR de pareamento
+cryptography
+segno

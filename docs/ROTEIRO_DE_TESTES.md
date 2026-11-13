@@ -476,3 +476,14 @@ Rotinas que você já tinha:
 - [ ] "Muda a rotina bom dia para cumprimento, briefing, layout trabalho e a playlist lo-fi." Depois "bom dia, Jarvis" usa o briefing.
 - [ ] "Cria uma rotina cedo que dá o briefing e abre o Notion" e "roda a rotina cedo": o briefing é falado e o Notion abre. "Quais rotinas eu tenho?" mostra "Briefing do dia" nos passos.
 - [ ] "Todo dia útil às 8h roda o bom dia" (horário daqui a 2 minutos, com o link fechado): o navegador abre, o Jarvis fala o briefing e o painel Briefing aparece.
+
+## Dependências travadas e auditoria
+
+Detalhes em [instalacao.md](instalacao.md#dependências-e-versões-travadas) e [testes.md](testes.md#auditoria-das-dependências). Os testes automáticos conferem o lock e o CI audita; aqui você confere o Windows de verdade e o CI no GitHub.
+
+- [ ] Num `.venv` novo no Windows (`py -3.12 -m venv .venv`), `python -m pip install -r requirements.txt` termina sem erro (confira principalmente `mediapipe`, `opencv-contrib-python`, `pycaw`, `comtypes` e `openwakeword`, que têm roda nativa por sistema) e `python -m pip check` diz "No broken requirements found".
+- [ ] `python doctor.py` e `python jarvis.py` sobem como antes: o HUD abre, o "Jarvis" ativa e a voz responde (uma troca de falas basta).
+- [ ] Com a agenda, o volume (pycaw) e a palavra de ativação ligados, nada reclama de pacote faltando ou de versão.
+- [ ] Depois de um `git pull` que mexeu no `package-lock.json`, o `python jarvis.py` roda o `npm install` sozinho e recompila o HUD.
+- [ ] No GitHub, a aba Actions mostra os jobs `pip-audit (ubuntu-latest)`, `pip-audit (windows-latest)` e `npm audit` verdes. Um Dependabot em `Insights > Dependency graph > Dependabot` aparece com pip, npm e github-actions.
+- [ ] Um PR de teste que adiciona uma linha em `requirements.in` sem regenerar o `requirements.txt` faz o passo "Lock em dia" falhar.

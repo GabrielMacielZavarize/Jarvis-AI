@@ -2,7 +2,7 @@
 
 ## O que precisa
 
-- Python 3.10 ou mais novo.
+- Python 3.11 ou mais novo (o 3.12 é o que o CI e o passo a passo usam).
 - Node.js 20 ou mais novo, para compilar o HUD.
 - Conta no [LiveKit Cloud](https://cloud.livekit.io). O plano gratuito serve para começar.
 - Uma chave de modelo: `GOOGLE_API_KEY` para o Gemini Live (padrão) ou `OPENAI_API_KEY` para os backends da OpenAI.
@@ -31,6 +31,55 @@ source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 cp .env.example .env
 ```
+
+## Dependências e versões travadas
+
+O `requirements.txt` é um lock: traz todas as dependências, as diretas e as que elas puxam, cada uma com a versão exata (`pacote==1.2.3`). Dois computadores que instalam a partir dele ficam com o mesmo ambiente, e uma versão nova de biblioteca não muda o comportamento do Jarvis sem ninguém ver.
+
+| Arquivo | Para que serve |
+| --- | --- |
+| `requirements.in` | As dependências diretas, escritas à mão. Só leva um piso (`>=`) quando existe um motivo, comentado na linha. É esse que você edita |
+| `requirements.txt` | O lock gerado do `.in`. Não edite à mão |
+| `web/package-lock.json` | O mesmo para o Node. O `npm ci` instala exatamente o que está nele |
+
+O lock é universal: o mesmo arquivo vale para Windows, Linux e macOS, e os marcadores de plataforma continuam nele. O `pycaw` e o `comtypes` só entram no Windows (`; sys_platform == 'win32'`) e o `openwakeword` fica de fora no Linux (`; sys_platform != 'linux'`), porque ali ele exige o `tflite-runtime`, sem wheel para o Python 3.12. Para quem só quer instalar, nada muda: `python -m pip install -r requirements.txt` serve em qualquer sistema e instala só o que vale para o seu. Ele foi resolvido para o Python 3.11 ou mais novo: no 3.10 a trava cairia numa versão do `onnxruntime` sem pacote pronto, por isso o piso subiu de 3.10 para 3.11.
+
+Depois de um `git pull` que mexeu no `requirements.txt`, rode o mesmo `pip install -r requirements.txt` de novo. O pip não remove o que saiu do lock; se quiser um ambiente idêntico ao do arquivo, use `uv pip sync requirements.txt` ou recrie o `.venv`.
+
+### Atualizar ou adicionar uma dependência
+
+Precisa do [uv](https://docs.astral.sh/uv/) só para quem mexe no lock (`python -m pip install uv`). Rode sempre na raiz do repositório:
+
+```bash
+# regenerar depois de editar o requirements.in (mantém as versões que já estavam, muda só o que mudou no .in)
+uv pip compile requirements.in --universal --python-version 3.11 -o requirements.txt
+
+# subir uma dependência (e o que ela puxa) para a versão mais nova
+uv pip compile requirements.in --universal --python-version 3.11 -o requirements.txt --upgrade-package livekit-agents
+
+# subir tudo de uma vez (revise o diff e rode os testes)
+uv pip compile requirements.in --universal --python-version 3.11 -o requirements.txt --upgrade
+```
+
+Depois instale (`python -m pip install -r requirements.txt`), rode `python -m pytest -q tests` e `cd web && npm test && npm run build`, e faça o commit do `.in` e do `.txt` juntos. O `pip-compile` do pip-tools também funciona, mas a linha acima é a que o CI confere. O CI regenera o lock e falha se ele não bate com o `requirements.in` (veja o job `auditoria-python` em [testes.md](testes.md#auditoria-das-dependências)).
+
+No Node: `cd web && npm install <pacote>@<versão>` atualiza o `package.json` e o `package-lock.json`; faça o commit dos dois. O `jarvis.py` roda o `npm install` sozinho quando o `package-lock.json` é mais novo que o `node_modules`.
+
+O Dependabot (`.github/dependabot.yml`) abre toda segunda-feira um PR por ecossistema (pip, npm em `web/` e GitHub Actions) com as atualizações menores juntas. As maiores (major) vêm em PRs separados. Os testes do CI dizem se o PR pode entrar.
+
+### Auditoria
+
+O CI procura vulnerabilidades conhecidas nas versões travadas: `pip-audit` no `requirements.txt` (no Ubuntu e no Windows, porque cada um só enxerga os pacotes do próprio sistema) e `npm audit --omit=dev --audit-level=high` em `web/`. Para rodar no seu computador:
+
+```bash
+python -m pip install pip-audit
+pip-audit -r requirements.txt --no-deps --disable-pip
+cd web && npm audit --omit=dev --audit-level=high
+```
+
+Quando a auditoria acha algo, o primeiro caminho é atualizar a dependência (`--upgrade-package`). Se não houver versão corrigida, ou se a atualização quebrar o Jarvis, registre a exceção aqui com o motivo e passe `--ignore-vuln <ID>` no job. Nada de esconder o aviso sem dizer por quê.
+
+Exceções registradas: nenhuma. A auditoria de hoje (`pip-audit` no lock e `npm audit` em `web/`) não achou nada. Ao registrar uma, ponha aqui o ID do alerta, o pacote, o motivo e quando revisar.
 
 Preencha o `.env` (próximas seções) e baixe os modelos locais que o LiveKit usa:
 
