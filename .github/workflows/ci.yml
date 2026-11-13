@@ -35,7 +35,7 @@ jobs:
       # O requirements.txt é o lock (gerado do requirements.in). No Linux ele já deixa o openwakeword de fora.
       - name: Dependências
         run: pip install -r requirements.txt pytest
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .cache/models
           key: mediapipe-models-v1
