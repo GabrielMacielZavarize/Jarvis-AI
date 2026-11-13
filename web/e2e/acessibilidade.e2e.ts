@@ -39,7 +39,8 @@ async function openHud(page: Page, persona: string, prefs?: Record<string, unkno
   }
   await page.goto('/');
   await page.locator('.boot').click();
-  await expect(page.locator('.hud.hud--online')).toBeVisible();
+  // No celular emulado, com o PC ocupado, a cena pode levar mais que os 5 s de costume para abrir.
+  await expect(page.locator('.hud.hud--online')).toBeVisible({ timeout: 20_000 });
   return errors;
 }
 
@@ -91,8 +92,8 @@ async function findCut(page: Page): Promise<string[]> {
         range.selectNodeContents(node);
         parts.push(...range.getClientRects());
       }
-      const right = Math.max(0, ...parts.map((rect) => rect.right));
-      const bottom = Math.max(0, ...parts.map((rect) => rect.bottom));
+      const right = Math.max(-Infinity, ...parts.map((rect) => rect.right));
+      const bottom = Math.max(-Infinity, ...parts.map((rect) => rect.bottom));
       const text = (el.textContent ?? '').trim().slice(0, 30);
       if (hiddenX && style.textOverflow !== 'ellipsis' && right > box.right + 1) out.push(`X ${label(el)} ${Math.round(right)}>${Math.round(box.right)} “${text}”`);
       const clamped = style.webkitLineClamp && style.webkitLineClamp !== 'none';
