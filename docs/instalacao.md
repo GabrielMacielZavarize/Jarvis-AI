@@ -124,14 +124,14 @@ Compila o HUD na primeira execução, sobe o worker do agente (`agent.py dev`) e
 | `python jarvis.py --no-agent` | Só o HUD, bom para o modo simulação |
 | `python jarvis.py --agent-mode start` | Worker sem hot reload |
 | `python jarvis.py --port 8080 --no-browser` | Outra porta, sem abrir o navegador |
-| `python jarvis.py --rebuild` | Recompila o HUD |
+| `python jarvis.py --rebuild` | Força a recompilação do HUD (ele já recompila sozinho quando o código muda) |
 | `python jarvis.py --lan` | Atende também o celular na rede de casa, com HTTPS e pareamento ([celular.md](celular.md)) |
 | `python jarvis.py --gestures` | Liga também os gestos das mãos ([gestos.md](gestos.md)) |
 | `pythonw jarvis.py --tray` | Só o ícone na bandeja do Windows, sem console e com os logs em `logs/jarvis.log` ([bandeja.md](bandeja.md)) |
 | `python gestures.py --preview` | Só os gestos, com a imagem da webcam para testar |
 | `python gestures.py --calibrate` | Calibra os gestos para a sua mão |
 
-Depois de atualizar o código, rode uma vez com `--rebuild`. Sem isso o navegador continua com o HUD antigo.
+Depois de atualizar o código não precisa fazer nada: o `jarvis.py` percebe que os arquivos do HUD mudaram desde a última compilação e recompila sozinho ao iniciar. O `--rebuild` continua valendo para forçar. Se o Node não estiver instalado ou a compilação falhar, ele avisa e segue com o HUD que já estava compilado.
 
 ### Conferindo a configuração
 

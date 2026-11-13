@@ -43,19 +43,48 @@ def _print_banner() -> None:
     )
 
 
+# O que entra na compilação do HUD: mudou algo aqui depois do último build, ele está velho.
+BUILD_INPUTS = ("src", "public", "index.html", "package.json", "vite.config.ts", "tsconfig.json")
+
+
+def _build_stale(web_dir: Path | None = None) -> bool:
+    """web/dist is missing or older than the HUD sources (a pull brought a new interface)."""
+    web = web_dir or WEB_DIR
+    built = web / "dist" / "index.html"
+    if not built.exists():
+        return True
+    stamp = built.stat().st_mtime
+    for name in BUILD_INPUTS:
+        path = web / name
+        files = [path] if path.is_file() else path.rglob("*") if path.is_dir() else []
+        if any(file.is_file() and file.stat().st_mtime > stamp for file in files):
+            return True
+    return False
+
+
 def _ensure_web_build(force: bool) -> bool:
-    if (WEB_DIR / "dist" / "index.html").exists() and not force:
+    built = (WEB_DIR / "dist" / "index.html").exists()
+    if built and not force and not _build_stale():
         return True
 
     npm = shutil.which("npm")
     if npm is None:
+        if built:
+            # Sem o Node dá para seguir com o HUD que já estava compilado.
+            print("[HUD] A interface mudou, mas o Node.js/npm não foi encontrado: seguindo com a versão já compilada.")
+            return True
         print("[HUD] Node.js/npm não encontrado. Instale o Node 20+ para compilar a interface.")
         return False
 
-    print("[HUD] Compilando a interface web (primeira execução)...")
-    if _dependencies_stale():
-        subprocess.run([npm, "install"], cwd=WEB_DIR, check=True)
-    subprocess.run([npm, "run", "build"], cwd=WEB_DIR, check=True)
+    print("[HUD] Compilando a interface web (primeira execução)..." if not built else "[HUD] A interface mudou desde a última compilação: recompilando...")
+    try:
+        if _dependencies_stale():
+            subprocess.run([npm, "install"], cwd=WEB_DIR, check=True)
+        subprocess.run([npm, "run", "build"], cwd=WEB_DIR, check=True)
+    except (subprocess.CalledProcessError, OSError):
+        if not built:
+            raise
+        print("[HUD] A compilação falhou: seguindo com a versão anterior. Rode `npm run build` em web/ para ver o erro.")
     return True
 
 
