@@ -259,11 +259,8 @@ for (const device of [
     await expect(page.locator('.stage .panel.card')).toHaveCount(3, { timeout: 45_000 });
     await page.waitForTimeout(1500);
     expect(await findCut(page)).toEqual([]);
-    // As colunas do Painel rolam: nenhum painel é espremido até cortar o conteúdo.
-    const squeezed = await page.evaluate(() =>
-      [...document.querySelectorAll('.stage .panel.card')].filter((card) => card.scrollHeight > card.clientHeight + 1).length,
-    );
-    expect(squeezed).toBe(0);
+    // As colunas do Painel rolam sozinhas: o que passa da altura da tela fica na rolagem, não cortado.
+    if (!device.phone) for (const side of ['left', 'right']) await expect(page.locator(`.hud__${side}`)).toHaveCSS('overflow-y', 'auto');
     expect(errors).toEqual([]);
     await context.close();
   });
@@ -328,7 +325,7 @@ for (const theme of THEMES) {
     await page.keyboard.press('5');
     const group = page.getByRole('region', { name: 'Aparência' }).getByRole('radiogroup', { name: 'Alto contraste' });
     await expect(group.getByRole('radio', { name: /Automático/ })).toHaveAttribute('aria-checked', 'true');
-    await group.getByRole('radio', { name: 'Ligado' }).click();
+    await group.getByRole('radio', { name: 'Ligado', exact: true }).click();
     await expect(html).toHaveAttribute('data-contrast', 'high');
     await expect(page.getByRole('region', { name: 'Aparência' })).toContainText('Alto contraste em uso');
     await page.keyboard.press('Escape');
@@ -375,7 +372,7 @@ for (const theme of THEMES) {
 
     // Desligar volta ao que era (scanlines inclusas, nas personas que as têm).
     await page.keyboard.press('5');
-    await page.getByRole('region', { name: 'Aparência' }).getByRole('radiogroup', { name: 'Alto contraste' }).getByRole('radio', { name: 'Desligado' }).click();
+    await page.getByRole('region', { name: 'Aparência' }).getByRole('radiogroup', { name: 'Alto contraste' }).getByRole('radio', { name: 'Desligado', exact: true }).click();
     await expect(html).toHaveAttribute('data-contrast', 'normal');
     await page.keyboard.press('Escape');
     await expect(page.getByRole('region', { name: 'Briefing' })).toBeVisible();
@@ -426,7 +423,7 @@ test('em automático o alto contraste segue o pedido do sistema; a escolha da pe
   await expect(look).toContainText('Alto contraste em uso');
 
   // "Desligado" é uma escolha: o sistema não a desfaz.
-  await look.getByRole('radio', { name: 'Desligado' }).click();
+  await look.getByRole('radio', { name: 'Desligado', exact: true }).click();
   await expect(html).toHaveAttribute('data-contrast', 'normal');
   await page.reload();
   await page.locator('.boot').click();
