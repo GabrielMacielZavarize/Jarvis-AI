@@ -2,6 +2,26 @@
 
 O que se usa todo dia sem pensar: tarefas e notas, o briefing, o foco, as cotações e o teste da internet. Tudo funciona por voz e pela área Dia a dia do HUD (tecla `2`). Um interruptor só liga e desliga o conjunto: `JARVIS_ENABLE_DAY` (vem ligado).
 
+## Como o Jarvis escolhe
+
+Alguns pedidos se parecem e vão para ferramentas diferentes. O prompt do Jarvis (só com o Dia a dia ligado) desempata assim:
+
+| Você diz | Vira |
+| --- | --- |
+| "Anota aí: ideia do painel de consumo." | Nota (`add_note`) |
+| "Tenho que fechar o relatório até sexta." | Tarefa com prazo de um dia (`add_task`) |
+| "Lembra que eu prefiro lo-fi pra programar." / "Anota que eu sou alérgico a dipirona." | Fato sobre você (`remember`, com a memória ligada) |
+| "Me lembra às 15h de ligar pro contador." | Aviso numa hora marcada (`set_reminder`, com os [avisos](avisos.md) ligados), mesmo que comece com "tenho que" |
+| "Timer de 5 minutos." | Contagem só desta conversa (`set_timer`) |
+| "Começa um foco de 25 minutos." / "Um pomodoro." | Sessão de foco (`focus_session`) |
+| "Modo foco." | A rotina "modo foco", se as rotinas estiverem ligadas; sem elas, a sessão de foco |
+| "Como está o meu dia?" | Briefing (`daily_briefing`) |
+| "O que eu tenho hoje?" | A agenda, se a [agenda](agenda.md) estiver ligada; sem ela, o briefing |
+| "Bom dia, Jarvis." | A rotina "bom dia", que não é o briefing |
+| "10 milhas em quilômetros." | Conversão de unidade, conta local, sem internet |
+
+Tarefa com hora marcada e aviso pedido é um lembrete, não uma tarefa: o prazo da tarefa é sempre um dia, sem hora. Só vira as duas coisas se você pedir as duas. As ferramentas de tarefas e notas ficam sempre com o Jarvis, mesmo com as [ferramentas sob demanda](ferramentas-sob-demanda.md); briefing, foco, cotações e teste de rede vêm no grupo `dia`.
+
 ## Tarefas e notas (TAR-43)
 
 Uma tarefa tem um texto, um prazo opcional (um dia, sem hora) e fica aberta ou feita. Uma nota é só um texto guardado. Aviso com hora marcada é outra coisa: são os lembretes do PRO-28 ([avisos.md](avisos.md)).
@@ -52,7 +72,7 @@ Limites: foco de 1 a 180 minutos, pausa de 1 a 60 e de 1 a 12 blocos. Pela palet
 
 Como a contagem é da aba do navegador, ela precisa de uma aba do HUD aberta para avisar. Com a aba fechada o horário não se perde: ao reabrir, o HUD passa pelos blocos que venceram e mostra onde a sessão está.
 
-A rotina "modo foco" ([memoria-e-rotinas.md](memoria-e-rotinas.md)) continua existindo e faz outra coisa: minimiza as janelas, baixa o volume e põe um timer.
+A rotina "modo foco" ([memoria-e-rotinas.md](memoria-e-rotinas.md)) continua existindo e faz outra coisa: minimiza as janelas, baixa o volume e põe um timer. Dito sozinho, "modo foco" é a rotina; "foco de 25 minutos", "pomodoro" e "bloco de foco" são a sessão. Quem esconde os painéis é o "modo cinema" ([hud.md](hud.md)): "modo foco" só faz isso se não existir a rotina nem a sessão de foco.
 
 ## Cotações e conversões (COT-44)
 

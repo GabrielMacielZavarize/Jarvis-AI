@@ -35,7 +35,7 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `backends.py` | Gemini, OpenAI Realtime e pipeline compatível, compressão de contexto e troca de modelo na conversa |
 | `model_pool.py` | Fila de modelos do Gemini: reservas, rodízio e pausa por cota ou sobrecarga (`modelos.json`) |
 | `settings.py` | Leitura e validação do `.env` |
-| `prompts.py` | Regras comuns a todas as personas, saudação por horário e resumo das memórias |
+| `prompts.py` | Regras comuns a todas as personas, regras só das ferramentas ligadas na sessão (`build_feature_rules`: Dia a dia e Olho de Deus), saudação por horário e resumo das memórias |
 | `personas.py` | Personas do HUD no agente (J.A.R.V.I.S., Mark III, F.R.I.D.A.Y., Stealth): jeito, voz, saudação, `persona.json` e a troca ao vivo |
 | `tools.py` | Ferramentas do Jarvis |
 | `weather.py` | Clima do Open-Meteo: rótulos dos códigos e o resumo do modo ambiente |

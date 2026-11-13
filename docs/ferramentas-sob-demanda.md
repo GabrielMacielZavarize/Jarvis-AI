@@ -23,7 +23,9 @@ A placa do núcleo mostra "FER-33 · Carregando ferramentas" com o nome do grupo
 
 ## O núcleo
 
-Fica sempre com o modelo: clima, pesquisa, notícias, hora, diagnóstico, timers, painéis do HUD, microfone, encerrar, voz, memória, rodar uma rotina (`run_routine`, para o "bom dia, Jarvis" não esperar), o `mcp_status` e todas as ferramentas de confirmar e cancelar por código. Ferramenta nova que ainda não está em grupo nenhum também fica no núcleo.
+Fica sempre com o modelo: clima, pesquisa, notícias, hora, diagnóstico, timers, painéis do HUD, microfone, encerrar, voz, memória, tarefas e notas (`add_task`, `add_note`, `list_tasks`, `complete_task`, `remove_task`), rodar uma rotina (`run_routine`, para o "bom dia, Jarvis" não esperar), o `mcp_status` e todas as ferramentas de confirmar e cancelar por código. Ferramenta nova que ainda não está em grupo nenhum também fica no núcleo.
+
+As tarefas e notas estão no núcleo de propósito: são pedidos de todo dia e, se ficassem num grupo, um "anota aí" cairia no `remember` (que é do núcleo) em vez de virar nota, porque o modelo usa a ferramenta que tem à mão. Elas custam cerca de 600 tokens a mais no núcleo.
 
 ## Os grupos
 
@@ -41,6 +43,8 @@ Fica sempre com o modelo: clima, pesquisa, notícias, hora, diagnóstico, timers
 | `avisos` | `set_reminder`, `list_reminders`, `cancel_reminder`, `configure_alerts` |
 | `diario` | `diary_lookup`, `forget_diary` |
 | `apps` | `search_apps`, `prepare_app_install` |
+| `dia` | `daily_briefing`, `focus_session`, `get_quotes`, `convert_value`, `network_speed` |
+| `olho` | `osint_lookup` |
 | um por servidor MCP | as ferramentas liberadas dele (`github`, `notion`...) |
 
 Só entram os grupos das partes ligadas no `.env`. O servidor MCP conecta quando o grupo dele entra pela primeira vez, e não quando o link abre. Até lá o `mcp_status` diz "ainda conectando".
@@ -52,7 +56,7 @@ Feitas no container com tudo ligado, contando o JSON das declarações que vão 
 | Conjunto | Ferramentas | Tokens |
 | --- | --- | --- |
 | Todas | 79 | 14.200 |
-| Núcleo | 27 | 3.200 |
+| Núcleo | 32 (27 e 3.200 tokens antes das tarefas entrarem; elas somam cerca de 600) | 3.800 |
 | Maior grupo (`janelas`) | 11 | 2.300 |
 | Grupo médio | 2 a 5 | 300 a 1.100 |
 | `.env` padrão (memória, diário e rotinas) | 25 | fica tudo junto no `auto` |

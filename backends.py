@@ -14,7 +14,7 @@ from livekit.plugins import google, noise_cancellation, openai, silero
 from health import report as report_health
 from model_pool import REASON_LABELS, ModelPool, classify_failure
 from personas import load_persona, set_active
-from prompts import build_agent_instructions, build_initial_reply_instruction
+from prompts import build_agent_instructions, build_feature_rules, build_initial_reply_instruction
 from settings import Settings
 from tools import PENDING_EMAIL_KEY, build_tools
 from voices import effective_voice
@@ -272,6 +272,7 @@ def build_runtime(
             persona=persona,
             integrations=_integrations_summary() if settings.mcp_enabled else None,
             tool_groups=router.summary() if router else None,
+            feature_rules=build_feature_rules(settings),
         )
     )
     room_options = room_io.RoomOptions(

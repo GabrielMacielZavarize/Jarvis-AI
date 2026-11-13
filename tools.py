@@ -931,7 +931,8 @@ async def set_hud_appearance(
             "friday" (violet, F.R.I.D.A.Y.: female voice, direct and warm, calls the user "chefe")
             or "stealth" (silver, whispered minimal answers). Omit to keep it.
         cinema: true hides every panel and leaves only the core and the live caption ("modo
-            cinema", "modo foco", "esconde os painéis"); false brings the full HUD back.
+            cinema", "esconde os painéis"; "modo foco" only when there is no routine or focus session
+            with that name); false brings the full HUD back.
     """
     wanted = None
     if theme:

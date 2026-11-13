@@ -3,7 +3,7 @@
 Com tudo ligado o Jarvis passa de 75 ferramentas (cerca de 14 mil tokens só de declarações) e,
 com as integrações MCP, de 100. Com tantas o modelo escolhe pior. Aqui elas viram:
 
-- um núcleo sempre presente: clima, pesquisa, hora, timers, HUD, memória, voz, encerrar, tudo
+- um núcleo sempre presente: clima, pesquisa, hora, timers, HUD, memória, tarefas e notas, voz, encerrar, tudo
   o que não está em grupo nenhum (inclusive ferramentas novas) e TODAS as de confirmar e cancelar
   por código, para uma confirmação pendente nunca perder a sua ferramenta;
 - grupos (agenda, email, tela, janelas, mídia, mouse, gestos, câmera, rotinas, avisos, apps e um
@@ -56,7 +56,9 @@ class ToolGroup:
     tools: tuple[str, ...]
 
 
-# Confirmar e cancelar (confirm_*, cancel_*) ficam fora de propósito: estão sempre no núcleo.
+# Confirmar e cancelar (confirm_*, cancel_*) ficam fora de propósito: estão sempre no núcleo. Tarefas e
+# notas (add_task, add_note, list_tasks, complete_task, remove_task) também: são pedidos de todo dia e,
+# se ficassem num grupo, "anota aí" cairia no remember (que está no núcleo) por falta da ferramenta certa.
 GROUPS: tuple[ToolGroup, ...] = (
     ToolGroup(
         "agenda",
@@ -108,7 +110,7 @@ GROUPS: tuple[ToolGroup, ...] = (
     ToolGroup(
         "avisos",
         "Lembretes e avisos",
-        "lembretes com dia e hora, listar lembretes, avisos proativos",
+        'aviso numa hora marcada ("me lembra às 15h de..."), listar e cancelar lembretes, avisos proativos (bateria, downloads...)',
         ("set_reminder", "list_reminders", "cancel_reminder", "configure_alerts"),
     ),
     ToolGroup(
@@ -121,16 +123,13 @@ GROUPS: tuple[ToolGroup, ...] = (
     ToolGroup(
         "dia",
         "Dia a dia",
-        "tarefas e notas (anotar, listar, concluir, apagar), briefing do dia, foco/Pomodoro, cotações de moedas, conversão de moedas e unidades, velocidade da internet",
-        (
-            "add_task", "add_note", "list_tasks", "complete_task", "remove_task", "daily_briefing", "focus_session",
-            "get_quotes", "convert_value", "network_speed",
-        ),
-    ),  # fmt: skip
+        "briefing do dia (\"como está o meu dia?\"), sessão de foco/Pomodoro com blocos e pausas, cotações de moedas, conversão de moedas e de unidades (comprimento, peso, temperatura...), velocidade da internet. As tarefas e notas ficam sempre com você",
+        ("daily_briefing", "focus_session", "get_quotes", "convert_value", "network_speed"),
+    ),
     ToolGroup(
         "olho",
         "Olho de Deus",
-        "consultas em fontes públicas: localizar IP, investigar domínio, link suspeito, CNPJ, CEP, DDD, email em vazamentos, usuário em sites, minha rede",
+        "consultas em fontes públicas: localizar IP (inclusive o meu), investigar domínio, link suspeito ou golpe, CNPJ, CEP, DDD, email em vazamentos, usuário em sites, minha rede (portas e aparelhos). Nunca CPF, telefone ou dados de pessoas",
         ("osint_lookup",),
     ),
 )

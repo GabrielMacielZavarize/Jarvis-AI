@@ -190,7 +190,8 @@ def build_day_tools(hud_url: str) -> list[Any]:
     @function_tool()
     async def daily_briefing(context: RunContext) -> str:
         """Briefing do dia num painel só: clima, próxima reunião, tarefas, lembretes, cotações e
-        manchetes ("como está o meu dia?", "me dá o resumo do dia", "o que tem pra hoje?")."""
+        manchetes ("como está o meu dia?", "me dá o resumo do dia"). Para só as tarefas ("o que falta
+        hoje?") use list_tasks; para só os compromissos, a agenda."""
         await tool_status("daily_briefing", "running", "montando")
         data = await asyncio.to_thread(fetch_briefing, hud_url)
         if data is None:
