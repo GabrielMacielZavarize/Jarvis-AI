@@ -1,5 +1,3 @@
-import { createAudioAnalyser, type LocalAudioTrack, type RemoteAudioTrack } from 'livekit-client';
-
 /**
  * Shared, allocation-free audio levels read by the 3D scene every frame.
  * React never re-renders because of audio: the scene samples this module in useFrame.
@@ -7,7 +5,46 @@ import { createAudioAnalyser, type LocalAudioTrack, type RemoteAudioTrack } from
 export const BANDS = 48;
 
 type Channel = 'agent' | 'user';
-type AudioTrack = LocalAudioTrack | RemoteAudioTrack;
+/** O que o analisador precisa de uma faixa do LiveKit (LocalAudioTrack e RemoteAudioTrack cumprem). */
+export interface AudioTrack {
+  mediaStreamTrack?: MediaStreamTrack;
+}
+
+const ANALYSER = { fftSize: 256, smoothingTimeConstant: 0.72, minDecibels: -92, maxDecibels: -22 };
+
+/**
+ * Liga a faixa a um AnalyserNode próprio. Faz o mesmo que o `createAudioAnalyser` do LiveKit, mas sem
+ * importar o `livekit-client`: este módulo é lido pela cena e pelo painel Sistema, e o LiveKit
+ * (mais de 300 kB) só deve ser baixado quando o servidor puder conectar.
+ */
+function createAnalyser(mediaStreamTrack: MediaStreamTrack) {
+  const Context = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Context) throw new Error('Audio Context not supported on this browser');
+  const context = new Context({ latencyHint: 'interactive' });
+  const input = context.createMediaStreamSource(new MediaStream([mediaStreamTrack]));
+  const analyser = context.createAnalyser();
+  Object.assign(analyser, ANALYSER);
+  input.connect(analyser);
+
+  // Sem gesto do usuário o navegador deixa o contexto suspenso: o primeiro clique o acorda.
+  const resume = () => {
+    if (context.state === 'suspended') void context.resume().catch(() => undefined);
+    else if (context.state === 'closed') document.body?.removeEventListener('click', resume);
+  };
+  if (context.state === 'suspended') document.body?.addEventListener('click', resume, { once: true });
+
+  let closed = false;
+  const cleanup = async () => {
+    // Fechar um contexto já fechado falha: repetir a limpeza não faz nada.
+    if (closed) return;
+    closed = true;
+    document.body?.removeEventListener('click', resume);
+    input.disconnect();
+    analyser.disconnect();
+    await context.close();
+  };
+  return { analyser, cleanup };
+}
 
 interface Source {
   track: AudioTrack;
@@ -49,12 +86,7 @@ export function attachTrack(channel: Channel, track: AudioTrack | undefined) {
   if (!track?.mediaStreamTrack) return;
 
   try {
-    const { analyser, cleanup } = createAudioAnalyser(track, {
-      fftSize: 256,
-      smoothingTimeConstant: 0.72,
-      minDecibels: -92,
-      maxDecibels: -22,
-    });
+    const { analyser, cleanup } = createAnalyser(track.mediaStreamTrack);
     const context = analyser.context;
     if (context instanceof AudioContext && context.state === 'suspended') void context.resume();
     sources[channel] = {

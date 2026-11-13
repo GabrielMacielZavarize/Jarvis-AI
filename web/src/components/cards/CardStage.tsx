@@ -1,88 +1,17 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as m from 'motion/react-m';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useHud } from '../../lib/hudStore';
 import { PANEL_META, panelTitle } from '../../lib/panels';
 import type { HudCard } from '../../lib/types';
 import { Panel } from '../Panel';
-import { CalendarBody } from './CalendarCard';
-import { CameraBody } from './CameraFeed';
-import { DiaryBody } from './DiaryCard';
-import { ExplainBody } from './ExplainCard';
-import {
-  DiagnosticsBody,
-  EmailBody,
-  InstallBody,
-  MediaBody,
-  MemoryBody,
-  NewsBody,
-  NoteBody,
-  PointerBody,
-  RoutineBody,
-  ScreenBody,
-  SearchBody,
-  TimeBody,
-  TimerBody,
-  WeatherBody,
-} from './Cards';
+import { CardBody } from './CardBody';
 import { HoloCard } from './HoloCard';
-import { BriefingBody, QuotesBody, SpeedBody, TasksBody } from './DayCards';
-import { OsintBody } from './OsintCard';
-
-function panelBody(card: HudCard, expanded: boolean): ReactNode {
-  switch (card.kind) {
-    case 'weather':
-      return <WeatherBody data={card.data} expanded={expanded} />;
-    case 'search':
-      return <SearchBody data={card.data} />;
-    case 'news':
-      return <NewsBody data={card.data} />;
-    case 'time':
-      return <TimeBody data={card.data} />;
-    case 'diagnostics':
-      return <DiagnosticsBody data={card.data} />;
-    case 'timer':
-      return <TimerBody data={card.data} />;
-    case 'note':
-      return <NoteBody data={card.data} />;
-    case 'email':
-      return <EmailBody data={card.data} />;
-    case 'media':
-      return <MediaBody data={card.data} />;
-    case 'screen':
-      return <ScreenBody data={card.data} />;
-    case 'install':
-      return <InstallBody data={card.data} />;
-    case 'camera':
-      return <CameraBody data={card.data} />;
-    case 'pointer':
-      return <PointerBody data={card.data} />;
-    case 'memory':
-      return <MemoryBody id={card.id} data={card.data} />;
-    case 'explain':
-      return <ExplainBody data={card.data} />;
-    case 'routine':
-      return <RoutineBody data={card.data} />;
-    case 'calendar':
-      return <CalendarBody data={card.data} />;
-    case 'diary':
-      return <DiaryBody id={card.id} data={card.data} />;
-    case 'osint':
-      return <OsintBody data={card.data} />;
-    case 'tasks':
-      return <TasksBody data={card.data} compact={!expanded} />;
-    case 'briefing':
-      return <BriefingBody data={card.data} />;
-    case 'quotes':
-      return <QuotesBody data={card.data} />;
-    case 'speed':
-      return <SpeedBody data={card.data} />;
-  }
-}
 
 /** Code and title come from PANEL_META, the same names the agent gets when it lists the panels. */
 function describe(card: HudCard, expanded: boolean): { code: string; title: string; body: ReactNode } {
-  return { code: PANEL_META[card.kind].code, title: panelTitle(card), body: panelBody(card, expanded) };
+  return { code: PANEL_META[card.kind].code, title: panelTitle(card), body: <CardBody card={card} expanded={expanded} /> };
 }
 
 /** One panel enlarged in the middle of the HUD ("Jarvis, amplia o clima"). */
@@ -92,7 +21,7 @@ function ExpandedCard({ card }: { card: HudCard }) {
   const { code, title, body } = describe(card, true);
 
   return createPortal(
-    <motion.div
+    <m.div
       className="expanded"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -110,7 +39,7 @@ function ExpandedCard({ card }: { card: HudCard }) {
       >
         {body}
       </HoloCard>
-    </motion.div>,
+    </m.div>,
     document.body,
   );
 }
@@ -143,9 +72,9 @@ export function CardStage() {
     <div className="stage">
       <AnimatePresence mode="popLayout" initial={false}>
         {cards.length === 0 ? (
-          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <m.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <EmptyStage />
-          </motion.div>
+          </m.div>
         ) : (
           docked.map((card) => {
             const { code, title, body } = describe(card, false);

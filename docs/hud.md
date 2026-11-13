@@ -118,6 +118,46 @@ A persona escolhida fica no servidor, em `persona.json` (fora do git). O agente 
 
 Quando o Gemini está pensando, três arcos de varredura giram em volta do plasma e quatro "bits" orbitam o núcleo. Enquanto uma ferramenta roda, aparecem um anel de marcações girando e um giroscópio duplo. No fim dela, uma onda de choque sai do núcleo, vermelha se a ferramenta falhou.
 
+## Tamanho do pacote
+
+O HUD baixa só o que a tela precisa. O `npm run build` gera um pacote principal pequeno e vários pedaços que o navegador pede na hora de usar (tamanhos em kB, sem e com gzip):
+
+| Pedaço | Quando é baixado | kB | gzip |
+| --- | --- | --- | --- |
+| `index` (React, painéis do Painel, estado) | sempre, na abertura | 363 | 118 |
+| `Scene` (Three.js e efeitos) | na abertura, enquanto o boot roda | 1052 | 281 |
+| `landDots` (mapa-múndi do globo: `d3-geo`, `world-atlas`) | com a cena | 77 | 31 |
+| `motionFeatures` (layout e gestos do `motion`) | logo depois da primeira pintura | 95 | 32 |
+| `CommandPalette` (Ctrl+K) | logo depois da abertura, fechada: a primeira letra digitada não se perde | 4 | 2 |
+| `DayView`, `EyeView`, `SystemView`, `SettingsView` | na primeira vez que a área é aberta (tecla ou aba) | 2 a 14 cada | 1 a 5 |
+| `CardBodies` (o corpo de cada painel projetado) | quando o link abre ou uma ferramenta começa a rodar | 40 | 12 |
+| `AmbientMode` | na primeira vez que o modo ambiente entra | 2 | 1 |
+| `LiveSession` (`livekit-client` e `@livekit/components-react`) | só quando `/api/status` diz que o LiveKit está configurado | 631 | 167 |
+
+Antes desta mudança o pacote principal tinha 1291 kB (386 kB com gzip), com o LiveKit, o `motion` inteiro, as quatro áreas, a paleta e os painéis projetados dentro dele, e o `chunkSizeWarningLimit` estava em 1800 para esconder o aviso. Agora:
+
+| | Antes | Depois |
+| --- | --- | --- |
+| Pacote principal (`index`) | 1291 kB · 386 kB gzip | 363 kB · 118 kB gzip |
+| JavaScript baixado na abertura (com a cena) | 2343 kB · 667 kB gzip | 1633 kB · 481 kB gzip |
+| Maior pedaço | `index`, 1291 kB | `Scene`, 1052 kB |
+| `chunkSizeWarningLimit` | 1800 | 1100 |
+
+O `Scene` é o único pedaço acima de 500 kB que sobra na abertura (é o Three.js, que a cena precisa inteiro), por isso o limite é 1100 e não menos: o aviso do `vite build` volta se alguma coisa passar disso. O `LiveSession` (631 kB) vem fora do caminho do boot, mas com o LiveKit configurado ele é baixado em paralelo assim que o status chega; sem LiveKit, ou antes do status, o navegador nem o pede.
+
+O que mudou:
+
+- As áreas Dia a dia, Olho de Deus, Sistema e Ajustes, a paleta, o modo ambiente, os painéis projetados e o LiveKit são `lazy` (`App.tsx`). Cada área é um arquivo próprio (`SystemView.tsx` e `SettingsView.tsx` saíram do antigo `Workspaces.tsx`, e a moldura ficou em `Workspace.tsx`).
+- Ao abrir uma área pela primeira vez, a anterior continua na tela até o código chegar e só então a nova entra (uma transição do React: `useShownView`). Nada de tela vazia no meio; `data-pending` no `main.app` marca a espera e o cursor vira "carregando". Numa rede lenta, como o celular no Wi-Fi, a área só troca quando termina de baixar.
+- `lib/audio.ts` ganhou o próprio analisador de áudio (Web Audio) no lugar do `createAudioAnalyser` do LiveKit. Era o único motivo de o `livekit-client` entrar no pacote principal e no da cena.
+- O estado do link (`LiveJarvis`, `OFFLINE_LIVE`) mora em `hooks/liveState.ts`, separado do hook que puxa o LiveKit.
+- O `motion` virou `LazyMotion`: os componentes `m.*` pintam o estado inicial e os recursos de animação (`domMax`, que inclui o `layout` usado nos avisos e nos painéis) chegam num pedaço à parte.
+- Os atalhos de teclado do `App.tsx` usam um único ouvinte de `keydown` (antes ele era religado a cada renderização, e uma tecla apertada logo depois de trocar de área se perdia).
+
+O que foi conferido e ficou como está: o `n8ao`, que o `@react-three/postprocessing` importa, só pesava 9 kB no pacote (o resto já era descartado); `d3-geo`, `topojson-client` e `world-atlas` vêm com o globo 3D e somam 31 kB com gzip; tirar qualquer um mudaria o visual do mapa.
+
+O teste `a área Painel abre sem baixar o código das outras áreas` (`web/e2e/hud.e2e.ts`) garante que nenhum pedaço das áreas, dos painéis projetados nem do LiveKit é pedido na abertura, e que cada área só é baixada quando aberta. Outro teste atrasa o `SystemView` de propósito, no computador e no celular, e confere que o Painel continua inteiro até o código chegar.
+
 ## Sons da interface
 
 O HUD gera os sons por código, com Web Audio e sem arquivos de terceiros: link abrindo e fechando, ferramenta começando e terminando, código de confirmação aceito, erro e timer acabando. Em Ajustes, "Sons da interface" liga e desliga, ajusta o volume e toca um teste. O bipe da palavra de ativação segue a mesma configuração, e quando o silêncio encerra o link toca um som só.

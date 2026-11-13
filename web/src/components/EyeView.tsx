@@ -1,10 +1,9 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
-import { useHud } from '../lib/hudStore';
 import { deviceTitle, learningMinutes, useNetworkDevices } from '../lib/network';
 import { checkPassword, guessKind, kindLabel, looksPersonal, OSINT_KINDS, useOsint } from '../lib/osint';
 import type { NetworkDevice, OsintKind, ServerStatus } from '../lib/types';
 import { Panel } from './Panel';
-import { Workspace } from './Workspaces';
+import { Workspace } from './Workspace';
 import { OsintBody } from './cards/OsintCard';
 
 const numberFormat = new Intl.NumberFormat('pt-BR');
@@ -324,10 +323,4 @@ export function EyeView({ server }: { server: ServerStatus | null }) {
       </div>
     </Workspace>
   );
-}
-
-/** Para a paleta de comandos: abre a área e já consulta. */
-export function openEyeWith(target: string) {
-  useHud.getState().setView('eye');
-  void useOsint.getState().run(target, null);
 }

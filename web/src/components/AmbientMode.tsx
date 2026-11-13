@@ -1,4 +1,5 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as m from 'motion/react-m';
 import { useEffect } from 'react';
 import { useAmbientInfo } from '../hooks/useAmbientInfo';
 import { useClock } from '../hooks/useClock';
@@ -25,7 +26,7 @@ export function AmbientMode({ active, wakeWord }: { active: boolean; wakeWord: b
   return (
     <AnimatePresence>
       {active && (
-        <motion.div
+        <m.div
           className="ambient"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -75,7 +76,7 @@ export function AmbientMode({ active, wakeWord }: { active: boolean; wakeWord: b
             )}
             <div className="ambient__hint">{wakeWord ? 'Mexa o mouse ou diga “Jarvis”' : 'Mexa o mouse para voltar'}</div>
           </div>
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   );

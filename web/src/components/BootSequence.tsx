@@ -1,4 +1,5 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as m from 'motion/react-m';
 import { useEffect, useState } from 'react';
 import { usePrefs } from '../lib/prefs';
 import { themeInfo } from '../lib/themes';
@@ -29,7 +30,7 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
   return (
     <AnimatePresence onExitComplete={onDone}>
       {visible && (
-        <motion.div
+        <m.div
           className={`boot ${online ? 'boot--online' : ''}`}
           role="status"
           aria-live="polite"
@@ -54,7 +55,7 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
               <path className="boot__tri" d="M60 37 79.9 71.5H40.1Z" />
               <circle className="boot__core" cx="60" cy="60" r="6.5" />
             </svg>
-            <motion.h1
+            <m.h1
               className="boot__title"
               data-text={persona.brand}
               initial={{ opacity: 0, letterSpacing: '0.9em' }}
@@ -62,14 +63,14 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
               transition={{ duration: 1.1, ease: 'easeOut' }}
             >
               {persona.brand}
-            </motion.h1>
+            </m.h1>
             <div className="boot__subtitle">{persona.tagline} · v2.0</div>
             <ul className="boot__lines">
               {steps.slice(0, step).map((text, index) => (
-                <motion.li key={text} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}>
+                <m.li key={text} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}>
                   <span className="boot__addr">{ADDRESSES[index]}</span>
                   {text}…<span className="boot__ok">OK</span>
-                </motion.li>
+                </m.li>
               ))}
             </ul>
             <div className="boot__meter">
@@ -80,7 +81,7 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
             </div>
             <div className="boot__skip">{online ? persona.boot.online : 'Clique para pular'}</div>
           </div>
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   );

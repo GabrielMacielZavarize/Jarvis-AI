@@ -495,3 +495,93 @@ test('o foco mudado fora da aba (voz, bandeja) aparece no HUD sem recarregar', a
   await expect(page.locator('.chip--focus')).toHaveCount(0, { timeout: 10_000 });
   expect(errors).toEqual([]);
 });
+
+// HUD-LEVE: cada pedaço do pacote que não aparece na abertura (as áreas, a paleta, o modo ambiente, os
+// painéis projetados e o LiveKit) só é baixado quando alguém precisa dele.
+const LAZY_CHUNKS = ['DayView', 'EyeView', 'SystemView', 'SettingsView', 'AmbientMode', 'CardBodies', 'LiveSession'];
+
+/** Os pedaços (por nome) que o navegador já baixou, em ordem. */
+function trackChunks(page: Page): string[] {
+  const loaded: string[] = [];
+  page.on('request', (request) => {
+    const name = new URL(request.url()).pathname.match(/\/assets\/([A-Za-z]+)-[\w-]+\.js$/)?.[1];
+    if (name) loaded.push(name);
+  });
+  return loaded;
+}
+
+test('o Painel abre sem baixar o código das outras áreas e cada área vem quando é aberta', async ({ page }) => {
+  const loaded = trackChunks(page);
+  const errors = await openHud(page, 'jarvis');
+  const app = page.locator('main.app');
+  for (const panel of ['Briefing', 'Projeções', 'Transcrição', 'Registro']) {
+    await expect(page.getByRole('region', { name: panel })).toBeVisible();
+  }
+  // Dá tempo de qualquer pedido atrasado chegar antes de conferir.
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(500);
+  expect(loaded.filter((name) => LAZY_CHUNKS.includes(name))).toEqual([]);
+  // O núcleo 3D (Scene) é o que o boot espera: esse sim vem na abertura.
+  expect(loaded).toContain('Scene');
+
+  // Dia a dia: só o dele.
+  await page.keyboard.press('2');
+  await expect(app).toHaveAttribute('data-view', 'day');
+  await expect(page.getByRole('region', { name: 'Tarefas' })).toBeVisible();
+  expect(loaded).toContain('DayView');
+  for (const other of ['EyeView', 'SystemView', 'SettingsView']) expect(loaded).not.toContain(other);
+
+  // Voltar e abrir de novo não baixa nada: o pedaço já está no navegador.
+  const before = loaded.length;
+  await page.keyboard.press('Escape');
+  await expect(app).toHaveAttribute('data-view', 'home');
+  await page.keyboard.press('2');
+  await expect(page.getByRole('region', { name: 'Tarefas' })).toBeVisible();
+  expect(loaded.length).toBe(before);
+
+  // A paleta (uns 4 kB) vem à parte logo depois da abertura, para o Ctrl+K abrir na hora e a primeira
+  // letra digitada não se perder.
+  expect(loaded).toContain('CommandPalette');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+k');
+  await page.keyboard.type('sistema');
+  await expect(page.getByRole('option').first()).toContainText('Sistema');
+  expect(errors).toEqual([]);
+});
+
+for (const device of [
+  { name: 'no computador', viewport: { width: 1600, height: 900 }, phone: false },
+  { name: 'no celular', viewport: { width: 390, height: 844 }, phone: true },
+]) {
+  test(`a área demorando para chegar não deixa a tela vazia ${device.name}`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: device.viewport, isMobile: device.phone, hasTouch: device.phone });
+    const page = await context.newPage();
+    // O pedaço do Sistema demora: durante a espera a área de antes tem que continuar na tela.
+    await page.route(/\/assets\/SystemView-[\w-]+\.js$/, async (route) => {
+      await new Promise((done) => setTimeout(done, 1500));
+      await route.continue();
+    });
+    const errors = await openHud(page, 'jarvis');
+    const app = page.locator('main.app');
+    const briefing = page.getByRole('region', { name: 'Briefing' });
+    await expect(briefing).toBeVisible();
+
+    const nav = device.phone ? page.locator('.nav--bar') : page.getByRole('navigation', { name: 'Áreas do HUD' });
+    const tab = nav.getByRole('button', { name: 'Sistema' });
+    await (device.phone ? tab.tap() : tab.click());
+
+    // Esperando: o HUD sinaliza, a aba já aparece marcada e o Painel continua inteiro (nada de buraco).
+    await expect(app).toHaveAttribute('data-pending', 'true');
+    await expect(app).toHaveAttribute('data-view', 'home');
+    await expect(briefing).toBeVisible();
+    await expect(page.locator('.workspace')).toHaveCount(0);
+
+    // Chegou: a área nova entra e o Painel sai, sem passar por uma tela sem nada.
+    await expect(app).toHaveAttribute('data-view', 'system', { timeout: 10_000 });
+    await expect(page.getByRole('region', { name: 'Sistema' }).first()).toBeVisible();
+    await expect(app).not.toHaveAttribute('data-pending', 'true');
+    await expect(briefing).toHaveCount(0);
+    expect(errors).toEqual([]);
+    await context.close();
+  });
+}

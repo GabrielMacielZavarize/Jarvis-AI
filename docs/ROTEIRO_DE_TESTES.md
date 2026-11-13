@@ -636,3 +636,30 @@ Fila do foco depois de um reinício:
 - [ ] Encerre o foco ("encerra o foco"): o Jarvis fala o lembrete e o download, cada um uma vez, com "(chegou às HH:MM, durante o foco)", e o `held` fica vazio. Reinicie de novo: nada se repete.
 - [ ] Repita, desta vez fechando o Jarvis durante o bloco, esperando o bloco acabar (ou encerrando-o pelo `foco.json`) e só então subindo o Jarvis: os avisos saem logo que ele voltar. Se passou de um dia, o aviso diz "chegou em DD/MM às HH:MM".
 - [ ] Um lembrete urgente continua falando na hora, durante o bloco, e não aparece no `held`.
+
+## HUD mais leve (carregamento sob demanda)
+
+O que o teste visual não alcança: o LiveKit de verdade, a voz, o microfone e a rede do celular. Rode `npm run build` na pasta `web/` antes e abra o HUD pelo `python jarvis.py`.
+
+Voz e LiveKit (com `LIVEKIT_*` configurado no `.env`):
+
+- [ ] Abra o HUD (`Ctrl+F5` para limpar o cache) e confira no DevTools (aba Rede) que o `LiveSession-*.js` é pedido só depois do `/api/status`, e que o `index-*.js` não passa de uns 360 kB.
+- [ ] Clique em Inicializar (ou diga "Jarvis"): o link abre, você ouve o Jarvis e a conversa aparece na Transcrição como antes.
+- [ ] Fale e veja o anel de voz do núcleo e o medidor "Você" em Ajustes mexerem com a sua voz, e o medidor "Jarvis" mexer quando ele responde. O analisador de áudio agora é do próprio HUD (`lib/audio.ts`), não do LiveKit: confira nos dois sentidos.
+- [ ] Troque o microfone em Ajustes durante o link: os medidores continuam seguindo o microfone novo.
+- [ ] Encerre o link e abra de novo duas ou três vezes: a sala reconecta e o Jarvis volta a responder.
+- [ ] Sem `LIVEKIT_*` no `.env`, o `LiveSession-*.js` não aparece na aba Rede e o botão Simulação funciona.
+
+Áreas e transições:
+
+- [ ] Com a aba Rede aberta e o cache desligado, abra Dia a dia, Olho de Deus, Sistema e Ajustes (teclas `2` a `5`), uma por vez: cada uma baixa o seu pedaço só na primeira vez, e a tela nunca fica vazia entre uma área e outra (a anterior fica até a nova entrar).
+- [ ] Na aba Rede, simule "Slow 3G" e abra o Sistema: o cursor vira "carregando", o Painel continua inteiro e a área nova entra quando termina de baixar, sem piscar.
+- [ ] `Ctrl+K` logo depois de abrir o HUD e já digitando: nenhuma letra se perde. Digitar um IP ou domínio oferece a consulta no Olho de Deus.
+- [ ] Deixe 3 minutos parado, sem link: o modo ambiente entra e sai com a mesma animação de antes (o pedaço dele é baixado nessa hora).
+- [ ] Com o link aberto, peça o clima ("como está o tempo?"): o painel aparece com o globo e a previsão, sem um quadro vazio antes do conteúdo. Peça outro painel pesado (agenda, "como está o PC?") e uma consulta do Olho de Deus.
+
+Celular (Wi-Fi do mesmo roteador, já pareado):
+
+- [ ] Abra o HUD no celular e troque de área pela barra de baixo: cada área entra sem piscar e a página não rola de lado.
+- [ ] Instale como app (PWA) e abra de novo: o HUD continua abrindo e os pedaços novos funcionam.
+- [ ] Com o HUD aberto, rode `npm run build` de novo (os nomes dos pedaços mudam) e abra uma área que ainda não tinha sido aberta: a página recarrega sozinha uma vez e a área abre, em vez de ficar em branco.

@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import * as m from 'motion/react-m';
 import { forwardRef, type ReactNode } from 'react';
 
 interface HoloCardProps {
@@ -17,7 +17,7 @@ export const HoloCard = forwardRef<HTMLElement, HoloCardProps>(function HoloCard
   ref,
 ) {
   return (
-    <motion.section
+    <m.section
       ref={ref}
       layout
       className={`panel card ${expanded ? 'card--expanded' : ''}`}
@@ -53,6 +53,6 @@ export const HoloCard = forwardRef<HTMLElement, HoloCardProps>(function HoloCard
       </header>
       <div className="panel__body">{children}</div>
       <div className="card__scan" />
-    </motion.section>
+    </m.section>
   );
 });

@@ -1,4 +1,5 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as m from 'motion/react-m';
 import { useEffect } from 'react';
 import { useHud } from '../lib/hudStore';
 import type { Toast } from '../lib/types';
@@ -13,7 +14,7 @@ function ToastItem({ toast }: { toast: Toast }) {
   }, [toast, dismiss]);
 
   return (
-    <motion.li
+    <m.li
       layout
       className={`toast toast--${toast.level}`}
       role={toast.level === 'critical' ? 'alert' : 'status'}
@@ -30,7 +31,7 @@ function ToastItem({ toast }: { toast: Toast }) {
         {toast.message && <span className="toast__message">{toast.message}</span>}
       </button>
       {toast.ttl > 0 && <i className="toast__timer" style={{ animationDuration: `${toast.ttl}ms` }} aria-hidden />}
-    </motion.li>
+    </m.li>
   );
 }
 

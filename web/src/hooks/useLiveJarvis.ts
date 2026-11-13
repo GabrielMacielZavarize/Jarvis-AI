@@ -28,6 +28,7 @@ import { PointerImages, withPointerImage } from '../lib/pointer';
 import { playCue, playHudEventSound } from '../lib/sounds';
 import { orderLines } from '../lib/transcript';
 import type { ChatLine, HudEvent, JarvisMode, MicReport } from '../lib/types';
+import type { LiveJarvis } from './liveState';
 
 export const HUD_TOPIC = 'jarvis.hud';
 const HUD_RPC_METHOD = 'jarvis.hud';
@@ -236,21 +237,6 @@ function describeStartError(err: unknown): string {
     return 'Não foi possível alcançar o servidor LiveKit. Confira LIVEKIT_URL e sua conexão.';
   }
   return `Falha ao conectar: ${message}`;
-}
-
-export interface LiveJarvis {
-  mode: JarvisMode;
-  connected: boolean;
-  lines: ChatLine[];
-  micEnabled: boolean;
-  micDevices: MediaDeviceInfo[];
-  micDeviceId: string;
-  selectMic: (deviceId: string) => Promise<void>;
-  error: string | null;
-  start: () => Promise<void>;
-  stop: () => Promise<void>;
-  toggleMic: () => Promise<void>;
-  send: (text: string) => Promise<void>;
 }
 
 export function useLiveJarvis(): LiveJarvis {
@@ -508,21 +494,3 @@ export function useLiveJarvis(): LiveJarvis {
     [mode, connected, lines, isMicrophoneEnabled, micDevices, micDeviceId, selectMic, error, start, stop, toggleMic, send],
   );
 }
-
-const noop = async () => {};
-
-/** Used while LiveKit is not configured: no session, no token requests. */
-export const OFFLINE_LIVE: LiveJarvis = {
-  mode: 'standby',
-  connected: false,
-  lines: [],
-  micEnabled: false,
-  micDevices: [],
-  micDeviceId: 'default',
-  selectMic: noop,
-  error: null,
-  start: noop,
-  stop: noop,
-  toggleMic: noop,
-  send: noop,
-};

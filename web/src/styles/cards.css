@@ -1419,3 +1419,12 @@
   font-size: 12.5px;
   color: var(--text);
 }
+
+/* Enquanto o código do painel projetado chega (só na primeira projeção da sessão). */
+.card__loading {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}

@@ -1,23 +1,16 @@
-import { RoomAudioRenderer, SessionProvider, StartAudio, useSession } from '@livekit/components-react';
-import { ConnectionState, TokenSource } from 'livekit-client';
-import { lazy, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, type ReactNode, startTransition, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
-import { AmbientMode } from './components/AmbientMode';
 import { BootSequence } from './components/BootSequence';
 import { CameraIndicator } from './components/CameraIndicator';
 import { CardStage } from './components/cards/CardStage';
 import { ControlDock } from './components/ControlDock';
 import { DictationIndicator } from './components/DictationIndicator';
 import { BriefingPanel } from './components/BriefingPanel';
-import { CommandPalette } from './components/CommandPalette';
 import { ConversationPanel } from './components/ConversationPanel';
-import { DayView } from './components/DayView';
-import { EyeView } from './components/EyeView';
 import { NavTabs } from './components/NavTabs';
 import { PairingScreen } from './components/PairingScreen';
 import { Toasts } from './components/Toasts';
 import { TopBar } from './components/TopBar';
-import { SettingsView, SystemView } from './components/Workspaces';
 import { useCameraMonitor } from './hooks/useCameraMonitor';
 import { useDemo } from './hooks/useDemo';
 import { useIdle } from './hooks/useIdle';
@@ -28,7 +21,7 @@ import { useSettledMode } from './hooks/useSettledMode';
 import { useSilentMicrophone } from './hooks/useSilentMicrophone';
 import { usePresence } from './hooks/usePresence';
 import { useLanAccess } from './hooks/useLanAccess';
-import { type LiveJarvis, OFFLINE_LIVE, useLiveJarvis } from './hooks/useLiveJarvis';
+import { type LiveJarvis, OFFLINE_LIVE } from './hooks/liveState';
 import { type StatusResult, useServerStatus } from './hooks/useServerStatus';
 import { useWakeWord } from './hooks/useWakeWord';
 import { AMBIENT_AFTER_MS } from './lib/ambient';
@@ -38,13 +31,61 @@ import { useFocusSync } from './hooks/useFocusSync';
 import { useHud } from './lib/hudStore';
 import { DEFAULT_LAYOUT, type PanelId, setPrefs, usePrefs } from './lib/prefs';
 import type { JarvisMode } from './lib/types';
-import { viewForKey } from './lib/views';
+import { preloadCardBodies } from './components/cards/CardBody';
+import { type ViewId, viewForKey } from './lib/views';
 import { micLabelFor } from './lib/wake';
 
 // three.js + postprocessing live in their own chunk; the boot sequence covers the load.
 const Scene = lazy(() => import('./scene/Scene').then((module) => ({ default: module.Scene })));
 
-const newRoomName = () => `jarvis-${crypto.randomUUID().slice(0, 8)}`;
+// O que não aparece na abertura vem sob demanda, cada coisa no seu pedaço do pacote: as áreas fora do
+// Painel, a paleta de comandos, o modo ambiente e o LiveKit (só quando o servidor pode conectar).
+const DayView = lazy(() => import('./components/DayView').then((module) => ({ default: module.DayView })));
+const EyeView = lazy(() => import('./components/EyeView').then((module) => ({ default: module.EyeView })));
+const SystemView = lazy(() => import('./components/SystemView').then((module) => ({ default: module.SystemView })));
+const SettingsView = lazy(() => import('./components/SettingsView').then((module) => ({ default: module.SettingsView })));
+const loadPalette = () => import('./components/CommandPalette').then((module) => ({ default: module.CommandPalette }));
+const CommandPalette = lazy(loadPalette);
+const AmbientMode = lazy(() => import('./components/AmbientMode').then((module) => ({ default: module.AmbientMode })));
+const LiveSession = lazy(() => import('./components/LiveSession'));
+
+/**
+ * A área que está na tela. Ao trocar para uma que ainda não foi baixada, a área anterior continua
+ * até o código chegar e só então a nova entra (uma transição do React): nada de tela vazia no meio.
+ * `pending` é o intervalo de espera, para o HUD mostrar o cursor de carregando.
+ */
+function useShownView(target: ViewId): { shown: ViewId; pending: boolean } {
+  const [shown, setShown] = useState(target);
+  useEffect(() => {
+    startTransition(() => setShown(target));
+  }, [target]);
+  return { shown, pending: shown !== target };
+}
+
+/**
+ * A paleta é pequena (uns 4 kB) e quem aperta Ctrl+K já sai digitando: ela é baixada logo depois da
+ * abertura, fora do pacote principal, e montada fechada. Assim a primeira letra não se perde.
+ */
+function usePaletteReady(): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void loadPalette().then(() => alive && setReady(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return ready;
+}
+
+/** Fica montado depois da primeira abertura, para a saída animada de uma paleta/ambiente já visto. */
+function useEverTrue(value: boolean): boolean {
+  const [seen, setSeen] = useState(value);
+  useEffect(() => {
+    if (value) setSeen(true);
+  }, [value]);
+  return seen || value;
+}
 
 export default function App() {
   // LAN-26: a phone that is not paired sees only the pairing screen (the server answers nothing else).
@@ -65,7 +106,11 @@ function JarvisApp({ local }: { local: boolean }) {
 
   return (
     <>
-      {canConnect && <LiveSession onChange={setLive} />}
+      {canConnect && (
+        <Suspense fallback={null}>
+          <LiveSession onChange={setLive} />
+        </Suspense>
+      )}
       <Hud status={status} booted={booted} live={canConnect ? live : OFFLINE_LIVE} local={local} />
       {!booted && <BootSequence onDone={() => setBooted(true)} />}
       <CameraIndicator />
@@ -74,47 +119,15 @@ function JarvisApp({ local }: { local: boolean }) {
   );
 }
 
-/** Owns the LiveKit session; only mounted once the backend can issue tokens. */
-function LiveSession({ onChange }: { onChange: (live: LiveJarvis) => void }) {
-  const tokenSource = useMemo(() => TokenSource.endpoint('/api/token'), []);
-  // A fresh room per session guarantees the agent is dispatched again on reconnect
-  // (agent dispatch only happens when LiveKit creates the room).
-  const [roomName, setRoomName] = useState(newRoomName);
-  const session = useSession(tokenSource, { agentName: 'jarvis', participantName: 'Operador', roomName });
-  const wasConnected = useRef(false);
-
-  useEffect(() => {
-    if (session.connectionState === ConnectionState.Connected) {
-      wasConnected.current = true;
-    } else if (session.connectionState === ConnectionState.Disconnected && wasConnected.current) {
-      wasConnected.current = false;
-      setRoomName(newRoomName());
-    }
-  }, [session.connectionState]);
-
-  return (
-    <SessionProvider session={session}>
-      <LiveBridge onChange={onChange} />
-      <RoomAudioRenderer />
-      {/* Only shows when the browser blocks the voice, e.g. a tab opened by "Jarvis" without a click yet. */}
-      <StartAudio label="Clique para ouvir o Jarvis" className="btn btn--primary start-audio" />
-    </SessionProvider>
-  );
-}
-
-function LiveBridge({ onChange }: { onChange: (live: LiveJarvis) => void }) {
-  const live = useLiveJarvis();
-  useEffect(() => onChange(live), [live, onChange]);
-  return null;
-}
-
 function Hud({ status, booted, live, local }: { status: StatusResult; booted: boolean; live: LiveJarvis; local: boolean }) {
   const demo = useDemo();
   const [busy, setBusy] = useState(false);
   const [sessionStart, setSessionStart] = useState<number | null>(null);
   const activeTool = useHud((s) => s.activeTool);
   const cinema = useHud((s) => s.cinema);
-  const view = useHud((s) => s.view);
+  const wantedView = useHud((s) => s.view);
+  const { shown: view, pending: viewPending } = useShownView(wantedView);
+  const palette = useHud((s) => s.palette);
   const prefs = usePrefs();
 
   const server = status.state === 'ok' ? status.status : null;
@@ -179,6 +192,13 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   const wakeListening = wake.enabled && wake.listening;
   // Ambient mode: a few idle minutes without a link (never during a session or the simulation).
   const ambient = useIdle(AMBIENT_AFTER_MS, prefs.ambient && booted && !connected && !busy);
+  const ambientSeen = useEverTrue(ambient);
+  const paletteReady = usePaletteReady();
+  const paletteSeen = useEverTrue(palette) || paletteReady;
+  // Os painéis projetados trazem o próprio pedaço de código: baixa antes da primeira projeção.
+  useEffect(() => {
+    if (connected || activeTool) preloadCardBodies();
+  }, [connected, activeTool]);
   // The hum only plays with the reactor awake: a link or the simulation, never on the idle screen.
   useReactorHum(booted && connected);
   // PRS-25: "Presente" / "Ausente há 5 min" in the Sistema panel.
@@ -246,8 +266,12 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   };
 
   // Global shortcuts: Space starts, M toggles the mic, Esc clears the projections.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
+  // O ouvinte é registrado uma vez só e chama sempre a versão mais nova da função: religá-lo a cada
+  // renderização deixava um intervalo sem ouvinte (a troca de área em transição demora a limpar os
+  // efeitos) e uma tecla apertada logo depois de outra se perdia.
+  const onKeyRef = useRef<(event: KeyboardEvent) => void>(() => undefined);
+  useLayoutEffect(() => {
+    onKeyRef.current = (event: KeyboardEvent) => {
       const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes((event.target as HTMLElement)?.tagName);
       const hud = useHud.getState();
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k') {
@@ -275,12 +299,15 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
       }
       if (event.key.toLowerCase() === 'm' && live.connected) void live.toggleMic();
     };
+  });
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => onKeyRef.current(event);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, []);
 
   return (
-    <main className="app" data-mode={mode} data-view={view} data-cinema={cinema || undefined} data-ambient={ambient || undefined}>
+    <main className="app" data-mode={mode} data-view={view} data-cinema={cinema || undefined} data-ambient={ambient || undefined} data-pending={viewPending || undefined}>
       <Suspense fallback={null}>
         <Scene visible={booted} />
       </Suspense>
@@ -327,26 +354,28 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
         {drag.target && view === 'home' && (
           <i className="drop-line" style={{ top: drag.target.top, left: drag.target.left, width: drag.target.width }} aria-hidden />
         )}
-        {view === 'day' && <DayView server={server} local={local} />}
-        {view === 'eye' && <EyeView server={server} />}
-        {view === 'system' && (
-          <SystemView
-            mode={mode}
-            status={status}
-            demo={demo.running}
-            connected={live.connected}
-            micEnabled={live.micEnabled}
-            wake={wake.enabled ? wake : null}
-            presence={presence}
-            local={local}
-          />
-        )}
-        {view === 'settings' && (
-          <SettingsView
-            microphone={{ devices: live.micDevices, deviceId: live.micDeviceId, onSelect: (id) => void live.selectMic(id) }}
-            demo={demo.running}
-          />
-        )}
+        <Suspense fallback={null}>
+          {view === 'day' && <DayView server={server} local={local} />}
+          {view === 'eye' && <EyeView server={server} />}
+          {view === 'system' && (
+            <SystemView
+              mode={mode}
+              status={status}
+              demo={demo.running}
+              connected={live.connected}
+              micEnabled={live.micEnabled}
+              wake={wake.enabled ? wake : null}
+              presence={presence}
+              local={local}
+            />
+          )}
+          {view === 'settings' && (
+            <SettingsView
+              microphone={{ devices: live.micDevices, deviceId: live.micDeviceId, onSelect: (id) => void live.selectMic(id) }}
+              demo={demo.running}
+            />
+          )}
+        </Suspense>
 
         <div className="hud__dock">
           <ControlDock
@@ -367,8 +396,16 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
         </div>
       </div>
       {booted && <NavTabs variant="bar" />}
-      <AmbientMode active={ambient} wakeWord={wake.enabled} />
-      <CommandPalette context={paletteContext} osint={server?.osint?.enabled ?? false} />
+      {ambientSeen && (
+        <Suspense fallback={null}>
+          <AmbientMode active={ambient} wakeWord={wake.enabled} />
+        </Suspense>
+      )}
+      {paletteSeen && (
+        <Suspense fallback={null}>
+          <CommandPalette context={paletteContext} osint={server?.osint?.enabled ?? false} />
+        </Suspense>
+      )}
       <Toasts />
     </main>
   );

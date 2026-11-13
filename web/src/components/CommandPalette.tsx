@@ -1,9 +1,10 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as m from 'motion/react-m';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { openEyeWith } from '../lib/eyeLink';
 import { useHud } from '../lib/hudStore';
 import { buildCommands, freeTextCommand, osintCommand, type PaletteCommand, type PaletteContext, searchCommands } from '../lib/palette';
-import { openEyeWith } from './EyeView';
 
 /** Quantos comandos a lista mostra de cada vez (a busca estreita o resto). */
 const MAX_SHOWN = 60;
@@ -103,7 +104,7 @@ export function CommandPalette({ context, osint }: CommandPaletteProps) {
   return createPortal(
     <AnimatePresence>
       {open && (
-        <motion.div
+        <m.div
           className="palette"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -113,7 +114,7 @@ export function CommandPalette({ context, osint }: CommandPaletteProps) {
             if (event.target === event.currentTarget) setPalette(false);
           }}
         >
-          <motion.div
+          <m.div
             className="palette__box"
             role="dialog"
             aria-modal="true"
@@ -185,8 +186,8 @@ export function CommandPalette({ context, osint }: CommandPaletteProps) {
                 <kbd>K</kbd> abrir de qualquer lugar
               </span>
             </div>
-          </motion.div>
-        </motion.div>
+          </m.div>
+        </m.div>
       )}
     </AnimatePresence>,
     document.body,

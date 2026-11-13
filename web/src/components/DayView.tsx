@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useBriefing, useSpeed, useTasks } from '../lib/day';
 import type { ServerStatus } from '../lib/types';
 import { Panel } from './Panel';
-import { Workspace } from './Workspaces';
+import { Workspace } from './Workspace';
 import { FocusBody, QuotesBody, SpeedBody, TasksBody } from './cards/DayCards';
 
 const EMPTY_TASKS = { tasks: [], notes: [], open: 0, overdue: 0, due_today: 0, done_today: 0 };

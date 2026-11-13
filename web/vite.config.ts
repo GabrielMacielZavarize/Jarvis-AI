@@ -11,6 +11,7 @@ export default defineConfig({
     },
   },
   build: {
-    chunkSizeWarningLimit: 1800,
+    // Só o pedaço da cena 3D (three.js, ~1,05 MB) passa de 500 kB; o resto do pacote fica bem abaixo disso.
+    chunkSizeWarningLimit: 1100,
   },
 });

@@ -91,7 +91,7 @@ E o HUD, em `web/src`:
 | Pasta | O que tem |
 | --- | --- |
 | `scene/` | Cena 3D: núcleo, anéis, espectro, órbitas, partículas, grade, globo e feixe do projetor |
-| `components/` | Painéis do HUD, cartões, notificações, legenda, modo ambiente e ajustes |
+| `components/` | Painéis do HUD, cartões, notificações, legenda, modo ambiente e ajustes. As áreas (`DayView`, `EyeView`, `SystemView`, `SettingsView`), a paleta, o modo ambiente, o corpo dos painéis projetados (`cards/CardBodies.tsx`) e o LiveKit (`LiveSession.tsx`) são carregados sob demanda ([tamanho do pacote](hud.md#tamanho-do-pacote)) |
 | `hooks/` | Sessão do LiveKit, simulação, status do servidor, palavra de ativação, arrastar painéis e ociosidade |
 | `lib/` | Estado do HUD, áudio, catálogo de protocolos, sons da interface (`sounds.ts`), personas (`themes.ts`), modo visual sem piscar (`visualMode.ts`), painel Gestos (`gestures.ts`), preferências (`prefs.ts`), qualidade da cena, gráficos e som do reator |
 | `styles/` | `hud.css` e `cards.css` com o visual base e `personas.css` com o que cada persona muda |

@@ -1389,3 +1389,8 @@ button.chip--focus-paused {
     order: -1;
   }
 }
+
+/* Troca de área esperando o código chegar: a área de antes continua na tela, com o cursor de carregando. */
+.app[data-pending] {
+  cursor: progress;
+}

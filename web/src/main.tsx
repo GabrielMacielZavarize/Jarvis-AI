@@ -18,14 +18,31 @@ import './styles/mobile.css';
 import './styles/personas.css';
 
 import { StrictMode } from 'react';
+import { LazyMotion } from 'motion/react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { registerServiceWorker } from './lib/pwa';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {/* As animações do motion chegam à parte; até lá os componentes `m` aparecem no estado inicial. */}
+    <LazyMotion features={() => import('./lib/motionFeatures').then((module) => module.default)} strict>
+      <App />
+    </LazyMotion>
   </StrictMode>,
 );
 
 registerServiceWorker();
+
+// Um pedaço que sumiu do servidor (o HUD foi recompilado com a aba aberta) não deve deixar a tela
+// em branco: recarrega uma vez para pegar os arquivos novos.
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault();
+  try {
+    if (window.sessionStorage.getItem('jarvis.chunk-reload')) return;
+    window.sessionStorage.setItem('jarvis.chunk-reload', '1');
+  } catch {
+    // Sem sessionStorage a recarga pode se repetir, mas só enquanto o pedaço faltar.
+  }
+  window.location.reload();
+});

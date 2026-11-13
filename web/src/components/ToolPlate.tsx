@@ -1,4 +1,5 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
+import * as m from 'motion/react-m';
 import { useEffect, useRef, useState } from 'react';
 import { TOOL_LABELS, toolCode } from '../lib/catalog';
 import { lastToolResult } from '../lib/coreActivity';
@@ -46,7 +47,7 @@ export function ToolPlate() {
   return (
     <AnimatePresence>
       {shown && (
-        <motion.div
+        <m.div
           key="plate"
           className={`tool-plate tool-plate--${state}`}
           role="status"
@@ -63,7 +64,7 @@ export function ToolPlate() {
           </span>
           {shown.detail && <span className="tool-plate__detail">{shown.detail}</span>}
           <i className="tool-plate__bar" aria-hidden />
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   );
