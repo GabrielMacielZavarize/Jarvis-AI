@@ -18,6 +18,10 @@ existe enquanto o link está aberto. Cada aviso tem uma prioridade e vai por um 
 
 No horário de silêncio (``JARVIS_QUIET_HOURS``, padrão 23:00-07:00) só o crítico fala, e
 "para de me avisar sobre bateria" silencia um assunto (ele ainda aparece no HUD, sem voz).
+
+Durante um bloco de foco (FOC-47, ``focus.py``) os avisos que não são críticos esperam o fim do
+bloco: ficam na memória do motor e saem juntos, pelo caminho de sempre, quando o bloco acaba. A troca
+de bloco do próprio foco (assunto ``focus``) passa por aqui como qualquer aviso.
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ import secrets
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Iterator, Literal, Protocol
 
@@ -53,7 +57,7 @@ API_PREFIX = "/api/proactive"
 
 Priority = Literal["low", "normal", "high", "critical"]
 PRIORITY_ORDER: dict[str, int] = {"low": 0, "normal": 1, "high": 2, "critical": 3}
-Topic = Literal["reminders", "battery", "performance", "downloads", "disk", "watch", "tasks"]
+Topic = Literal["reminders", "battery", "performance", "downloads", "disk", "watch", "tasks", "focus"]
 TOPIC_LABELS: dict[str, str] = {
     "reminders": "Lembretes",
     "battery": "Bateria",
@@ -62,6 +66,7 @@ TOPIC_LABELS: dict[str, str] = {
     "disk": "Disco",
     "watch": "Erros na tela",
     "tasks": "Tarefas",
+    "focus": "Foco",
 }
 Route = Literal["speak", "wake", "hud"]
 
@@ -100,6 +105,8 @@ DOWNLOADS_PER_NOTICE = 3
 TASKS_MORNING_START_H = 5
 TASKS_MORNING_END_H = 12
 TASKS_LISTED = 3
+# Avisos que esperam o fim do bloco de foco (FOC-47): passando disso, os mais antigos caem.
+MAX_HELD = 30
 
 # ───────────────────────── quando ─────────────────────────
 
@@ -1023,6 +1030,7 @@ class ProactiveEngine:
         hud_url: str = "http://127.0.0.1:8000",
         clock: Callable[[], float] = time.monotonic,
         now: Callable[[], dt.datetime] = _local_now,
+        hold: Callable[[], bool] = lambda: False,
     ) -> None:
         self.hub = hub
         self.monitors = monitors
@@ -1032,6 +1040,9 @@ class ProactiveEngine:
         self.hud_url = hud_url
         self._clock = clock
         self._now = now
+        self.hold = hold
+        # Avisos não críticos que chegaram durante o foco: (hora em que chegaram, aviso).
+        self.held: list[tuple[str, Notice]] = []
         self.agent_seen_at: float | None = None
         self.agent_queue: list[tuple[float, Notice]] = []
         self.recent: deque[dict[str, Any]] = deque(maxlen=20)
@@ -1093,10 +1104,44 @@ class ProactiveEngine:
                 logger.exception("Monitor de %s falhou.", monitor.topic)
         return notices
 
+    def _holding(self) -> bool:
+        try:
+            return bool(self.hold())
+        except Exception:
+            logger.exception("Não consegui saber se há um bloco de foco em andamento.")
+            return False
+
+    def _hold(self, notice: Notice, now: dt.datetime) -> None:
+        self.held = [item for item in self.held if item[1].id != notice.id]
+        self.held.append((now.strftime("%H:%M"), notice))
+        del self.held[:-MAX_HELD]
+        logger.info("Aviso proativo (%s) espera o fim do bloco de foco: %s", notice.topic, notice.title)
+
+    def release_held(self) -> list[Notice]:
+        """Os avisos que esperaram o foco, quando o bloco de foco acabou (ou a sessão foi encerrada)."""
+        if not self.held or self._holding():
+            return []
+        released = [
+            replace(notice, message=f"{notice.message} (chegou às {arrived}, durante o foco)") for arrived, notice in self.held
+        ]
+        self.held = []
+        return released
+
     def dispatch(self, notices: list[Notice]) -> list[tuple[Notice, Route]]:
         if not notices:
             return []
         now = self._now()
+        # Só o crítico (e a própria troca de bloco do foco) fura o bloco de foco.
+        if self._holding():
+            ready = []
+            for notice in notices:
+                if notice.topic == "focus" or notice.priority == "critical":
+                    ready.append(notice)
+                else:
+                    self._hold(notice, now)
+            notices = ready
+            if not notices:
+                return []
         state = load_state(self.path)
         quiet = in_quiet_hours(now, quiet_window(state, self.default_quiet))
         muted = muted_topics(state, now)
@@ -1119,7 +1164,7 @@ class ProactiveEngine:
 
     async def tick(self) -> list[tuple[Notice, Route]]:
         notices = await asyncio.to_thread(self.collect)
-        return self.dispatch(notices)
+        return self.dispatch([*self.release_held(), *notices])
 
     async def run(self) -> None:
         while True:
@@ -1226,6 +1271,7 @@ TOPIC_ALIASES = {
     "armazenamento": "disk", "espaco": "disk", "lembrete": "reminders", "lembretes": "reminders",
     "erro": "watch", "erros": "watch", "vigia": "watch", "terminal": "watch",
     "tarefa": "tasks", "tarefas": "tasks", "pendencia": "tasks", "pendencias": "tasks",
+    "foco": "focus", "pomodoro": "focus",
 }
 ALL_WORDS = {"tudo", "todos", "todas", "all"}
 
@@ -1390,7 +1436,7 @@ def _settings_quiet_hours() -> tuple[int, int] | None:
 async def configure_alerts(
     context: RunContext,
     action: Literal["mute", "unmute", "quiet_hours", "status"],
-    topic: Literal["battery", "performance", "downloads", "disk", "reminders", "watch", "tasks", "all"] | None = None,
+    topic: Literal["battery", "performance", "downloads", "disk", "reminders", "watch", "tasks", "focus", "all"] | None = None,
     hours: float | None = None,
     quiet_start: str | None = None,
     quiet_end: str | None = None,
@@ -1408,7 +1454,8 @@ async def configure_alerts(
     Args:
         action: mute, unmute, quiet_hours or status.
         topic: battery, performance (CPU/RAM), downloads, disk, reminders, watch (errors in the
-            window watched by watch_screen), tasks (morning summary of tasks) or all.
+            window watched by watch_screen), tasks (morning summary of tasks), focus (the focus session's
+            block changes) or all.
         hours: Mute only for this many hours; omit to mute until the user lifts it.
         quiet_start: Start of the quiet hours ("23:00"), or "off" to turn them off.
         quiet_end: End of the quiet hours ("07:00").
@@ -1420,7 +1467,7 @@ async def configure_alerts(
         topics = _topics(topic)
         if not topics:
             await tool_status("configure_alerts", "error")
-            return f"Assunto desconhecido: '{topic}'. Use battery, performance, downloads, disk, reminders, watch, tasks ou all."
+            return f"Assunto desconhecido: '{topic}'. Use battery, performance, downloads, disk, reminders, watch, tasks, focus ou all."
         labels = ", ".join(TOPIC_LABELS[name].lower() for name in topics)
         if action == "mute":
             until = now + dt.timedelta(hours=hours) if hours and hours > 0 else None
@@ -1460,7 +1507,7 @@ async def configure_alerts(
         {
             "title": "Avisos proativos",
             "content": (
-                "Vigiando: bateria, CPU/RAM, downloads, disco, lembretes e tarefas.\n"
+                "Vigiando: bateria, CPU/RAM, downloads, disco, lembretes, tarefas e o foco.\n"
                 f"Silenciados: {muted_text}\nHorário de silêncio: {format_window(window)}\n"
                 f"Lembretes marcados: {len(state['reminders'])}"
             ),

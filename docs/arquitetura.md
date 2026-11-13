@@ -56,7 +56,8 @@ As ferramentas que vão à rede rodam fora do event loop (`asyncio.to_thread`), 
 | `tasks.py` | Tarefas e notas (TAR-43): `tarefas.json`, prazos falados, ferramentas e as rotas `/api/tasks` |
 | `quotes.py` | Cotações e conversões (COT-44): AwesomeAPI com um minuto de memória e a conta local das unidades |
 | `netcheck.py` | Velocidade da internet (RED-45): latência, download, upload, `rede.json` e as rotas `/api/network` |
-| `briefing.py` | Briefing do dia (BRF-46), montado no servidor em `/api/briefing`, e a ferramenta do foco (FOC-47), que pede a sessão ao HUD |
+| `briefing.py` | Briefing do dia (BRF-46), montado no servidor em `/api/briefing`, e a ferramenta de voz do foco (FOC-47), que pede a sessão ao servidor |
+| `focus.py` | Sessão de foco (FOC-47): a contagem, a pausa pela presença, o `foco.json` e as rotas `/api/focus`. O servidor conta; o HUD só mostra |
 | `osint.py` | Olho de Deus (ODD-42): consultas em fontes públicas (IP, domínio, link, CNPJ, CEP, DDD, email, usuário, rede), a trava contra SSRF, a ferramenta `osint_lookup` e as rotas `/api/osint` |
 | `voices.py` | Voz do Jarvis (VOZ-30): vozes do Gemini Live, `voz.json` (uma voz por persona) e a ferramenta `change_voice` |
 | `routines.py` | Rotinas (`rotinas.json`): passos, execução com falhas parciais, ferramentas e agendador |

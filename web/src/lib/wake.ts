@@ -147,6 +147,15 @@ export function noticeToast(notice: NoticeEvent): Pick<Toast, 'level' | 'title' 
   return { level, title: notice.title, message: notice.message, code };
 }
 
+/**
+ * A troca de bloco do foco (FOC-47) chega aqui como aviso para ganhar voz e bandeja, mas o som, a
+ * notificação e o registro dela vêm da própria sessão de foco (`lib/focus.ts`): mostrar de novo seria
+ * duplicar.
+ */
+export function noticeIsShownByHud(notice: Pick<NoticeEvent, 'topic'>): boolean {
+  return notice.topic !== 'focus';
+}
+
 export function noticeLogLevel(priority: NoticePriority): LogLevel {
   return priority === 'critical' || priority === 'high' ? 'warn' : 'info';
 }

@@ -311,7 +311,7 @@ class TrayEndpointTests(unittest.TestCase):
         client, _ = self.client({**LIVEKIT_ENV, tray.SECRET_ENV: SECRET})
         hub: WakeHub = client.app.state.wake_hub
 
-        self.assertEqual(client.get("/api/tray/state", headers=TRAY).json(), {"link": False, "listening": False, "detector": False, "tabs": 0})
+        self.assertEqual(client.get("/api/tray/state", headers=TRAY).json(), {"link": False, "listening": False, "detector": False, "tabs": 0, "toasts": []})
         hub.connect(TAB)
         hub.update(TAB, session_active=True, visible=True, mic_label=None)
         self.assertEqual(client.get("/api/tray/state", headers=TRAY).json()["link"], True)

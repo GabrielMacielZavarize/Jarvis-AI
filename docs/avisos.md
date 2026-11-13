@@ -52,6 +52,10 @@ O primeiro momento útil do dia gasta o aviso, mesmo que não houvesse tarefa: u
 
 A prioridade é normal: com o link aberto o Jarvis fala; com o link fechado o aviso fica só no HUD (não abre o navegador nem acorda o Jarvis, tarefa não é urgência). O assunto é `tasks`: "para de me avisar sobre tarefas" silencia o assunto (continua no HUD, sem voz). O monitor só existe com `JARVIS_ENABLE_DAY=true` (o padrão), já que as tarefas fazem parte do [Dia a dia](dia-a-dia.md).
 
+### Troca de bloco do foco
+
+A [sessão de foco](dia-a-dia.md#foco-foc-47) também avisa pelo motor, com o assunto `focus`: "Hora da pausa", "De volta ao foco", "Sessão de foco concluída" e, com a presença ligada, "Foco retomado" quando você volta. A prioridade é normal: com o link aberto o Jarvis fala; com o link fechado o aviso fica no HUD e, com o [ícone da bandeja](bandeja.md#avisos-do-jarvis-na-bandeja), vira notificação do Windows. Nunca abre o navegador. O assunto é `focus` ("para de me avisar sobre o foco"). Vale também com `JARVIS_PROACTIVE=false`: sem o motor, o aviso vai só para a bandeja e para a aba aberta.
+
 ## Como ele avisa
 
 Quem vigia é o servidor do HUD, que sobe com o `jarvis.py` e fica de pé o tempo todo. Cada aviso tem uma prioridade:
@@ -68,9 +72,23 @@ Com o link fechado, o aviso importante faz o mesmo que a palavra de ativação: 
 
 Os avisos que ficam só no HUD aparecem como notificação e painel "Aviso" e entram no registro de atividades. Se nenhuma aba estiver aberta, os últimos 10 esperam a próxima.
 
+## Durante o foco
+
+Enquanto um bloco de [foco](dia-a-dia.md#foco-foc-47) está correndo, o motor segura os avisos que não são críticos e os entrega quando o bloco acaba. Ficam de fora da espera:
+
+| Passa na hora | Espera o fim do bloco |
+| --- | --- |
+| Crítica: bateria em 10%, lembrete marcado como urgente | Alta: lembrete comum, bateria em 20% |
+| A troca de bloco do próprio foco | Normal e baixa: download, CPU e RAM, disco, tarefas, erros na janela vigiada, carregador |
+
+- "Durante o bloco" vale também quando a contagem está parada pela ausência: você saiu, mas a sessão não acabou. Na pausa (o descanso), ao encerrar o foco e ao terminar a sessão, a espera acaba.
+- O aviso que esperou sai pelo caminho de sempre, decidido na hora da entrega: um lembrete alto com o link fechado abre o link nessa hora, e o horário de silêncio e os assuntos silenciados continuam valendo. Ele ganha "(chegou às 14:02, durante o foco)" no fim. Vários avisos saem juntos, na ordem em que chegaram, no máximo 30 (passando disso, os mais antigos caem).
+- Quem segura é o servidor, na memória: se o Jarvis for reiniciado no meio do bloco, o que esperava se perde. Um lembrete comum que vence durante o foco também espera (ele já saiu do `lembretes.json`), então um bloco de 3 horas pode atrasar um lembrete em até 3 horas. Para um lembrete que não pode esperar, peça como urgente.
+- Sem o foco rodando, ou com `JARVIS_ENABLE_DAY=false`, nada é segurado.
+
 ## Por voz
 
-"Para de me avisar sobre bateria" silencia o assunto, que continua aparecendo no HUD, sem voz. Os assuntos são bateria, desempenho (CPU e RAM), downloads, disco, lembretes, erros na tela e tarefas. "Por duas horas" põe prazo, e "pode voltar a avisar da bateria" desfaz.
+"Para de me avisar sobre bateria" silencia o assunto, que continua aparecendo no HUD, sem voz. Os assuntos são bateria, desempenho (CPU e RAM), downloads, disco, lembretes, erros na tela, tarefas e foco. "Por duas horas" põe prazo, e "pode voltar a avisar da bateria" desfaz.
 
 "Horário de silêncio das 22h às 6h" ou "desliga o horário de silêncio" mudam o horário. O que você fala vale mais que o `.env` e fica guardado no `lembretes.json`.
 
@@ -95,3 +113,4 @@ No Windows, com `JARVIS_PROACTIVE=true` e `python jarvis.py --rebuild`:
 7. CPU: rode algo pesado por mais de 5 minutos (um benchmark, ou `python -c "while True: pass"` em vários terminais). O aviso cita o processo culpado.
 8. Silêncio: "horário de silêncio de agora até daqui a uma hora" (por exemplo "das 15h às 16h") e repita o passo 5: só HUD. Um lembrete urgente nesse horário ainda fala. No fim, "desliga o horário de silêncio".
 9. Tarefas: veja os itens de "Tarefas nos avisos proativos" no [roteiro de testes](ROTEIRO_DE_TESTES.md#tarefas-nos-avisos-proativos).
+10. Foco: veja os itens de "Foco integrado" no [roteiro de testes](ROTEIRO_DE_TESTES.md#foco-integrado-com-presença-avisos-e-bandeja).

@@ -421,7 +421,7 @@ def _day_rules(settings: Any) -> str:
     focus = (
         '- Sessão de foco (Pomodoro): "começa um foco de 25 minutos", "foco de 50 com pausa de 10, três blocos", '
         '"quanto falta do foco?", "pula esse bloco", "encerra o foco" = focus_session (start, status, skip, stop). '
-        "A contagem roda no HUD e continua com o link fechado. Não é um set_timer (uma contagem só)"
+        "A contagem roda no servidor do Jarvis e continua com o link e o HUD fechados. Não é um set_timer (uma contagem só)"
     )
     if routines:
         focus += ' nem a rotina "modo foco" (minimiza janelas, baixa o volume e põe um timer): "modo foco" dito sozinho é a rotina (run_routine), e só "foco de N minutos", "pomodoro" ou "bloco de foco" é focus_session.'

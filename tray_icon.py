@@ -305,6 +305,8 @@ class Win32TrayIcon:
         self._messages: queue.Queue[str] = queue.Queue()
         self._stop = threading.Event()
         self._taskbar_created: int | None = None
+        # Avisos do servidor (troca de bloco do foco) viram notificação, como as respostas do menu.
+        controller.on_message = self.notify
 
     def run(self) -> None:
         """Create the icon and pump its messages until ``stop()`` (blocks: call it on its own thread)."""

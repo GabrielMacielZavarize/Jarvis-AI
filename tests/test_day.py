@@ -523,11 +523,21 @@ class BriefingTests(unittest.TestCase):
 class DayToolTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.card = AsyncMock()
-        self.hud = AsyncMock()
-        for name, mock in (("show_card", self.card), ("tool_status", AsyncMock()), ("hud_request", self.hud)):
+        for name, mock in (("show_card", self.card), ("tool_status", AsyncMock())):
             patcher = patch(f"briefing.{name}", mock)
             patcher.start()
             self.addCleanup(patcher.stop)
+        # O foco fala com o servidor do HUD por HTTP (focus_request): aqui, uma resposta combinada.
+        self.focus_calls: list[dict] = []
+        self.focus_reply: dict | None = None
+
+        def fake_focus_request(hud_url: str, payload: dict) -> dict | None:
+            self.focus_calls.append(payload)
+            return self.focus_reply
+
+        patcher = patch("briefing.focus_request", fake_focus_request)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.daily_briefing, self.focus_session = briefing.build_day_tools("http://127.0.0.1:8000")
 
     async def test_briefing_projects_and_speaks(self) -> None:
@@ -538,23 +548,49 @@ class DayToolTests(unittest.IsolatedAsyncioTestCase):
         with patch("briefing.fetch_briefing", return_value=None):
             self.assertIn("não respondeu", await self.daily_briefing(SimpleNamespace()))
 
-    async def test_focus_is_asked_to_the_hud_within_limits(self) -> None:
-        self.hud.return_value = {"running": True, "phase": "work", "cycle": 1, "cycles": 12, "remaining_s": 1500}
+    async def test_focus_is_asked_to_the_server_within_limits(self) -> None:
+        self.focus_reply = {"running": True, "phase": "work", "cycle": 1, "cycles": 12, "remaining_s": 1500}
         started = await self.focus_session(SimpleNamespace(), action="start", work_minutes=999, break_minutes=0, cycles=50)
-        self.assertEqual(self.hud.await_args.args, ("focus", {"command": "start", "work": 180, "rest": 1, "cycles": 12}))
+        self.assertEqual(self.focus_calls[-1], {"command": "start", "work": 180, "rest": 1, "cycles": 12})
         self.assertIn("12 blocos de 180 minutos", started)
-        self.hud.return_value = {"running": True, "phase": "rest", "cycle": 2, "cycles": 4, "remaining_s": 185}
+        self.focus_reply = {"running": True, "phase": "rest", "cycle": 2, "cycles": 4, "remaining_s": 185}
         self.assertEqual(await self.focus_session(SimpleNamespace(), action="quanto falta"), "Em pausa, ciclo 2 de 4. Faltam 3 min e 5 s.")
-        self.hud.return_value = {"running": False}
+        self.assertEqual(self.focus_calls[-1]["command"], "status")
+        self.focus_reply = {"running": False}
         self.assertEqual(await self.focus_session(SimpleNamespace(), action="status"), "Nenhuma sessão de foco rodando.")
         self.assertEqual(await self.focus_session(SimpleNamespace(), action="parar"), "Sessão de foco encerrada.")
 
-    async def test_focus_without_a_hud_or_with_a_strange_action(self) -> None:
-        self.hud.return_value = None
-        self.assertIn("O HUD não respondeu", await self.focus_session(SimpleNamespace(), action="start"))
-        self.hud.reset_mock()
+    async def test_focus_says_when_it_is_paused_because_the_user_left(self) -> None:
+        self.focus_reply = {"running": True, "phase": "work", "cycle": 1, "cycles": 4, "paused": True, "remaining_s": 725}
+        said = await self.focus_session(SimpleNamespace(), action="status")
+        self.assertIn("pausado porque você saiu", said)
+        self.assertIn("Faltam 12 min", said)
+
+    async def test_focus_without_the_server_or_with_a_strange_action(self) -> None:
+        self.focus_reply = None
+        self.assertIn("O servidor do HUD não respondeu", await self.focus_session(SimpleNamespace(), action="start"))
+        self.focus_calls.clear()
         self.assertIn("Posso começar", await self.focus_session(SimpleNamespace(), action="dançar"))
-        self.hud.assert_not_awaited()
+        self.assertEqual(self.focus_calls, [])
+
+
+class FocusRequestTests(unittest.TestCase):
+    def test_focus_request_posts_to_the_hud_and_survives_bad_answers(self) -> None:
+        sent = []
+
+        def post(url, json, timeout):
+            sent.append((url, json))
+            return FakeResponse({"enabled": True, "running": True}, 200)
+
+        self.assertEqual(briefing.focus_request("http://x/", {"command": "status"}, http=SimpleNamespace(post=post)), {"enabled": True, "running": True})
+        self.assertEqual(sent, [("http://x/api/focus", {"command": "status"})])
+        self.assertIsNone(briefing.focus_request("http://x", {}, http=SimpleNamespace(post=lambda url, json, timeout: FakeResponse({}, 403))))
+        self.assertIsNone(briefing.focus_request("http://x", {}, http=SimpleNamespace(post=lambda url, json, timeout: FakeResponse({"enabled": False}, 200))))
+
+        def down(url, json, timeout):
+            raise requests.ConnectionError("fora do ar")
+
+        self.assertIsNone(briefing.focus_request("http://x", {}, http=SimpleNamespace(post=down)))
 
 
 class RouteTests(unittest.TestCase):

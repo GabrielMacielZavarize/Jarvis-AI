@@ -1319,6 +1319,12 @@ button.chip--focus-rest {
   border-color: rgb(82 255 176 / 0.55);
   color: var(--c-ok);
 }
+/* Parado porque você saiu da frente do PC: sem cor de destaque, só a contagem congelada. */
+button.chip--focus-paused {
+  border-color: rgb(var(--c-primary-rgb) / 0.35);
+  color: var(--c-primary);
+  opacity: 0.8;
+}
 :root[data-theme='friday'] :is(.day__add input, .task__due, .convert, .speed > div, .focus__field input) {
   border-radius: 10px;
 }

@@ -397,7 +397,7 @@ Detalhes em [dia-a-dia.md](dia-a-dia.md). As cotações, as manchetes e o teste 
 - [ ] "Anota aí: a senha do banco é 1234" é recusado com a explicação.
 - [ ] "Como está o meu dia?": o painel Briefing traz clima, próxima reunião, tarefas, lembretes, cotações e manchetes, e ele fala o resumo. O Briefing do Painel mostra o mesmo.
 - [ ] "Quanto está o dólar?" e "quanto dá 150 dólares em reais?": os valores batem com um site de câmbio. "10 milhas em quilômetros" responde 16,09 sem abrir painel.
-- [ ] "Começa um foco de 1 minuto com pausa de 1, dois blocos": a contagem aparece no painel Foco e na barra do topo. Deixe o link fechar por silêncio: a contagem continua e, na troca, tocam o som e a notificação "Hora da pausa".
+- [ ] "Começa um foco de 1 minuto com pausa de 1, dois blocos": a contagem aparece no painel Foco e na barra do topo. Deixe o link fechar por silêncio: a contagem continua e, na troca, tocam o som e a notificação "Hora da pausa". Feche também a aba do HUD: veja o item de bandeja em [Foco integrado](#foco-integrado-com-presença-avisos-e-bandeja).
 - [ ] Com o foco rodando, recarregue a página: a contagem volta de onde estava. "Quanto falta do foco?" e "encerra o foco" funcionam por voz.
 - [ ] "Como está a minha internet?": em uns 15 segundos ele fala download, upload e latência, e o painel Rede ganha uma barra no histórico. Peça de novo na hora: ele pede para esperar.
 - [ ] No celular pareado, o painel Rede mostra o histórico sem o botão "Medir agora".
@@ -518,3 +518,42 @@ Detalhes em [avisos.md](avisos.md#tarefas-do-dia) e [dia-a-dia.md](dia-a-dia.md#
 - [ ] Sem tarefa atrasada nem para hoje (marque as duas como feitas), zere o `tasks_notice_day` e espere 1 minuto: nenhum aviso, e `tasks_notice_day` volta com a data de hoje.
 - [ ] Depois do meio-dia (ou antes das 5h) o aviso não sai, mesmo com tarefas atrasadas.
 - [ ] Com `JARVIS_ENABLE_DAY=false` no `.env`, o aviso das tarefas nunca aparece, mesmo com o `tasks_notice_day` zerado e tarefas atrasadas. Os outros avisos (bateria, lembretes) continuam.
+
+## Foco integrado com presença, avisos e bandeja
+
+Detalhes em [dia-a-dia.md](dia-a-dia.md#foco-foc-47), [avisos.md](avisos.md#durante-o-foco) e [bandeja.md](bandeja.md#avisos-do-jarvis-na-bandeja). Os testes automáticos usam relógio falso, presença falsa e um ícone falso; aqui você confere com o relógio, a câmera, a voz e o Windows de verdade. Use `JARVIS_PROACTIVE=true`, `JARVIS_PRESENCE=true`, `JARVIS_ENABLE_CAMERA=true` e `pythonw jarvis.py --tray`, e apague o `foco.json` antes de começar se sobrou uma sessão.
+
+Servidor e HUD:
+
+- [ ] "Começa um foco de 2 minutos com pausa de 1, três blocos". O painel Foco e o chip do topo mostram "Foco 1/3" quase na hora. Recarregue a página, depois feche a aba e abra de novo: a contagem está onde devia (não reiniciou).
+- [ ] Reinicie o Jarvis pelo menu da bandeja no meio de um bloco: depois de subir, o HUD mostra a mesma sessão, com o tempo certo. O `foco.json` aparece na pasta do projeto e não vai para o `git status`.
+- [ ] Feche o Jarvis por mais tempo que um bloco e suba de novo: a sessão está no bloco que o relógio manda e só a última troca é avisada.
+- [ ] Pelo painel, "Pular bloco" e "Encerrar" funcionam; por voz, "quanto falta do foco?" fala o tempo e "encerra o foco" tira o chip do topo na hora (até uns 3 segundos).
+- [ ] Abra o HUD em dois navegadores (ou no celular pareado): os dois mostram a mesma contagem, e "pula esse bloco" por voz muda os dois.
+
+Troca de bloco sem aba (precisa do ícone da bandeja):
+
+- [ ] Com o foco rodando e o link fechado, feche a aba do HUD. Na troca do bloco aparece uma notificação do Windows "Jarvis" com "Hora da pausa. Bloco 1 de 3 concluído...", em até uns 3 segundos, sem abrir o navegador nem o link. A notificação some sozinha e não repete.
+- [ ] Com a aba aberta e o link fechado: som de timer, notificação do HUD e também a notificação do Windows. Com o link aberto: o Jarvis fala a troca, sem notificação do Windows.
+- [ ] "Para de me avisar sobre o foco": na troca seguinte não há voz (só HUD e bandeja). "Pode voltar a avisar sobre o foco" desfaz.
+- [ ] Sem o ícone da bandeja (sem `--tray`) e sem aba: nada aparece na hora; ao abrir a aba o registro de atividades já mostra o que aconteceu e o chip tem o bloco certo. Anote se isso é suficiente para você ou se prefere o aviso abrir o link.
+- [ ] Horário de silêncio cobrindo a hora atual: a troca não fala, mas a notificação do Windows e o HUD continuam.
+
+Presença:
+
+- [ ] Com a câmera e a presença ligadas, comece um foco de 10 minutos e fique na frente do PC: nada muda.
+- [ ] Saia da frente da câmera por menos de 1 minuto e volte: o foco não pausa.
+- [ ] Saia por uns 2 minutos: o chip do topo e o anel passam a "parado" (uns 1 a 1,5 minuto depois de sair). Fique fora um tempo conhecido (por exemplo 3 minutos) e volte: a contagem retoma e o Jarvis avisa "Foco retomado... Faltam N min", com N batendo com o que faltava quando você saiu, menos uns 20 segundos (o tempo que a presença leva para notar a saída). A ausência inteira não foi descontada.
+- [ ] "Quanto falta do foco?" durante a pausa fala "pausado porque você saiu".
+- [ ] Durante a pausa (descanso) saia por mais de 1 minuto: nada pausa. Se o descanso acabar com você fora, o próximo bloco começa e para até você voltar.
+- [ ] Desligue a presença ("desliga a presença") com o foco parado pela ausência: a contagem volta a andar, sem aviso.
+- [ ] Com `JARVIS_PRESENCE=false` (ou a câmera desligada), sair da frente do PC não muda nada na contagem.
+- [ ] A volta da presença ao mesmo tempo que o "bem-vindo de volta" do PRS-25 (ausência de mais de 2 minutos com o link fechado): o Jarvis não fala duas coisas atropeladas. Anote como ficou.
+
+Avisos esperam o bloco:
+
+- [ ] Durante um bloco de foco, baixe um arquivo pelo navegador (aviso de download) e marque um lembrete para daqui a 1 minuto. Nada aparece nem fala durante o bloco. Quando a pausa começa, o Jarvis fala a troca e, em seguida, o download e o lembrete, cada um com "(chegou às HH:MM, durante o foco)".
+- [ ] Um lembrete pedido como urgente ("me lembra daqui a 1 minuto de ligar pro contador, é urgente") fala na hora, no meio do bloco.
+- [ ] Tire o carregador do notebook durante o bloco: nada. Com a bateria em 10% (ou simulada): o aviso crítico fala na hora.
+- [ ] "Encerra o foco" com avisos esperando: eles saem em até uns 5 segundos.
+- [ ] Com `JARVIS_ENABLE_DAY=false`, os avisos nunca esperam (e o painel Foco não responde).

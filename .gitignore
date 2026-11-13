@@ -76,3 +76,7 @@ tarefas*.json
 tarefas.json.tmp
 rede.json
 rede.json.tmp
+
+# Sessão de foco (FOC-47): estado e preferências, cópias e temporários
+foco*.json
+foco.json.tmp

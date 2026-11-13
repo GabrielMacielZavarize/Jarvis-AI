@@ -949,7 +949,7 @@ class ToolTests(FileTestCase):
 
     async def test_mute_all_leaves_reminders_alone(self) -> None:
         await configure_alerts(self.context, "mute", "all")
-        self.assertEqual(sorted(load_state()["muted"]), ["battery", "disk", "downloads", "performance", "tasks", "watch"])
+        self.assertEqual(sorted(load_state()["muted"]), ["battery", "disk", "downloads", "focus", "performance", "tasks", "watch"])
 
 
 class ToolListTests(unittest.TestCase):

@@ -34,6 +34,7 @@ import { useWakeWord } from './hooks/useWakeWord';
 import { AMBIENT_AFTER_MS } from './lib/ambient';
 import { homeFromTimezone } from './lib/geo';
 import { useFocus } from './lib/focus';
+import { useFocusSync } from './hooks/useFocusSync';
 import { useHud } from './lib/hudStore';
 import { DEFAULT_LAYOUT, type PanelId, setPrefs, usePrefs } from './lib/prefs';
 import type { JarvisMode } from './lib/types';
@@ -183,15 +184,11 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   // PRS-25: "Presente" / "Ausente há 5 min" in the Sistema panel.
   const presence = usePresence(server?.presence ?? false);
 
-  // FOC-47: a sessão de foco anda a cada segundo, com ou sem link aberto.
-  const focusRunning = useFocus((s) => s.focus.running);
-  useEffect(() => {
-    if (!focusRunning) return;
-    useFocus.getState().tick();
-    const timer = window.setInterval(() => useFocus.getState().tick(), 1000);
-    return () => window.clearInterval(timer);
-  }, [focusRunning]);
+  // FOC-47: o servidor conta a sessão de foco; o HUD só a lê (a cada poucos segundos, e já quando o
+  // bloco passa do fim) e mostra. Com o Dia a dia desligado não há sessão para ler.
+  useFocusSync(server?.day === true);
 
+  const focusRunning = useFocus((s) => s.focus.running);
   const micSilent = useSilentMicrophone(live.connected && !demo.running && live.micEnabled);
   const sendText = (text: string) => void live.send(text);
 
@@ -244,8 +241,8 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
     resetLayout: () => setPrefs({ layout: DEFAULT_LAYOUT }),
     send: sendText,
     focusRunning,
-    startFocus: () => useFocus.getState().start(),
-    stopFocus: () => useFocus.getState().stop(),
+    startFocus: () => void useFocus.getState().start(),
+    stopFocus: () => void useFocus.getState().stop(),
   };
 
   // Global shortcuts: Space starts, M toggles the mic, Esc clears the projections.

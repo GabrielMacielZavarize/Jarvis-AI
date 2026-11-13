@@ -1,14 +1,16 @@
 /**
- * Sessão de foco (FOC-47): blocos de trabalho e pausas, no estilo Pomodoro. Roda no HUD, não no
- * agente, para a contagem continuar depois que o link fecha por silêncio; fica salva no navegador,
- * então recarregar a página não zera o bloco em andamento.
+ * Sessão de foco (FOC-47): blocos de trabalho e pausas, no estilo Pomodoro. A fonte da verdade é o
+ * servidor do HUD (`focus.py`): ele conta com a aba fechada, pausa quando você sai da frente do PC e
+ * avisa a troca de bloco. Aqui ficam o espelho do estado (para o anel e o chip do topo), os
+ * comandos e o aviso de som e notificação quando a aba está aberta.
  */
 import { create } from 'zustand';
 import { useHud } from './hudStore';
 import { playCue } from './sounds';
 
 export type FocusPhase = 'work' | 'rest';
-export type FocusEvent = 'rest' | 'work' | 'done';
+/** O que o servidor registra a cada troca: blocos, pausa pela ausência e volta. */
+export type FocusEventKind = 'rest' | 'work' | 'done' | 'paused' | 'resumed';
 
 export interface FocusConfig {
   /** Minutos de cada bloco de foco. */
@@ -24,16 +26,30 @@ export interface FocusState extends FocusConfig {
   phase: FocusPhase;
   /** Bloco de foco atual, de 1 a `cycles`. */
   cycle: number;
-  /** Quando o bloco atual termina (ms). */
+  /** A contagem parou porque você saiu da frente do PC (presença ligada). */
+  paused: boolean;
+  /** Quando o bloco atual termina, no relógio deste navegador (ms). 0 parado ou pausado. */
   endsAt: number;
+  /** Quanto faltava ao pausar (s). Só vale com `paused`. */
+  pausedRemaining: number;
+}
+
+/** A última troca registrada pelo servidor (`last_event` de `/api/focus`). */
+export interface FocusLastEvent {
+  seq: number;
+  kind: FocusEventKind;
+  title: string;
+  message: string;
+  /** Relógio do servidor (ms). */
+  at_ms: number;
 }
 
 export const DEFAULT_FOCUS: FocusConfig = { work: 25, rest: 5, cycles: 4 };
 export const FOCUS_LIMITS = { work: [1, 180], rest: [1, 60], cycles: [1, 12] } as const;
-export const FOCUS_STORAGE_KEY = 'jarvis.focus';
-export const IDLE_FOCUS: FocusState = { ...DEFAULT_FOCUS, running: false, phase: 'work', cycle: 1, endsAt: 0 };
+export const FOCUS_POLL_MS = 3000;
+export const IDLE_FOCUS: FocusState = { ...DEFAULT_FOCUS, running: false, phase: 'work', cycle: 1, paused: false, endsAt: 0, pausedRemaining: 0 };
 
-const MINUTE = 60_000;
+const EVENT_KINDS: readonly FocusEventKind[] = ['rest', 'work', 'done', 'paused', 'resumed'];
 
 function clamp(value: unknown, [low, high]: readonly [number, number], fallback: number): number {
   const number = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : fallback;
@@ -48,51 +64,58 @@ export function cleanConfig(raw: Partial<FocusConfig> | null | undefined): Focus
   };
 }
 
-export function startFocus(config: Partial<FocusConfig>, now: number): FocusState {
-  const clean = cleanConfig(config);
-  return { ...clean, running: true, phase: 'work', cycle: 1, endsAt: now + clean.work * MINUTE };
-}
-
-/** O bloco seguinte, contado a partir de `from` (o fim do anterior, ou agora ao pular). */
-function nextBlock(state: FocusState, from: number): { state: FocusState; event: FocusEvent } {
-  if (state.phase === 'work') {
-    // Depois do último bloco de foco não há pausa: a sessão acabou.
-    if (state.cycle >= state.cycles) return { state: { ...state, running: false, endsAt: 0 }, event: 'done' };
-    return { state: { ...state, phase: 'rest', endsAt: from + state.rest * MINUTE }, event: 'rest' };
-  }
-  return { state: { ...state, phase: 'work', cycle: state.cycle + 1, endsAt: from + state.work * MINUTE }, event: 'work' };
-}
+const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
 /**
- * Anda a sessão até `now`. Se a aba dormiu por vários blocos, passa por todos de uma vez e devolve
- * cada troca que aconteceu, com os horários contados do fim de cada bloco (sem acumular atraso).
+ * O estado de `/api/focus` no relógio deste navegador: o servidor manda o horário dele (`now_ms`) e o
+ * do fim do bloco, e a diferença entre os dois relógios sai da conta. null se a resposta não for isso.
  */
-export function advance(state: FocusState, now: number): { state: FocusState; events: FocusEvent[] } {
-  const events: FocusEvent[] = [];
-  let current = state;
-  while (current.running && now >= current.endsAt && events.length < 64) {
-    const step = nextBlock(current, current.endsAt);
-    current = step.state;
-    events.push(step.event);
-  }
-  return { state: current, events };
+export function stateFromSnapshot(raw: unknown, clientNow: number): FocusState | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const data = raw as Record<string, unknown>;
+  if (data.enabled === false || typeof data.running !== 'boolean') return null;
+  const config = cleanConfig(data as Partial<FocusConfig>);
+  if (!data.running) return { ...IDLE_FOCUS, ...config };
+  const paused = data.paused === true;
+  const skew = isNumber(data.now_ms) ? data.now_ms - clientNow : 0;
+  const endsAt = isNumber(data.ends_at_ms) ? data.ends_at_ms - skew : 0;
+  if (!paused && endsAt <= 0) return null;
+  return {
+    ...config,
+    running: true,
+    phase: data.phase === 'rest' ? 'rest' : 'work',
+    cycle: clamp(data.cycle, [1, config.cycles], 1),
+    paused,
+    endsAt: paused ? 0 : endsAt,
+    pausedRemaining: paused && isNumber(data.remaining_s) ? Math.max(0, data.remaining_s) : 0,
+  };
 }
 
-export function skipPhase(state: FocusState, now: number): { state: FocusState; events: FocusEvent[] } {
-  if (!state.running) return { state, events: [] };
-  const step = nextBlock(state, now);
-  return { state: step.state, events: [step.event] };
+export function lastEventOf(raw: unknown): FocusLastEvent | null {
+  const event = (raw as { last_event?: unknown } | null)?.last_event;
+  if (typeof event !== 'object' || event === null) return null;
+  const data = event as Record<string, unknown>;
+  if (!EVENT_KINDS.includes(data.kind as FocusEventKind) || !isNumber(data.at_ms) || typeof data.title !== 'string') return null;
+  return {
+    seq: isNumber(data.seq) ? data.seq : 0,
+    kind: data.kind as FocusEventKind,
+    title: data.title,
+    message: typeof data.message === 'string' ? data.message : '',
+    at_ms: data.at_ms,
+  };
 }
 
 export function remainingSeconds(state: FocusState, now: number): number {
-  return state.running ? Math.max(0, Math.ceil((state.endsAt - now) / 1000)) : 0;
+  if (!state.running) return 0;
+  if (state.paused) return Math.ceil(state.pausedRemaining);
+  return Math.max(0, Math.ceil((state.endsAt - now) / 1000));
 }
 
 /** 0 → 1 do bloco atual, para o anel de progresso. */
 export function phaseProgress(state: FocusState, now: number): number {
   if (!state.running) return 0;
-  const total = (state.phase === 'work' ? state.work : state.rest) * MINUTE;
-  return Math.max(0, Math.min(1, 1 - (state.endsAt - now) / total));
+  const total = (state.phase === 'work' ? state.work : state.rest) * 60;
+  return Math.max(0, Math.min(1, 1 - remainingSeconds(state, now) / total));
 }
 
 export function formatCountdown(seconds: number): string {
@@ -100,98 +123,106 @@ export function formatCountdown(seconds: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-/** O que a ferramenta de voz recebe de volta. */
-export function focusReport(state: FocusState, now: number) {
-  return { running: state.running, phase: state.phase, cycle: state.cycle, cycles: state.cycles, remaining_s: remainingSeconds(state, now) };
+/** Já passou do fim do bloco e o servidor ainda não mandou a troca (ele conta a cada segundo). */
+export function blockEnded(state: FocusState, now: number): boolean {
+  return state.running && !state.paused && now >= state.endsAt;
 }
 
-export function parseFocus(raw: string | null): FocusState {
-  if (!raw) return IDLE_FOCUS;
-  try {
-    const data = JSON.parse(raw) as Partial<FocusState>;
-    const config = cleanConfig(data);
-    if (!data.running || typeof data.endsAt !== 'number' || !Number.isFinite(data.endsAt)) return { ...IDLE_FOCUS, ...config };
-    return {
-      ...config,
-      running: true,
-      phase: data.phase === 'rest' ? 'rest' : 'work',
-      cycle: clamp(data.cycle, [1, config.cycles], 1),
-      endsAt: data.endsAt,
-    };
-  } catch {
-    return IDLE_FOCUS;
-  }
-}
-
-function load(): FocusState {
-  try {
-    return typeof window === 'undefined' ? IDLE_FOCUS : parseFocus(window.localStorage.getItem(FOCUS_STORAGE_KEY));
-  } catch {
-    return IDLE_FOCUS;
-  }
-}
-
-function save(state: FocusState) {
-  try {
-    window.localStorage.setItem(FOCUS_STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // Janela anônima: a sessão vale até a aba fechar.
-  }
-}
-
-const EVENT_TEXT: Record<FocusEvent, { title: string; message: (state: FocusState) => string }> = {
-  rest: { title: 'Hora da pausa', message: (s) => `Bloco ${s.cycle} de ${s.cycles} concluído. ${s.rest} min de descanso.` },
-  work: { title: 'De volta ao foco', message: (s) => `Bloco ${s.cycle} de ${s.cycles}: ${s.work} min.` },
-  done: { title: 'Sessão de foco concluída', message: (s) => `${s.cycles} ${s.cycles === 1 ? 'bloco' : 'blocos'} de ${s.work} min. Bom trabalho.` },
-};
-
-/** Som, notificação e registro de cada troca de bloco. */
-function announce(events: FocusEvent[], state: FocusState) {
-  if (events.length === 0) return;
+/** Som, notificação e registro de cada troca vista com a aba aberta. */
+function announce(event: FocusLastEvent) {
   const hud = useHud.getState();
-  // Vários blocos de uma vez (aba que dormiu): só o último vira aviso.
-  const event = events[events.length - 1];
-  const text = EVENT_TEXT[event];
+  if (event.kind === 'paused') {
+    hud.addLog('info', 'Foco · pausado porque você saiu');
+    return;
+  }
   playCue('timerDone');
-  hud.pushToast({ level: event === 'work' ? 'info' : 'warn', title: text.title, message: text.message(state), code: 'FOC-47' });
-  hud.addLog(event === 'done' ? 'ok' : 'info', `Foco · ${text.title.toLowerCase()}`);
+  const level = event.kind === 'work' || event.kind === 'resumed' ? 'info' : 'warn';
+  hud.pushToast({ level, title: event.title, message: event.message, code: 'FOC-47' });
+  hud.addLog(event.kind === 'done' ? 'ok' : 'info', `Foco · ${event.title.toLowerCase()}`);
 }
 
 interface FocusStore {
   focus: FocusState;
-  start: (config?: Partial<FocusConfig>) => void;
-  stop: () => void;
-  skip: () => void;
-  /** Chamado a cada segundo enquanto a sessão roda. */
-  tick: (now?: number) => void;
+  /** Por que o último comando não deu certo (o servidor fora do ar, o foco desligado). */
+  error: string | null;
+  /** Lê o servidor. Chamado a cada poucos segundos e quando o bloco passa do fim. */
+  sync: () => Promise<void>;
+  start: (config?: Partial<FocusConfig>) => Promise<void>;
+  stop: () => Promise<void>;
+  skip: () => Promise<void>;
 }
 
-export const useFocus = create<FocusStore>((set, get) => ({
-  focus: load(),
-  start: (config) => {
-    const focus = startFocus(config ?? get().focus, Date.now());
-    save(focus);
-    set({ focus });
-    useHud.getState().addLog('info', `Foco iniciado · ${focus.cycles}×${focus.work} min`);
-  },
-  stop: () => {
-    const focus = { ...get().focus, running: false, endsAt: 0, phase: 'work' as const, cycle: 1 };
-    save(focus);
-    set({ focus });
-  },
-  skip: () => {
-    const { state, events } = skipPhase(get().focus, Date.now());
-    save(state);
-    set({ focus: state });
-    announce(events, state);
-  },
-  tick: (now = Date.now()) => {
-    const current = get().focus;
-    if (!current.running) return;
-    const { state, events } = advance(current, now);
-    if (events.length === 0) return;
-    save(state);
-    set({ focus: state });
-    announce(events, state);
-  },
-}));
+// A troca de bloco só vira aviso depois da primeira leitura: abrir ou recarregar a aba não repete
+// o que o servidor já avisou (pela bandeja ou pela voz).
+let lastEventAt: number | null = null;
+let inFlight = false;
+
+async function request(path: string, init?: RequestInit): Promise<unknown> {
+  const response = await fetch(path, { cache: 'no-store', ...init, headers: init?.body ? { 'Content-Type': 'application/json' } : undefined });
+  if (!response.ok) {
+    let detail = `O servidor respondeu ${response.status}.`;
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === 'string') detail = body.detail;
+    } catch {
+      // Sem corpo JSON: fica a mensagem genérica.
+    }
+    throw new Error(detail);
+  }
+  return response.json();
+}
+
+export const useFocus = create<FocusStore>((set, get) => {
+  const apply = (raw: unknown) => {
+    const focus = stateFromSnapshot(raw, Date.now());
+    if (!focus) return;
+    const event = lastEventOf(raw);
+    if (lastEventAt === null) lastEventAt = event?.at_ms ?? 0;
+    else if (event && event.at_ms > lastEventAt) {
+      lastEventAt = event.at_ms;
+      announce(event);
+    }
+    set({ focus, error: null });
+  };
+
+  const command = async (body: Record<string, unknown>): Promise<boolean> => {
+    try {
+      apply(await request('/api/focus', { method: 'POST', body: JSON.stringify(body) }));
+      return true;
+    } catch (error) {
+      set({ error: error instanceof Error && error.message ? error.message : 'O servidor do HUD não respondeu.' });
+      return false;
+    }
+  };
+
+  return {
+    focus: IDLE_FOCUS,
+    error: null,
+    sync: async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        apply(await request('/api/focus'));
+      } catch {
+        // Sem servidor a tela segue com o último estado; a próxima leitura tenta de novo.
+      } finally {
+        inFlight = false;
+      }
+    },
+    start: async (config) => {
+      const clean = cleanConfig(config ?? get().focus);
+      if (await command({ command: 'start', ...clean })) {
+        useHud.getState().addLog('info', `Foco iniciado · ${clean.cycles}×${clean.work} min`);
+      }
+    },
+    stop: async () => void (await command({ command: 'stop' })),
+    skip: async () => void (await command({ command: 'skip' })),
+  };
+});
+
+/** Só para os testes: volta ao estado de uma aba recém-aberta. */
+export function resetFocusForTests() {
+  lastEventAt = null;
+  inFlight = false;
+  useFocus.setState({ focus: IDLE_FOCUS, error: null });
+}

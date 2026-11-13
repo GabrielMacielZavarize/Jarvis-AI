@@ -356,3 +356,34 @@ test('a sessão de foco conta no painel, aparece no topo e sobrevive a recarrega
   await expect(page.locator('.chip--focus')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('o foco mudado fora da aba (voz, bandeja) aparece no HUD sem recarregar', async ({ page }) => {
+  const errors = await openHud(page, 'jarvis');
+  await expect(page.locator('.chip--focus')).toHaveCount(0);
+
+  // O servidor é a fonte da verdade: o que a voz ou a bandeja fazem chega na aba em poucos segundos.
+  const send = async (data: Record<string, unknown>) => {
+    const response = await page.request.post('/api/focus', { data });
+    expect(response.ok()).toBeTruthy();
+    return response.json();
+  };
+  const started = await send({ command: 'start', work: 5, rest: 1, cycles: 2 });
+  expect(started).toMatchObject({ running: true, phase: 'work', cycle: 1, cycles: 2, paused: false });
+  await expect(page.locator('.chip--focus')).toContainText('1/2', { timeout: 10_000 });
+  await expect(page.locator('.chip--focus')).toContainText('Foco');
+
+  await page.keyboard.press('2');
+  const timer = page.getByRole('region', { name: 'Foco' }).getByRole('timer');
+  await expect(timer).toContainText('Foco 1/2');
+  await expect(timer).toContainText(/^(05:00|04:5\d)/);
+
+  const skipped = await send({ command: 'skip' });
+  expect(skipped.last_event).toMatchObject({ kind: 'rest', title: 'Hora da pausa' });
+  await expect(timer).toContainText('Pausa 1/2', { timeout: 10_000 });
+  // A troca feita fora da aba também mostra a notificação do HUD.
+  await expect(page.getByText('Hora da pausa').first()).toBeVisible({ timeout: 10_000 });
+
+  await send({ command: 'stop' });
+  await expect(page.locator('.chip--focus')).toHaveCount(0, { timeout: 10_000 });
+  expect(errors).toEqual([]);
+});

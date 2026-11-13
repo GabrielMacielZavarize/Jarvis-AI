@@ -20,6 +20,7 @@ import subprocess
 import sys
 import threading
 import webbrowser
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
@@ -71,6 +72,27 @@ def wanted(flag: bool) -> bool:
         print("[BANDEJA] O ícone na bandeja só existe no Windows; o Jarvis segue sem ele.")
         return False
     return on
+
+
+# ───────────────────────── avisos na bandeja ─────────────────────────
+
+MAX_TOASTS = 10
+
+
+class TrayToasts:
+    """Avisos do servidor que o ícone mostra como notificação do Windows (a troca de bloco do foco,
+    FOC-47, sem nenhuma aba aberta). O ícone consulta o servidor a cada 2 s e esvazia a fila."""
+
+    def __init__(self) -> None:
+        self._items: deque[str] = deque(maxlen=MAX_TOASTS)
+
+    def push(self, title: str, message: str) -> None:
+        self._items.append(f"{title}. {message}".strip())
+
+    def drain(self) -> list[str]:
+        items = list(self._items)
+        self._items.clear()
+        return items
 
 
 # ───────────────────────── estado e menu ─────────────────────────
@@ -184,9 +206,14 @@ class TrayController:
         self.log_dir = log_dir
         self.restart_requested = False
         self.last_state = TrayState()
+        # O ícone liga isto à notificação do Windows: avisos que o servidor pede para a bandeja mostrar.
+        self.on_message: Callable[[str], None] = lambda _text: None
 
     def poll(self) -> TrayState:
         hub = self._hub_state()
+        for text in (hub or {}).get("toasts") or []:
+            if isinstance(text, str) and text.strip():
+                self.on_message(text.strip())
         gestures = self._gesture_service()
         try:
             autostart = self.autostart.enabled()
@@ -338,7 +365,9 @@ class LinkRequest(BaseModel):
     action: Literal["start", "stop"]
 
 
-def build_tray_router(hub: WakeHub, *, secret: str | None, open_browser: Callable[[str], Any]) -> APIRouter:
+def build_tray_router(
+    hub: WakeHub, *, secret: str | None, open_browser: Callable[[str], Any], toasts: TrayToasts | None = None
+) -> APIRouter:
     router = APIRouter(prefix="/api/tray")
 
     def require_tray(request: Request) -> None:
@@ -351,7 +380,13 @@ def build_tray_router(hub: WakeHub, *, secret: str | None, open_browser: Callabl
     async def state(request: Request) -> dict[str, Any]:
         require_tray(request)
         status = hub.status()
-        return {"link": hub.link_open(), "listening": status["listening"], "detector": status["detector"], "tabs": len(hub.clients)}
+        return {
+            "link": hub.link_open(),
+            "listening": status["listening"],
+            "detector": status["detector"],
+            "tabs": len(hub.clients),
+            "toasts": toasts.drain() if toasts is not None else [],
+        }
 
     @router.post("/link")
     async def link(body: LinkRequest, request: Request) -> dict[str, Any]:

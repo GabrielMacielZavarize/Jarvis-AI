@@ -1,6 +1,5 @@
 import { useAgent, useLocalParticipant, useSessionContext, useSessionMessages } from '@livekit/components-react';
 import { useSpeed, useTasks } from '../lib/day';
-import { focusReport, useFocus } from '../lib/focus';
 import { OSINT_LINK_MS } from '../lib/osint';
 import type { ReceivedMessage } from '@livekit/components-core';
 import {
@@ -287,13 +286,6 @@ export function useLiveJarvis(): LiveJarvis {
       const hud = useHud.getState();
       if (request.action === 'mic') return JSON.stringify({ mic: await microphoneReport(room) });
       if (request.action === 'appearance') return JSON.stringify(applyAppearance(request.theme, request.cinema));
-      if (request.action === 'focus') {
-        const focus = useFocus.getState();
-        if (request.command === 'start') focus.start({ work: request.work, rest: request.rest, cycles: request.cycles });
-        else if (request.command === 'stop') focus.stop();
-        else if (request.command === 'skip') focus.skip();
-        return JSON.stringify(focusReport(useFocus.getState().focus, Date.now()));
-      }
       if (request.action === 'end_session') {
         hud.addLog('info', 'Jarvis encerrou o link a seu pedido');
         window.setTimeout(() => void stopRef.current(), END_LINK_DELAY_MS);

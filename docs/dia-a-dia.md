@@ -1,6 +1,6 @@
 # Dia a dia
 
-O que se usa todo dia sem pensar: tarefas e notas, o briefing, o foco, as cotações e o teste da internet. Tudo funciona por voz e pela área Dia a dia do HUD (tecla `2`). Um interruptor só liga e desliga o conjunto: `JARVIS_ENABLE_DAY` (vem ligado).
+O que se usa todo dia sem pensar: tarefas e notas, o briefing, o foco, as cotações e o teste da internet. Tudo funciona por voz e pela área Dia a dia do HUD (tecla `2`); o foco também conversa com a presença, os avisos e a bandeja. Um interruptor só liga e desliga o conjunto: `JARVIS_ENABLE_DAY` (vem ligado).
 
 ## Como o Jarvis escolhe
 
@@ -81,11 +81,41 @@ Quem já tem um `rotinas.json` mantém o "bom dia" que salvou; a troca só vale 
 
 Blocos de trabalho com pausas, no estilo Pomodoro: "começa um foco de 25 minutos", "foco de 50 com pausa de 10, três blocos", "quanto falta do foco?", "pula esse bloco", "encerra o foco".
 
-A contagem roda no HUD, não no agente. Por isso ela continua depois que o link fecha por silêncio, e fica salva no navegador: recarregar a página não zera o bloco. A cada troca tocam o som de timer e uma notificação ("Hora da pausa", "De volta ao foco", "Sessão concluída"). O bloco em andamento aparece na barra do topo, em qualquer área, e clicar nele abre o Dia a dia. Depois do último bloco de foco não há pausa: a sessão acaba.
+A contagem mora no **servidor do HUD** (`focus.py`), não na aba do navegador nem no agente de voz. Por isso ela anda com o HUD fechado, depois que o link fecha por silêncio e até depois de um "Reiniciar o Jarvis" da bandeja: o estado fica em memória e em `foco.json`, na pasta do projeto e fora do git. O arquivo é pequeno e não guarda nada além dos tempos e de onde a sessão está. Se o Jarvis ficou desligado por mais de um bloco, ao subir ele passa pelos blocos que venceram e avisa só a última troca.
 
-Limites: foco de 1 a 180 minutos, pausa de 1 a 60 e de 1 a 12 blocos. Pela paleta (`Ctrl+K`), "Começar o foco" usa os tempos do painel.
+O HUD apenas mostra a sessão (o anel no painel, o chip na barra do topo, em qualquer área, que ao clique abre o Dia a dia) e manda os comandos do painel e da paleta (`Ctrl+K`, "Começar o foco" usa os tempos do painel). Recarregar a página não zera nada. Depois do último bloco de foco não há pausa: a sessão acaba.
 
-Como a contagem é da aba do navegador, ela precisa de uma aba do HUD aberta para avisar. Com a aba fechada o horário não se perde: ao reabrir, o HUD passa pelos blocos que venceram e mostra onde a sessão está.
+Limites: foco de 1 a 180 minutos, pausa de 1 a 60 e de 1 a 12 blocos.
+
+### Quem avisa a troca de bloco
+
+A cada troca ("Hora da pausa", "De volta ao foco", "Sessão de foco concluída") o servidor avisa pelo mesmo caminho dos [avisos proativos](avisos.md#durante-o-foco), com o assunto `foco` e prioridade normal:
+
+| Situação | O que acontece |
+| --- | --- |
+| Aba do HUD aberta | Som de timer, notificação e registro na tela |
+| Link aberto | Além disso, o Jarvis fala a troca |
+| Sem aba, com o ícone da [bandeja](bandeja.md#avisos-do-jarvis-na-bandeja) | Notificação do Windows |
+| Sem aba e sem a bandeja | Fica no registro do servidor e na tela da próxima aba que abrir. Não abre o navegador nem acorda o Jarvis |
+
+Escolhemos a prioridade normal de propósito: quem fecha o HUD para trabalhar não quer um navegador pulando a cada 25 minutos, então o aviso não abre o link como um lembrete faz. "Para de me avisar sobre o foco" silencia a voz (o HUD e a bandeja continuam mostrando).
+
+Pular o bloco pelo botão ou por voz não gera esse aviso: quem pediu já sabe. O HUD toca o som e mostra a notificação.
+
+### Com a presença ligada
+
+Com a [presença](camera-e-presenca.md) ligada (`JARVIS_PRESENCE=true`, com a câmera), sair da frente do PC durante um **bloco de foco** pausa a contagem:
+
+- A presença marca "ausente" depois de uns 20 segundos sem rosto, teclado nem mouse. Uma ausência de menos de 1 minuto (pegar um café, atender a porta) não pausa nada. Passou disso, a contagem para e **o tempo da ausência fica de fora**, inclusive o minuto de tolerância (só os 20 segundos que a presença leva para notar que você saiu continuam contando).
+- O anel e o chip do topo mostram "parado", e o `focus_session` diz "pausado porque você saiu".
+- Ao voltar, a contagem retoma e o Jarvis avisa quanto falta: "Foco retomado. Bem-vindo de volta. Faltam 14 min do bloco 2 de 4." Esse aviso segue o caminho da tabela acima.
+- Se a presença for desligada no meio da pausa, a contagem volta sozinha, sem aviso.
+- Na **pausa** (o descanso) a ausência é esperada e não pausa nada. Se a pausa acabar com você ainda longe, o próximo bloco começa e é ele que fica parado até você voltar.
+- Presença desligada, câmera desligada ou estado ainda "desconhecido": nada muda, a contagem é só relógio.
+
+### Avisos esperam o bloco
+
+Enquanto um bloco de foco corre (mesmo parado pela ausência), os avisos proativos que **não são críticos** esperam o fim do bloco: download concluído, CPU alta, disco, tarefas, lembrete comum e a bateria em 20%. Nem a notificação aparece. Quando o bloco acaba (a pausa começa, a sessão termina ou você encerra o foco), eles saem juntos, pelo caminho de sempre, com "(chegou às 14:02, durante o foco)" no fim. Continuam furando o foco: a bateria em 10%, o lembrete marcado como urgente e a troca de bloco do próprio foco. Detalhes em [avisos.md](avisos.md#durante-o-foco).
 
 A rotina "modo foco" ([memoria-e-rotinas.md](memoria-e-rotinas.md)) continua existindo e faz outra coisa: minimiza as janelas, baixa o volume e põe um timer. Dito sozinho, "modo foco" é a rotina; "foco de 25 minutos", "pomodoro" e "bloco de foco" são a sessão. Quem esconde os painéis é o "modo cinema" ([hud.md](hud.md)): "modo foco" só faz isso se não existir a rotina nem a sessão de foco.
 
@@ -112,11 +142,11 @@ Conversão de unidade é conta local, sem rede: comprimento, peso, volume, tempe
 
 | Variável | Padrão | O que faz |
 | --- | --- | --- |
-| `JARVIS_ENABLE_DAY` | `true` | Liga tarefas, notas, briefing, foco, cotações e teste de rede. `false` tira as ferramentas de voz, as rotas `/api/tasks` e `/api/network/test` e o aviso de tarefas da manhã |
+| `JARVIS_ENABLE_DAY` | `true` | Liga tarefas, notas, briefing, foco, cotações e teste de rede. `false` tira as ferramentas de voz, as rotas `/api/tasks`, `/api/focus` e `/api/network/test`, a contagem do foco e o aviso de tarefas da manhã |
 | `JARVIS_BRIEFING_NEWS` | `principais notícias do Brasil hoje` | Assunto das manchetes do briefing. Vazio ou `false`: sem manchetes |
 
 ## Arquivos
 
-- `tasks.py`, `quotes.py`, `netcheck.py` e `briefing.py` (que também tem a ferramenta do foco).
-- `web/src/lib/day.ts` e `web/src/lib/focus.ts`; `web/src/components/DayView.tsx` e `web/src/components/cards/DayCards.tsx`.
-- Testes: `tests/test_day.py`, `web/src/lib/focus.test.ts`, `web/src/lib/day.test.ts` e dois testes visuais em `web/e2e/hud.e2e.ts`.
+- `tasks.py`, `quotes.py`, `netcheck.py` e `briefing.py` (que também tem a ferramenta do foco). O foco em si é o `focus.py`: a sessão, o `foco.json` e as rotas `/api/focus`.
+- `web/src/lib/day.ts`, `web/src/lib/focus.ts` e `web/src/hooks/useFocusSync.ts`; `web/src/components/DayView.tsx` e `web/src/components/cards/DayCards.tsx`.
+- Testes: `tests/test_day.py`, `tests/test_focus.py` (relógio injetável), `web/src/lib/focus.test.ts`, `web/src/lib/day.test.ts` e dois testes visuais em `web/e2e/hud.e2e.ts`.

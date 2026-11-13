@@ -37,13 +37,15 @@ from camera import CAMERA_DISABLED, OPEN_TIMEOUT_S, CameraError, CameraHub
 from generate_playground_token import create_token
 from health import HealthStore, build_health_router
 from briefing import build_briefing_router
+from focus import ANNOUNCED as FOCUS_ANNOUNCED
+from focus import FocusEvent, FocusSession, build_focus_router
 from briefing import collect as collect_briefing
 from netcheck import build_net_router
 from osint import build_osint_router
 from tasks import build_tasks_router
 from routines import RoutineScheduler
 from context_triggers import ContextWatcher
-from proactive import ProactiveEngine, build_proactive_router
+from proactive import Notice, ProactiveEngine, build_proactive_router
 from screen_watch import attach_screen_watch, build_watch_router
 from presence import NEEDS_CAMERA, PresenceService, get_service, voice_action
 from personas import is_persona, save_persona, saved_persona
@@ -52,7 +54,7 @@ from settings import Settings, SettingsError, load_settings
 from wake_hub import SECRET_ENV as WAKE_SECRET_ENV
 from wake_hub import WakeHub, build_wake_router
 from tray import SECRET_ENV as TRAY_SECRET_ENV
-from tray import build_tray_router
+from tray import TrayToasts, build_tray_router
 
 APP_VERSION = "2.0.0"
 DEFAULT_AGENT_NAME = "jarvis"
@@ -379,6 +381,7 @@ def create_app(
     devices: DeviceRegistry | None = None,
     context_watcher: ContextWatcher | None = None,
     health_store: HealthStore | None = None,
+    focus_session: FocusSession | None = None,
 ) -> FastAPI:
     """Build the app. With ``reload_env`` the .env file is re-read on every request,
     so credentials added while the server is running are picked up without a restart.
@@ -389,7 +392,8 @@ def create_app(
     (tests); by default it runs when JARVIS_PROACTIVE=true; ``presence_service`` replaces the
     webcam presence detector (PRS-25, tests); ``devices`` replaces ``aparelhos.json`` (tests);
     ``context_watcher`` replaces the watcher of the routines fired by context (tests);
-    ``health_store`` replaces ``saude.db`` (SAU-40, tests)."""
+    ``health_store`` replaces ``saude.db`` (SAU-40, tests); ``focus_session`` replaces the focus
+    session and its ``foco.json`` (FOC-47, tests)."""
 
     def default_engine(wake_hub: WakeHub) -> ProactiveEngine | None:
         try:
@@ -404,14 +408,45 @@ def create_app(
         def user_present() -> bool | None:
             # TAR-43: o aviso das tarefas espera o usuário chegar. None = não dá para saber
             # (presença desligada, sem câmera ou parada): aí o aviso não fica travado.
-            if not settings.presence_enabled:
-                return None
-            state = presence().state()
-            if not state["running"] or state["state"] == "off":
-                return None
-            return state["state"] == "present"
+            reading = presence_reading()
+            return None if reading is None else reading == "present"
 
         return ProactiveEngine.for_settings(settings, wake_hub, open_browser=opener, present=user_present)
+
+    def presence_reading() -> str | None:
+        """"present", "away" ou "unknown" com a presença ligada e a câmera viva; None sem ela."""
+        try:
+            if not current_settings().presence_enabled:
+                return None
+        except SettingsError:
+            return None
+        state = presence().state()
+        if not state["running"] or state["state"] == "off":
+            return None
+        return str(state["state"])
+
+    def focus_present() -> bool | None:
+        # FOC-47: ausente pausa o foco; "unknown" (acabou de ligar) e sem presença não mexem em nada.
+        return {"present": True, "away": False}.get(presence_reading() or "")
+
+    def focus() -> FocusSession:
+        if not focus_box:
+            focus_box.append(FocusSession())
+        return focus_box[0]
+
+    def announce_focus(events: list[FocusEvent]) -> None:
+        """A troca de bloco vira um aviso do motor (voz com o link aberto) e, quando só o HUD o recebe,
+        uma notificação da bandeja. Vários blocos de uma vez (servidor parado): só a última troca."""
+        spoken = [event for event in events if event.kind in FOCUS_ANNOUNCED]
+        if not spoken:
+            return
+        event = spoken[-1]
+        notice = Notice("focus", "normal", event.title, event.message, id=f"f-{focus().seq}")
+        engine = app.state.proactive
+        routed = engine.dispatch([notice]) if engine is not None else []
+        way = routed[0][1] if routed else "hud"
+        if way == "hud" and os.environ.get(TRAY_SECRET_ENV):
+            app.state.tray_toasts.push(event.title, event.message)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -440,15 +475,20 @@ def create_app(
         # Rotinas por contexto: app aberto, fone conectado, chegada ou saída, rede Wi-Fi.
         context_task = asyncio.create_task(app.state.context.run_forever(context_enabled))
         reminders = asyncio.create_task(_calendar_reminders()) if calendar_reminders else None
+        # FOC-47: a sessão de foco conta aqui, com o HUD aberto ou não.
+        focus_task = asyncio.create_task(focus().run(focus_present, announce_focus, day_enabled))
         engine = (proactive or default_engine)(app.state.wake_hub)
         app.state.proactive = engine
         if engine is not None:
+            # FOC-47: durante um bloco de foco, os avisos que não são críticos esperam o fim do bloco.
+            engine.hold = lambda: day_enabled() and focus().holding()
             engine.start()
         # OLH-35: o vigia de janela é mais um monitor do motor de avisos.
         app.state.screen_watch = attach_screen_watch(engine, settings)
         yield
         scheduler_task.cancel()
         context_task.cancel()
+        focus_task.cancel()
         if reminders is not None:
             reminders.cancel()
         if engine is not None:
@@ -467,6 +507,8 @@ def create_app(
     app.state.lan_urls = []
     app.state.tls = None
     registry_box: list[DeviceRegistry] = [devices] if devices is not None else []
+    focus_box: list[FocusSession] = [focus_session] if focus_session is not None else []
+    app.state.tray_toasts = TrayToasts()
 
     def registry() -> DeviceRegistry:
         if not registry_box:
@@ -822,7 +864,9 @@ def create_app(
 
     # BAN-41: o ícone da bandeja (tray.py) abre e fecha o link por aqui.
     app.include_router(
-        build_tray_router(app.state.wake_hub, secret=os.environ.get(TRAY_SECRET_ENV), open_browser=open_browser)
+        build_tray_router(
+            app.state.wake_hub, secret=os.environ.get(TRAY_SECRET_ENV), open_browser=open_browser, toasts=app.state.tray_toasts
+        )
     )
 
     app.state.hud_url = "http://127.0.0.1:8000"
@@ -891,6 +935,8 @@ def create_app(
     # TAR-43 e RED-45: o HUD marca tarefas e mede a rede sem passar pelo agente.
     app.include_router(build_tasks_router(day_enabled, _require_local))
     app.include_router(build_net_router(day_enabled, _require_local))
+    # FOC-47: o painel de foco e a ferramenta de voz leem e mandam na mesma sessão.
+    app.include_router(build_focus_router(focus, day_enabled, _require_local))
 
     @app.get("/api/system/live")
     def system_live(request: Request) -> dict[str, Any]:

@@ -279,8 +279,8 @@ export function BriefingBody({ data }: { data: BriefingData }) {
 
 /** FOC-47: o anel da contagem e os controles da sessão de foco. */
 export function FocusBody() {
-  const { focus, start, stop, skip } = useFocus();
-  const now = useClock(focus.running ? 500 : 60_000);
+  const { focus, error, start, stop, skip } = useFocus();
+  const now = useClock(focus.running && !focus.paused ? 500 : 60_000);
   const [config, setConfig] = useState({ work: focus.work, rest: focus.rest, cycles: focus.cycles });
   const progress = phaseProgress(focus, now);
   const radius = 54;
@@ -308,16 +308,20 @@ export function FocusBody() {
         </svg>
         <div className="focus__time" role="timer" aria-live="off">
           <b>{focus.running ? formatCountdown(remainingSeconds(focus, now)) : formatCountdown(config.work * 60)}</b>
-          <span>{focus.running ? (focus.phase === 'work' ? `Foco ${focus.cycle}/${focus.cycles}` : `Pausa ${focus.cycle}/${focus.cycles}`) : 'Pronto'}</span>
+          <span>
+            {focus.running
+              ? `${focus.phase === 'work' ? 'Foco' : 'Pausa'} ${focus.cycle}/${focus.cycles}${focus.paused ? ' · parado' : ''}`
+              : 'Pronto'}
+          </span>
         </div>
       </div>
       <div className="focus__side">
         {focus.running ? (
           <div className="focus__actions">
-            <button type="button" className="btn btn--ghost" onClick={skip}>
+            <button type="button" className="btn btn--ghost" onClick={() => void skip()}>
               Pular bloco
             </button>
-            <button type="button" className="btn btn--danger" onClick={stop}>
+            <button type="button" className="btn btn--danger" onClick={() => void stop()}>
               Encerrar
             </button>
           </div>
@@ -328,14 +332,24 @@ export function FocusBody() {
               {field('rest', 'Pausa (min)', 60)}
               {field('cycles', 'Blocos', 12)}
             </div>
-            <button type="button" className="btn" onClick={() => start(config)}>
+            <button type="button" className="btn" onClick={() => void start(config)}>
               Começar o foco
             </button>
           </>
         )}
+        {focus.paused && (
+          <p className="osint__note" role="status">
+            Você saiu da frente do PC: a contagem parou e volta quando você voltar.
+          </p>
+        )}
+        {error && (
+          <p className="notice" role="alert">
+            {error}
+          </p>
+        )}
         <p className="osint__note">
-          A contagem roda no HUD e continua com o link fechado. Cada troca de bloco avisa com som e notificação. Por voz: “começa um foco de 25
-          minutos”.
+          A contagem roda no servidor do Jarvis e continua com o HUD fechado: a troca de bloco avisa por som, voz ou pela bandeja. Com a presença
+          ligada, ela para quando você sai. Por voz: “começa um foco de 25 minutos”.
         </p>
       </div>
     </div>

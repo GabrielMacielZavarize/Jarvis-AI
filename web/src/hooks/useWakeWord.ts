@@ -10,6 +10,7 @@ import {
   ACTIVE_MODES,
   hasPendingWork,
   noticeCard,
+  noticeIsShownByHud,
   noticeLogLevel,
   noticeToast,
   parseWakeEvent,
@@ -189,6 +190,7 @@ export function useWakeWord(options: WakeOptions): WakeWord {
           words: event.words ?? [],
         });
       } else if (event.type === 'notice') {
+        if (!noticeIsShownByHud(event)) return;
         const hud = useHud.getState();
         hud.pushCard('note', noticeCard(event));
         hud.pushToast(noticeToast(event));

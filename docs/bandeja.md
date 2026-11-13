@@ -49,6 +49,12 @@ O resultado de cada item aparece numa notificação do Windows quando há algo a
 
 Os gestos do menu rodam no processo do `jarvis.py`. Se você ligou os gestos por voz ("Jarvis, liga os gestos"), desligue também por voz: os dois juntos disputam a webcam.
 
+## Avisos do Jarvis na bandeja
+
+O ícone também mostra, como notificação do Windows, os avisos que o servidor pede para ele mostrar. Hoje é um só: a troca de bloco da [sessão de foco](dia-a-dia.md#foco-foc-47) ("Hora da pausa. Bloco 1 de 4 concluído. 5 min de descanso."), para quem fechou a aba do HUD e não está com o link aberto. A notificação sai quando o aviso não foi falado: com o link aberto o Jarvis fala e a bandeja fica quieta. Os outros avisos proativos não passam pela bandeja.
+
+Só existe com o ícone ligado (sem `--tray` o servidor nem guarda a fila). A notificação demora até 2 segundos, o intervalo em que o ícone pergunta ao servidor.
+
 ## Iniciar com o Windows
 
 O item grava a entrada `Jarvis` em `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`:
@@ -84,7 +90,7 @@ O ícone usa `Shell_NotifyIconW` pelo `ctypes`, como o aviso dos gestos (`gestur
 | --- | --- |
 | Estado, menu, comandos, chave Run e logs | `tray.py` |
 | Ícone, menu e notificações no Windows | `tray_icon.py` |
-| Rotas `/api/tray/state` e `/api/tray/link` | `tray.py`, ligadas no `server.py` |
+| Rotas `/api/tray/state` e `/api/tray/link`, e a fila de notificações (`TrayToasts`) | `tray.py`, ligadas no `server.py` |
 | Abrir e fechar o link na aba | `web/src/hooks/useWakeWord.ts` |
 
-A cada 2 segundos o ícone pergunta ao servidor se há link aberto e se o detector está ouvindo, e confere se o processo do agente está vivo. Para abrir e fechar o link ele usa o mesmo canal da palavra de ativação: o servidor manda um aviso à aba do HUD, e é ela que conecta ou desconecta.
+A cada 2 segundos o ícone pergunta ao servidor se há link aberto e se o detector está ouvindo, recebe as notificações que estiverem na fila (`toasts` em `/api/tray/state`, que esvazia a cada leitura) e confere se o processo do agente está vivo. Para abrir e fechar o link ele usa o mesmo canal da palavra de ativação: o servidor manda um aviso à aba do HUD, e é ela que conecta ou desconecta.

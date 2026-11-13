@@ -401,8 +401,6 @@ export type HudRequest =
   | { action: HudPanelAction; targets: string[] }
   | { action: 'mic' }
   | { action: 'end_session' }
-  /** FOC-47: começa, para, pula ou consulta a sessão de foco que roda no HUD. */
-  | { action: 'focus'; command: 'start' | 'stop' | 'skip' | 'status'; work: number; rest: number; cycles: number }
   /** Colour theme and/or cinema mode; null leaves that part as it is. */
   | { action: 'appearance'; theme: string | null; cinema: boolean | null };
 

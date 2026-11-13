@@ -197,12 +197,6 @@ export function parseHudRequest(payload: string): HudRequest {
     raw = {};
   }
   if (raw.action === 'mic' || raw.action === 'end_session') return { action: raw.action };
-  if (raw.action === 'focus') {
-    const extra = raw as { command?: unknown; work?: unknown; rest?: unknown; cycles?: unknown };
-    const command = ['start', 'stop', 'skip', 'status'].includes(extra.command as string) ? (extra.command as 'start' | 'stop' | 'skip' | 'status') : 'status';
-    const number = (value: unknown, fallback: number) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback);
-    return { action: 'focus', command, work: number(extra.work, 25), rest: number(extra.rest, 5), cycles: number(extra.cycles, 4) };
-  }
   if (raw.action === 'appearance') {
     return {
       action: 'appearance',

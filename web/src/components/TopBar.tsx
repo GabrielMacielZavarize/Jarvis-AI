@@ -96,8 +96,14 @@ export function TopBar({ mode, status, connected, micEnabled, demo, sessionStart
       <div className="chips">
         {demo && <div className="chip chip--demo">Simulação</div>}
         {focus.running && (
-          <button type="button" className={`chip chip--focus chip--focus-${focus.phase}`} onClick={() => useHud.getState().setView('day')} title="Abrir o Dia a dia">
-            {focus.phase === 'work' ? 'Foco' : 'Pausa'} <b>{formatCountdown(remainingSeconds(focus, now))}</b> {focus.cycle}/{focus.cycles}
+          <button
+            type="button"
+            className={`chip chip--focus chip--focus-${focus.phase}${focus.paused ? ' chip--focus-paused' : ''}`}
+            onClick={() => useHud.getState().setView('day')}
+            title={focus.paused ? 'Foco parado: você saiu da frente do PC. Abrir o Dia a dia' : 'Abrir o Dia a dia'}
+          >
+            {focus.paused ? 'Foco parado' : focus.phase === 'work' ? 'Foco' : 'Pausa'} <b>{formatCountdown(remainingSeconds(focus, now))}</b> {focus.cycle}/
+            {focus.cycles}
           </button>
         )}
         <div className="chip">

@@ -46,7 +46,7 @@ Cada ferramenta do Jarvis tem um código de protocolo, que aparece no HUD (na pl
 | COT-44 | `get_quotes`, `convert_value` | Cotação de moedas em reais e conversão entre moedas ou entre unidades de medida | "Quanto está o dólar?", "Quanto dá 150 dólares em reais?", "10 milhas em quilômetros." |
 | RED-45 | `network_speed` | Latência, download e upload da internet, com histórico | "Como está a minha internet?", "Testa a velocidade." |
 | BRF-46 | `daily_briefing` | Resumo do dia num painel: clima, próxima reunião, tarefas, lembretes, cotações e manchetes | "Como está o meu dia?", "Me dá o resumo do dia." |
-| FOC-47 | `focus_session` | Sessão de foco (Pomodoro) com a contagem no HUD, que continua com o link fechado | "Começa um foco de 25 minutos.", "Quanto falta do foco?", "Encerra o foco." |
+| FOC-47 | `focus_session` | Sessão de foco (Pomodoro) contada no servidor: continua com o HUD fechado, pausa quando você sai (presença), segura os avisos não críticos e avisa a troca de bloco por voz, HUD ou bandeja | "Começa um foco de 25 minutos.", "Quanto falta do foco?", "Encerra o foco." |
 | SAU-40 | Nenhuma (painel do HUD) | Histórico local de tempo de resposta, ativações, falhas e modelos, com sugestões de ajuste do `.env` | Abra o painel Saúde no HUD |
 
 A palavra de ativação (WAK-22) e o celular na rede de casa (LAN-26) não têm ferramenta de voz. Estão em [voz.md](voz.md#palavra-de-ativação) e [celular.md](celular.md).

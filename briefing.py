@@ -4,8 +4,9 @@ O briefing junta num painel só o que o dia tem: clima, próxima reunião, taref
 próximas 24 horas, cotações e manchetes. Quem monta é o servidor do HUD (``/api/briefing``), que
 já guarda o clima e a agenda em memória; o painel Briefing do HUD e a ferramenta de voz leem dali.
 
-O foco (Pomodoro) roda no HUD, não no agente: assim a contagem continua depois que o link fecha
-por silêncio. A ferramenta de voz só pede ao HUD para começar, parar ou dizer quanto falta.
+O foco (Pomodoro) roda no servidor do HUD (``focus.py``), não no agente nem na aba: assim a
+contagem continua depois que o link fecha por silêncio e com o navegador fechado. A ferramenta de
+voz pede ao servidor, por HTTP, para começar, parar, pular ou dizer quanto falta.
 """
 
 from __future__ import annotations
@@ -22,7 +23,9 @@ from livekit.agents import RunContext, function_tool
 
 import quotes as quotes_module
 import tasks as tasks_module
-from hud import hud_request, show_card, tool_status
+from focus import API_PATH as FOCUS_PATH
+from focus import FOCUS_LIMITS, spoken_left
+from hud import show_card, tool_status
 
 logger = logging.getLogger("jarvis-briefing")
 
@@ -31,7 +34,6 @@ QUOTES_TTL_S = 10 * 60
 NEWS_TTL_S = 30 * 60
 MAX_HEADLINES = 4
 MAX_TASKS = 6
-FOCUS_LIMITS = {"work": (1, 180), "rest": (1, 60), "cycles": (1, 12)}
 
 
 def greeting(now: dt.datetime) -> str:
@@ -175,14 +177,25 @@ def _clamp(name: str, value: int) -> int:
     return max(low, min(high, int(value)))
 
 
+def focus_request(hud_url: str, payload: dict[str, Any], *, http: Any = requests, timeout: float = 4.0) -> dict[str, Any] | None:
+    """Manda um comando à sessão de foco do servidor do HUD; None quando ele não responde."""
+    try:
+        response = http.post(f"{hud_url.rstrip('/')}{FOCUS_PATH}", json=payload, timeout=timeout)
+        body = response.json() if response.status_code == 200 else None
+    except (requests.RequestException, ValueError):
+        return None
+    return body if isinstance(body, dict) and body.get("enabled", True) else None
+
+
 def describe_focus(state: dict[str, Any] | None) -> str:
     if state is None:
-        return "O HUD não respondeu. O foco roda no painel: abra o HUD para usar."
+        return "O servidor do HUD não respondeu. A sessão de foco mora nele: confira se o Jarvis está rodando."
     if not state.get("running"):
         return "Nenhuma sessão de foco rodando."
-    minutes, seconds = divmod(max(0, int(state.get("remaining_s") or 0)), 60)
-    left = f"{minutes} min" + (f" e {seconds} s" if seconds and minutes < 5 else "")
+    left = spoken_left(int(state.get("remaining_s") or 0))
     phase = "foco" if state.get("phase") == "work" else "pausa"
+    if state.get("paused"):
+        return f"Em {phase}, ciclo {state.get('cycle')} de {state.get('cycles')}, pausado porque você saiu da frente do PC. Faltam {left}."
     return f"Em {phase}, ciclo {state.get('cycle')} de {state.get('cycles')}. Faltam {left}."
 
 
@@ -203,8 +216,10 @@ def build_day_tools(hud_url: str) -> list[Any]:
 
     @function_tool()
     async def focus_session(context: RunContext, action: str = "start", work_minutes: int = 25, break_minutes: int = 5, cycles: int = 4) -> str:
-        """Sessão de foco (Pomodoro) com contagem no HUD: blocos de trabalho e pausas. A contagem
-        continua mesmo com o link fechado e avisa com som quando cada bloco acaba.
+        """Sessão de foco (Pomodoro): blocos de trabalho e pausas. A contagem mora no servidor do HUD,
+        continua com o link e o navegador fechados e avisa quando cada bloco acaba (por voz, pelo HUD
+        ou pela bandeja). Com a presença ligada, ela pausa se o usuário sai da frente do PC; durante o
+        bloco de foco os avisos que não são críticos esperam.
 
         Args:
             action: "start" começa, "stop" encerra, "skip" pula para o próximo bloco, "status" diz quanto falta.
@@ -218,12 +233,12 @@ def build_day_tools(hud_url: str) -> list[Any]:
             return "Posso começar, parar, pular o bloco ou dizer quanto falta do foco."
         payload = {"command": wanted, "work": _clamp("work", work_minutes), "rest": _clamp("rest", break_minutes), "cycles": _clamp("cycles", cycles)}
         await tool_status("focus_session", "running", wanted)
-        state = await hud_request("focus", payload)
+        state = await asyncio.to_thread(focus_request, hud_url, payload)
         await tool_status("focus_session", "done" if state is not None else "error", wanted)
         if state is None:
             return describe_focus(None)
         if wanted == "start":
-            return f"Foco iniciado: {payload['cycles']} blocos de {payload['work']} minutos com pausas de {payload['rest']}. Aviso com som a cada troca."
+            return f"Foco iniciado: {payload['cycles']} blocos de {payload['work']} minutos com pausas de {payload['rest']}. Aviso a cada troca de bloco."
         if wanted == "stop":
             return "Sessão de foco encerrada."
         return describe_focus(state)
