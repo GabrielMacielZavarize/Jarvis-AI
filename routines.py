@@ -1,7 +1,7 @@
 """Rotinas do Jarvis (ROT-24): um comando roda várias ferramentas em sequência.
 
-"Bom dia, Jarvis" cumprimenta pelo horário, diz o clima, as manchetes e os lembretes, aplica o
-layout "trabalho" e toca uma playlist; "modo foco", "modo jogo" e "boa noite" fazem o mesmo com
+"Bom dia, Jarvis" cumprimenta pelo horário, dá o briefing do dia (clima, reunião, tarefas,
+lembretes, cotações e manchetes), aplica o layout "trabalho" e toca uma playlist; "modo foco", "modo jogo" e "boa noite" fazem o mesmo com
 outros passos. As rotinas ficam em ``rotinas.json`` (fora do git) e o usuário cria e edita as
 suas por voz ("cria uma rotina estudo que abre o Notion e põe lo-fi").
 
@@ -97,6 +97,7 @@ class Action:
 ACTIONS: dict[str, Action] = {
     "greet": Action("Cumprimento", example="greet"),
     "weather": Action("Clima", example="weather (cidade padrão) ou weather: Lisboa"),
+    "briefing": Action("Briefing do dia", example="briefing"),
     "news": Action("Notícias", example="news: tecnologia"),
     "reminders": Action("Lembretes", needs="memory", example="reminders"),
     "time": Action("Horário", example="time"),
@@ -126,6 +127,8 @@ ACTION_ALIASES = {
     "previsao": "weather",
     "noticias": "news",
     "manchetes": "news",
+    "resumo": "briefing",
+    "resumo_do_dia": "briefing",
     "lembretes": "reminders",
     "memoria": "reminders",
     "hora": "time",
@@ -237,6 +240,8 @@ def parse_step(raw: str) -> Step:
             raise RoutineError("No passo de mídia use stop (pausar), play_pause, next ou previous.")
     if action == "volume":
         arg = _volume_arg(arg)
+    if action == "briefing":
+        arg = ""  # "resumo do dia" chega como "resumo: do dia"; o briefing não recebe argumento
     if action == "timer":
         parse_timer(arg)
     if ACTIONS[action].needs_arg and not arg:
@@ -367,16 +372,19 @@ def occurrence(schedule: dict[str, Any], now: dt.datetime) -> dt.datetime | None
 
 
 def default_routines() -> dict[str, dict[str, Any]]:
-    """As rotinas de fábrica; o usuário pode editar, agendar ou apagar qualquer uma."""
+    """As rotinas de fábrica; o usuário pode editar, agendar ou apagar qualquer uma.
+
+    Só valem enquanto não existe ``rotinas.json``: a primeira edição grava todas no arquivo e dali
+    em diante ele manda sozinho (``load_routines`` não mescla padrões com salvas). Por isso mudar
+    um padrão aqui nunca reescreve a rotina de quem já salvou a sua.
+    """
     return {
         "bom dia": {
             "name": "Bom dia",
             "aliases": ["bom dia jarvis", "rotina da manha", "manha"],
             "steps": [
                 "greet",
-                "weather",
-                f"news: {DEFAULT_NEWS_TOPIC}",
-                "reminders",
+                "briefing",
                 "layout: trabalho",
                 "youtube: playlist lo-fi para trabalhar",
             ],
@@ -628,6 +636,54 @@ def is_failure(result: str) -> bool:
     return bool(FAILURE_START.match(plain) or FAILURE_ANYWHERE.search(plain))
 
 
+async def _briefing(context: Any, settings: Settings) -> str:
+    """O passo "briefing": o resumo montado pelo servidor do HUD, projetado no painel Briefing e falado.
+
+    Com ``JARVIS_ENABLE_DAY=false`` o servidor não monta o resumo; o passo cai no clima, nas notícias
+    e nos lembretes de antes, para o "bom dia" de fábrica não perder o que dizia.
+    """
+    if not settings.day_enabled:
+        return await _briefing_without_day(context, settings)
+    briefing = importlib.import_module("briefing")  # na hora, para os testes trocarem as funções
+    data = await asyncio.to_thread(briefing.fetch_briefing, settings.hud_url)
+    if not isinstance(data, dict):
+        raise RoutineError("o servidor do HUD não respondeu ao briefing (confira se o HUD está aberto).")
+    try:
+        text = briefing.spoken(data)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise RoutineError("o servidor do HUD devolveu um briefing em formato inesperado.") from None
+    await show_card("briefing", data)
+    return text
+
+
+async def _briefing_without_day(context: Any, settings: Settings) -> str:
+    sources: list[tuple[str, Callable[[], Awaitable[str]]]] = []
+    if settings.home_city:
+        sources.append(("clima", lambda: _tool("tools", "get_weather")(context, city=settings.home_city)))
+    sources.append(("notícias", lambda: _tool("tools", "search_news")(context, topic=DEFAULT_NEWS_TOPIC)))
+    if settings.memory_enabled:
+        sources.append(("lembretes", lambda: asyncio.to_thread(reminders_text)))
+    done: list[str] = []
+    missing: list[str] = []
+    for label, fetch in sources:
+        try:
+            text = str(await fetch() or "").strip()
+        except Exception:  # uma fonte fora do ar não derruba as outras
+            logger.exception("Briefing sem o Dia a dia: falhou a fonte '%s'.", label)
+            missing.append(label)
+            continue
+        if not text or is_failure(text):
+            missing.append(label)
+        else:
+            done.append(text)
+    if not done:
+        raise RoutineError("o briefing está desligado (JARVIS_ENABLE_DAY=false) e nem o clima, as notícias e os lembretes responderam.")
+    note = "Briefing do dia desligado (JARVIS_ENABLE_DAY=false): usei clima, notícias e lembretes."
+    if missing:
+        note += f" Sem resposta: {', '.join(missing)}."
+    return note + " " + " ".join(done)
+
+
 async def _execute(step: Step, context: Any, settings: Settings) -> str:
     """Run one step through the tool that already does it; raises RoutineError for a clear failure."""
     action, arg = step.action, step.arg
@@ -641,6 +697,8 @@ async def _execute(step: Step, context: Any, settings: Settings) -> str:
         return greeting(_now())
     if action == "reminders":
         return await asyncio.to_thread(reminders_text)
+    if action == "briefing":
+        return await _briefing(context, settings)
     if action == "weather":
         city = arg or settings.home_city
         if not city:
@@ -950,7 +1008,9 @@ async def save_routine(
 ) -> str:
     """Create a routine or change one ("cria uma rotina estudo que abre o Notion e põe lo-fi").
 
-    Each step is one line "action: argument". Actions: greet; weather (or "weather: city");
+    Each step is one line "action: argument". Actions: greet; briefing (the day summary: weather,
+    next meeting, tasks, reminders, quotes and headlines, shown on the Briefing panel);
+    weather (or "weather: city");
     news: topic; reminders; time; timer: minutes label; note: title | text; layout: name (apply a
     saved window layout); save_layout: name; youtube: search (plays the best video/playlist);
     spotify: search; stream: service | search; site: url or name; app: name; folder: name;

@@ -101,7 +101,7 @@ Os gestos ainda abrem a webcam por conta própria. Com presença e gestos ligado
 
 Detalhes em [memoria-e-rotinas.md](memoria-e-rotinas.md#rotinas).
 
-- [ ] "Bom dia, Jarvis": clima, manchetes, lembretes, layout de trabalho e playlist, com cada passo no painel Rotina.
+- [ ] "Bom dia, Jarvis": cumprimento, briefing do dia, layout de trabalho e playlist, com cada passo no painel Rotina (detalhes na seção 33).
 - [ ] "Modo foco": pomodoro e volume baixo. "Boa noite" pergunta antes de bloquear o PC.
 - [ ] "Cria uma rotina estudo que abre o Notion e põe lo-fi" e depois "roda a rotina estudo".
 - [ ] "Todo dia útil às 8h roda o bom dia" (teste com um horário daqui a 2 min).
@@ -448,3 +448,31 @@ Olho de Deus:
 - [ ] "Minha senha vazou? É 123456." Ele não repete a senha, não consulta e manda você ao painel "Senha vazada?" da área Olho de Deus (tecla `3`).
 - [ ] Com `JARVIS_OSINT_NETWORK=false`: "como está a minha rede?" ele diz que a consulta está desligada e não insiste.
 - [ ] Com `JARVIS_ENABLE_OSINT=false` e `JARVIS_ENABLE_DAY=false` (reinicie): ele não conhece mais essas ferramentas e diz com franqueza que não consegue, sem inventar resultado.
+
+## 33. Briefing na rotina "bom dia"
+
+Detalhes em [memoria-e-rotinas.md](memoria-e-rotinas.md#o-passo-briefing) e [dia-a-dia.md](dia-a-dia.md#no-bom-dia). Os testes automáticos usam o servidor do HUD falso; aqui você confere com o servidor, o clima, a agenda e as notícias de verdade. Comece sem `rotinas.json` (apague ou renomeie o seu antes, guardando uma cópia).
+
+Rotina de fábrica:
+
+- [ ] "Bom dia, Jarvis." O painel Rotina mostra 4 passos (Cumprimento, Briefing do dia, Layout, YouTube) e o painel Briefing abre sozinho com clima, reunião, tarefas, lembretes, cotações e manchetes.
+- [ ] O Jarvis fala o cumprimento e o resumo (clima, reunião, tarefas, lembretes e 2 ou 3 manchetes) sem ler a lista inteira, e as janelas voltam ao lugar e a playlist abre.
+- [ ] O que ele fala bate com o painel Briefing do Painel (tecla `1`) e com "como está o meu dia?".
+- [ ] Crie um lembrete para daqui a 1 hora e uma tarefa para hoje; repita o bom dia e confira que os dois aparecem no resumo falado.
+- [ ] Com a agenda ligada e uma reunião hoje, a próxima reunião entra no resumo.
+
+HUD fora do ar:
+
+- [ ] Com o link conectado, derrube só o servidor do HUD (por exemplo, com um `JARVIS_HUD_URL` errado só para o agente) e diga "bom dia". O passo Briefing do dia aparece como falhou ("o servidor do HUD não respondeu ao briefing"), o layout e a playlist rodam mesmo assim e o Jarvis diz o que falhou, sem inventar o resumo.
+
+Dia a dia desligado:
+
+- [ ] Com `JARVIS_ENABLE_DAY=false` (reinicie): "bom dia, Jarvis" ainda funciona. O passo Briefing do dia fala que o briefing está desligado e usa clima, notícias e lembretes (confira que o clima é o da `JARVIS_HOME_CITY`). Não abre o painel Briefing.
+- [ ] Ainda com `JARVIS_ENABLE_DAY=false` e sem internet: o passo falha de vez com a mensagem que cita `JARVIS_ENABLE_DAY=false`, e o resto da rotina segue.
+
+Rotinas que você já tinha:
+
+- [ ] Com um `rotinas.json` antigo (o "bom dia" com clima, notícias e lembretes), diga "bom dia, Jarvis": ele roda os 6 passos antigos, sem briefing. Peça "cria uma rotina estudo que abre o Notion" e abra o `rotinas.json`: o "bom dia" continua com os passos antigos.
+- [ ] "Muda a rotina bom dia para cumprimento, briefing, layout trabalho e a playlist lo-fi." Depois "bom dia, Jarvis" usa o briefing.
+- [ ] "Cria uma rotina cedo que dá o briefing e abre o Notion" e "roda a rotina cedo": o briefing é falado e o Notion abre. "Quais rotinas eu tenho?" mostra "Briefing do dia" nos passos.
+- [ ] "Todo dia útil às 8h roda o bom dia" (horário daqui a 2 minutos, com o link fechado): o navegador abre, o Jarvis fala o briefing e o painel Briefing aparece.

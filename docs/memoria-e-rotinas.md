@@ -59,7 +59,7 @@ Uma rotina é uma lista de passos que o Jarvis roda em sequência com as ferrame
 
 | Rotina | O que faz |
 | --- | --- |
-| Bom dia ("Bom dia, Jarvis") | Cumprimenta pelo horário, diz o clima de `JARVIS_HOME_CITY`, as manchetes do dia e os lembretes de agenda da memória, aplica o layout de janelas "trabalho" e toca uma playlist lo-fi no YouTube |
+| Bom dia ("Bom dia, Jarvis") | Cumprimenta pelo horário, dá o [briefing do dia](dia-a-dia.md#briefing-do-dia-brf-46) (clima, próxima reunião, tarefas, lembretes, cotações e manchetes, no painel Briefing), aplica o layout de janelas "trabalho" e toca uma playlist lo-fi no YouTube |
 | Modo foco | Minimiza as janelas, põe o volume em 15%, liga um timer Pomodoro de 25 minutos e deixa uma nota no HUD |
 | Modo jogo | Abre a Steam e o Discord e põe o volume em 60% |
 | Boa noite | Cumprimenta, salva as janelas como layout "noite", pausa a mídia e pergunta antes de bloquear o PC |
@@ -67,6 +67,19 @@ Uma rotina é uma lista de passos que o Jarvis roda em sequência com as ferrame
 Cada passo aparece no painel Rotina do HUD como feito, falhou ou esperando o seu sim. Um passo que falha (layout que não existe, app que não abre, rede fora) não derruba os outros, e o Jarvis diz o que falhou e por quê. Um passo travado desiste depois de 60 segundos.
 
 O layout "trabalho" do bom dia é o que você salvou com "salva esse layout como trabalho". Sem ele, esse passo falha e o resto segue.
+
+#### O passo "briefing"
+
+O `briefing` pede o resumo ao servidor do HUD (o mesmo `/api/briefing` do painel Briefing), projeta o painel e devolve o texto para o Jarvis falar. Como o servidor já guarda o clima, as cotações e as manchetes em memória, o passo é rápido e não faz as buscas de novo.
+
+- **HUD fora do ar:** o passo falha com "o servidor do HUD não respondeu ao briefing" e o resto da rotina segue (layout e música abrem do mesmo jeito).
+- **`JARVIS_ENABLE_DAY=false`:** o servidor não monta o briefing, então o passo cai nos passos de antes: clima da `JARVIS_HOME_CITY`, notícias e lembretes da memória (os que estiverem ligados). A resposta começa dizendo que o briefing está desligado e o que não respondeu. Só falha de vez se nem o clima, nem as notícias, nem os lembretes responderem. Assim o "bom dia" de fábrica continua dizendo o essencial.
+
+#### Quem já tem o `rotinas.json`
+
+As rotinas de fábrica só valem enquanto o arquivo não existe. A primeira edição (criar, mudar ou agendar qualquer rotina) grava as quatro nele, e dali em diante o arquivo manda sozinho: o Jarvis não mistura padrões novos com as suas rotinas. Por isso a troca do "bom dia" (clima, notícias e lembretes viraram o briefing) vale para quem ainda não tem o arquivo e **não mexe** em quem já tem: o seu "bom dia" continua com os passos de antes até você pedir.
+
+Para trocar, diga "muda o bom dia para cumprimento, briefing, layout trabalho e a playlist lo-fi" (ou edite o arquivo). Para voltar à rotina de fábrica inteira, apague o `rotinas.json`; isso também apaga as suas rotinas, agendas e gatilhos.
 
 ### Criando e agendando
 
@@ -124,7 +137,7 @@ Ações aceitas:
 
 | Ação | Argumento |
 | --- | --- |
-| `greet`, `reminders`, `time`, `minimize`, `lock` | Nenhum |
+| `greet`, `briefing`, `reminders`, `time`, `minimize`, `lock` | Nenhum (`briefing`: o resumo do dia; também aceita `resumo`) |
 | `weather` | Opcional: a cidade |
 | `news` | O tema |
 | `timer` | Minutos e rótulo |
@@ -147,7 +160,7 @@ O que pode e o que não pode entrar numa rotina está em [seguranca.md](seguranc
 No Windows, com `JARVIS_ENABLE_PC_CONTROL=true` e `JARVIS_HOME_CITY` no `.env` (`python jarvis.py --rebuild` na primeira vez):
 
 1. Arrume as janelas de trabalho nos 3 monitores e diga "salva esse layout como trabalho". Minimize tudo.
-2. "Bom dia, Jarvis": o painel Rotina mostra os 6 passos um a um. O Jarvis fala o clima, 2 ou 3 manchetes e os lembretes, as janelas voltam ao lugar e a playlist abre.
+2. "Bom dia, Jarvis": o painel Rotina mostra os 4 passos um a um e o painel Briefing abre. O Jarvis fala o clima, a próxima reunião, as tarefas, os lembretes e 2 ou 3 manchetes, as janelas voltam ao lugar e a playlist abre.
 3. "Apaga o layout trabalho" e repita o bom dia: o passo do layout falha, o resto roda e o Jarvis diz que o layout não existe.
 4. "Modo foco": janelas minimizadas, volume em 15% e o timer de 25 minutos no HUD.
 5. "Boa noite": layout "noite" salvo, mídia pausada e a pergunta do bloqueio. Responda "não" (nada acontece), depois rode de novo e responda "sim, pode" (a tela bloqueia).

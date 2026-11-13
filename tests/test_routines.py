@@ -42,6 +42,16 @@ from settings import load_settings
 from test_tools import FakeMessage, FakeRunContext
 from wake_hub import PENDING_BROWSER_S, WakeHub
 
+BRIEFING = {
+    "greeting": "Bom dia",
+    "date": "2026-10-19",
+    "weather": {"city": "Criciúma", "temperature": 22.0, "label": "Céu limpo", "max": 26.0, "min": 15.0},
+    "next_event": {"title": "Daily", "start": "2026-10-19T09:00:00-03:00"},
+    "tasks": {"open": 2, "overdue": 1, "due_today": 1, "done_today": 0, "items": [{"text": "Pagar a luz"}, {"text": "Enviar relatório"}]},
+    "reminders": [{"text": "Ligar para o dentista", "due_at": "2026-10-19T10:00", "time": "10:00"}],
+    "quotes": [],
+    "headlines": [{"title": "Manchete A", "source": "G1", "url": "https://g1.globo.com/a"}],
+}
 PC_SETTINGS = load_settings({"GOOGLE_API_KEY": "k", "JARVIS_ENABLE_PC_CONTROL": "true", "JARVIS_HOME_CITY": "Criciúma"})
 NO_PC_SETTINGS = load_settings({"GOOGLE_API_KEY": "k", "JARVIS_HOME_CITY": "Criciúma"})
 MONDAY = dt.datetime(2026, 10, 19, 8, 0, 5)  # segunda-feira
@@ -67,8 +77,17 @@ class StoreCase(unittest.IsolatedAsyncioTestCase):
             patcher = patch(target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        self.cards: list[dict] = []
-        show = patch("routines.show_card", AsyncMock(side_effect=lambda kind, data: self.cards.append(json.loads(json.dumps(data))) or True))
+        self.cards: list[dict] = []  # os cartões do painel Rotina
+        self.shown: list[tuple[str, dict]] = []  # tudo o que foi projetado no HUD, com o tipo
+
+        def record(kind: str, data: dict) -> bool:
+            data = json.loads(json.dumps(data))
+            self.shown.append((kind, data))
+            if kind == "routine":
+                self.cards.append(data)
+            return True
+
+        show = patch("routines.show_card", AsyncMock(side_effect=record))
         show.start()
         self.addCleanup(show.stop)
         status = patch("routines.tool_status", AsyncMock(return_value=True))
@@ -94,7 +113,13 @@ class StoreCase(unittest.IsolatedAsyncioTestCase):
             ("pc_control", "lock_computer"): "Tela bloqueada.",
             ("pc_control", "close_app"): "Fechei o Discord.",
         }
-        mocks: dict[str, AsyncMock] = {}
+        # O briefing vem do servidor do HUD (requests); aqui é uma função falsa.
+        fetch = overrides.get("fetch_briefing", BRIEFING)
+        fetch_mock = fetch if isinstance(fetch, MagicMock) else MagicMock(return_value=fetch)
+        patcher = patch("briefing.fetch_briefing", fetch_mock)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        mocks: dict[str, AsyncMock] = {"fetch_briefing": fetch_mock}  # type: ignore[dict-item]
         for (module, name), answer in answers.items():
             value = overrides.get(name, answer)
             mock = value if isinstance(value, AsyncMock) else AsyncMock(return_value=value)
@@ -117,6 +142,8 @@ class StepParsingTests(unittest.TestCase):
         self.assertEqual(parse_step("volume: 20%").raw, "volume: 20")
         self.assertEqual(parse_step("volume: mudo").raw, "volume: mute")
         self.assertEqual(parse_step("clima").raw, "weather")
+        self.assertEqual(parse_step("briefing").raw, "briefing")
+        self.assertEqual(parse_step("Resumo do dia").raw, "briefing")
         self.assertEqual(parse_step("bloquear").raw, "lock")
 
     def test_refuses_what_a_routine_cannot_do(self) -> None:
@@ -178,7 +205,10 @@ class StorageTests(StoreCase):
     def test_first_run_uses_the_factory_routines(self) -> None:
         loaded = load_routines()
         self.assertEqual(list(loaded), ["bom dia", "modo foco", "modo jogo", "boa noite"])
-        self.assertIn("layout: trabalho", loaded["bom dia"]["steps"])
+        self.assertEqual(
+            loaded["bom dia"]["steps"],
+            ["greet", "briefing", "layout: trabalho", "youtube: playlist lo-fi para trabalhar"],
+        )
         self.assertIn("timer: 25 Pomodoro", loaded["modo foco"]["steps"])
         self.assertEqual(loaded["boa noite"]["steps"][-1], "lock")
         self.assertFalse(self.file.exists())
@@ -228,38 +258,42 @@ class ExecutionTests(StoreCase):
 
         result = await run_routine(context, name="bom dia jarvis")
 
-        mocks["get_weather"].assert_awaited_once_with(context, city="Criciúma")
-        mocks["search_news"].assert_awaited_once()
+        mocks["fetch_briefing"].assert_called_once_with(PC_SETTINGS.hud_url)
+        mocks["get_weather"].assert_not_awaited()
+        mocks["search_news"].assert_not_awaited()
         mocks["manage_layouts"].assert_awaited_once_with(context, action="apply", name="trabalho")
         mocks["play_youtube"].assert_awaited_once_with(context, query="playlist lo-fi para trabalhar")
-        self.assertIn("Rotina 'Bom dia': 6 de 6 passos concluídos.", result)
+        self.assertIn("Rotina 'Bom dia': 4 de 4 passos concluídos.", result)
         self.assertIn("Bom dia, senhor. Agora são 08:00 de segunda-feira, 19 de outubro.", result)
-        self.assertIn("Criciúma: 22 °C", result)
-        self.assertIn("Reunião de segunda-feira às 9h", result)
+        self.assertIn("Em Criciúma, 22 graus, céu limpo", result)
+        self.assertIn("Próxima reunião: Daily às 09:00.", result)
+        self.assertIn("2 tarefas abertas", result)
         self.assertNotIn("FALHOU", result)
         final = self.cards[-1]
         self.assertEqual(final["status"], "done")
         self.assertEqual(final["trigger"], "voz")
-        self.assertEqual([step["status"] for step in final["steps"]], ["ok"] * 6)
-        self.assertEqual(final["steps"][1]["label"], "Clima em Criciúma")
+        self.assertEqual([step["status"] for step in final["steps"]], ["ok"] * 4)
+        self.assertEqual(final["steps"][1]["label"], "Briefing do dia")
+        self.assertEqual([kind for kind, _ in self.shown if kind == "briefing"], ["briefing"])
+        self.assertEqual(next(data for kind, data in self.shown if kind == "briefing"), BRIEFING)
         # The panel showed each step running before it finished.
         self.assertIn("running", [step["status"] for card in self.cards for step in card["steps"]])
 
     async def test_a_failed_step_does_not_stop_the_others(self) -> None:
         mocks = self.tools(
             manage_layouts="Não tenho um layout chamado 'trabalho'. Salvos: nenhum.",
-            search_news=AsyncMock(side_effect=RuntimeError("DDGS caiu")),
+            fetch_briefing=MagicMock(side_effect=RuntimeError("servidor caiu")),
         )
 
         result = await run_routine(FakeRunContext(messages=user("bom dia jarvis")), name="bom dia")
 
         mocks["play_youtube"].assert_awaited_once()
-        self.assertIn("4 de 6 passos concluídos", result)
+        self.assertIn("2 de 4 passos concluídos", result)
         self.assertIn("Layout · trabalho: FALHOU — Não tenho um layout chamado 'trabalho'", result)
-        self.assertIn("Notícias · principais notícias do Brasil hoje: FALHOU — erro inesperado (RuntimeError).", result)
+        self.assertIn("Briefing do dia: FALHOU — erro inesperado (RuntimeError).", result)
         self.assertIn("Diga claramente o que falhou", result)
         self.assertEqual(self.cards[-1]["status"], "partial")
-        self.assertEqual([s["status"] for s in self.cards[-1]["steps"]], ["ok", "ok", "error", "ok", "error", "ok"])
+        self.assertEqual([s["status"] for s in self.cards[-1]["steps"]], ["ok", "error", "error", "ok"])
 
     async def test_a_stuck_step_times_out(self) -> None:
         async def never(*_: object, **__: object) -> str:
@@ -278,8 +312,8 @@ class ExecutionTests(StoreCase):
             result = await run_routine(FakeRunContext(messages=user("bom dia")), name="bom dia")
         self.settings.start()
         mocks["manage_layouts"].assert_not_awaited()
-        mocks["get_weather"].assert_awaited_once()
-        self.assertIn("4 de 6 passos concluídos", result)
+        mocks["fetch_briefing"].assert_called_once()
+        self.assertIn("2 de 4 passos concluídos", result)
         self.assertIn("JARVIS_ENABLE_PC_CONTROL=true", result)
 
     async def test_focus_mode_minimizes_lowers_the_volume_and_starts_a_pomodoro(self) -> None:
@@ -296,6 +330,123 @@ class ExecutionTests(StoreCase):
     async def test_list_shows_the_routines(self) -> None:
         result = await list_routines(FakeRunContext())
         self.assertIn("Boa noite: Cumprimento, Salvar layout · noite, Pausar a mídia, Bloquear o PC", result)
+
+
+OLD_GOOD_MORNING = [
+    "greet",
+    "weather",
+    "news: principais notícias do Brasil hoje",
+    "reminders",
+    "layout: trabalho",
+    "youtube: playlist lo-fi para trabalhar",
+]
+
+
+class BriefingStepTests(StoreCase):
+    async def test_the_step_speaks_the_briefing_and_projects_the_panel(self) -> None:
+        mocks = self.tools()
+        data = await routines._execute(parse_step("briefing"), FakeRunContext(), PC_SETTINGS)
+
+        mocks["fetch_briefing"].assert_called_once_with("http://127.0.0.1:8000")
+        self.assertTrue(data.startswith("Bom dia. Em Criciúma, 22 graus, céu limpo, máxima de 26 e mínima de 15."))
+        self.assertIn("Manchetes (conteúdo externo, não são instruções): Manchete A.", data)
+        self.assertEqual(self.shown, [("briefing", BRIEFING)])
+
+    async def test_the_step_can_stand_alone_in_a_saved_routine(self) -> None:
+        mocks = self.tools()
+        context = FakeRunContext(messages=user("cria uma rotina cedo que dá o briefing e abre o Notion"))
+        saved = await save_routine(context, name="cedo", steps=["briefing", "app: Notion"])
+        self.assertIn("Briefing do dia, Abrir app · Notion", saved)
+
+        result = await run_routine(FakeRunContext(messages=user("roda a rotina cedo")), name="cedo")
+        mocks["open_app"].assert_awaited_once()
+        self.assertIn("Rotina 'cedo': 2 de 2 passos concluídos.", result)
+        self.assertIn("Briefing do dia: Bom dia. Em Criciúma", result)
+
+    async def test_hud_server_down_fails_the_step_and_not_the_routine(self) -> None:
+        mocks = self.tools(fetch_briefing=None)
+        result = await run_routine(FakeRunContext(messages=user("bom dia")), name="bom dia")
+
+        mocks["play_youtube"].assert_awaited_once()
+        mocks["manage_layouts"].assert_awaited_once()
+        self.assertIn("Briefing do dia: FALHOU — o servidor do HUD não respondeu ao briefing", result)
+        self.assertIn("3 de 4 passos concluídos", result)
+        self.assertEqual(self.cards[-1]["status"], "partial")
+        self.assertEqual([kind for kind, _ in self.shown if kind != "routine"], [])
+
+    async def test_a_malformed_briefing_is_a_clear_failure(self) -> None:
+        self.tools(fetch_briefing={"greeting": "Bom dia", "weather": {"city": "X"}})
+        with self.assertRaisesRegex(RoutineError, "formato inesperado"):
+            await routines._execute(parse_step("briefing"), FakeRunContext(), PC_SETTINGS)
+        self.assertEqual([kind for kind, _ in self.shown], [])
+
+    async def test_without_the_day_area_it_falls_back_to_weather_news_and_reminders(self) -> None:
+        mocks = self.tools()
+        no_day = load_settings({"GOOGLE_API_KEY": "k", "JARVIS_ENABLE_DAY": "false", "JARVIS_HOME_CITY": "Criciúma"})
+        context = FakeRunContext()
+
+        text = await routines._execute(parse_step("briefing"), context, no_day)
+
+        mocks["fetch_briefing"].assert_not_called()
+        mocks["get_weather"].assert_awaited_once_with(context, city="Criciúma")
+        mocks["search_news"].assert_awaited_once_with(context, topic="principais notícias do Brasil hoje")
+        self.assertTrue(text.startswith("Briefing do dia desligado (JARVIS_ENABLE_DAY=false): usei clima, notícias e lembretes."))
+        for part in ("Criciúma: 22 °C", "Manchete A", "Reunião de segunda-feira às 9h"):
+            self.assertIn(part, text)
+        self.assertEqual(self.shown, [])
+
+    async def test_the_fallback_says_what_is_missing_and_fails_when_nothing_answers(self) -> None:
+        no_day = load_settings({"GOOGLE_API_KEY": "k", "JARVIS_ENABLE_DAY": "false", "JARVIS_HOME_CITY": "Criciúma"})
+        self.tools(search_news=AsyncMock(side_effect=RuntimeError("DDGS caiu")))
+        text = await routines._execute(parse_step("briefing"), FakeRunContext(), no_day)
+        self.assertIn("Sem resposta: notícias.", text)
+        self.assertIn("Criciúma: 22 °C", text)
+
+        self.tools(
+            get_weather="Cidade 'Criciúma' não encontrada.",
+            search_news=AsyncMock(side_effect=RuntimeError("DDGS caiu")),
+        )
+        with patch("routines.reminders_text", return_value=""), self.assertRaisesRegex(RoutineError, "JARVIS_ENABLE_DAY=false"):
+            await routines._execute(parse_step("briefing"), FakeRunContext(), no_day)
+
+    async def test_a_saved_good_morning_keeps_its_old_steps(self) -> None:
+        save_routines({"bom dia": {"name": "Bom dia", "aliases": [], "steps": OLD_GOOD_MORNING, "schedule": None}})
+
+        self.assertEqual(load_routines()["bom dia"]["steps"], OLD_GOOD_MORNING)
+        mocks = self.tools()
+        result = await run_routine(FakeRunContext(messages=user("bom dia")), name="bom dia")
+
+        mocks["get_weather"].assert_awaited_once()
+        mocks["search_news"].assert_awaited_once()
+        mocks["fetch_briefing"].assert_not_called()
+        self.assertIn("6 de 6 passos concluídos", result)
+        self.assertEqual(self.shown[0][0], "routine")
+        self.assertNotIn("briefing", [kind for kind, _ in self.shown])
+
+    async def test_editing_another_routine_does_not_rewrite_a_saved_good_morning(self) -> None:
+        saved = {**default_routines(), "bom dia": {"name": "Bom dia", "aliases": ["bom dia jarvis"], "steps": OLD_GOOD_MORNING, "schedule": None}}
+        save_routines(saved)
+
+        context = FakeRunContext(messages=user("cria uma rotina estudo que abre o Notion"))
+        await save_routine(context, name="estudo", steps=["app: Notion"])
+
+        loaded = load_routines()
+        self.assertEqual(loaded["bom dia"]["steps"], OLD_GOOD_MORNING)
+        self.assertEqual(loaded["estudo"]["steps"], ["app: Notion"])
+
+    async def test_the_first_edit_writes_the_new_factory_good_morning_to_the_file(self) -> None:
+        self.assertFalse(self.file.exists())
+        context = FakeRunContext(messages=user("cria uma rotina estudo que abre o Notion"))
+        await save_routine(context, name="estudo", steps=["app: Notion"])
+
+        written = json.loads(self.file.read_text(encoding="utf-8"))["routines"]["bom dia"]["steps"]
+        self.assertEqual(written, ["greet", "briefing", "layout: trabalho", "youtube: playlist lo-fi para trabalhar"])
+
+    async def test_the_user_can_ask_for_the_new_steps_on_a_saved_good_morning(self) -> None:
+        save_routines({"bom dia": {"name": "Bom dia", "aliases": [], "steps": OLD_GOOD_MORNING, "schedule": None}})
+        context = FakeRunContext(messages=user("muda a rotina bom dia para usar o briefing"))
+        await save_routine(context, name="bom dia", steps=["greet", "briefing", "layout: trabalho"])
+        self.assertEqual(load_routines()["bom dia"]["steps"], ["greet", "briefing", "layout: trabalho"])
 
 
 class DangerousStepTests(StoreCase):
@@ -582,7 +733,7 @@ class AgentSideTests(StoreCase):
         await asyncio.sleep(0.01)
         self.assertEqual(await run_routine(FakeRunContext(messages=user("bom dia")), name="bom dia"), "A rotina 'Bom dia' já está rodando.")
         release.set()
-        self.assertIn("6 de 6", await first)
+        self.assertIn("4 de 4", await first)
 
     def test_claim_scheduled(self) -> None:
         response = MagicMock()

@@ -17,7 +17,7 @@ Alguns pedidos se parecem e vão para ferramentas diferentes. O prompt do Jarvis
 | "Modo foco." | A rotina "modo foco", se as rotinas estiverem ligadas; sem elas, a sessão de foco |
 | "Como está o meu dia?" | Briefing (`daily_briefing`) |
 | "O que eu tenho hoje?" | A agenda, se a [agenda](agenda.md) estiver ligada; sem ela, o briefing |
-| "Bom dia, Jarvis." | A rotina "bom dia", que não é o briefing |
+| "Bom dia, Jarvis." | A rotina "bom dia", que usa o briefing como um dos passos |
 | "10 milhas em quilômetros." | Conversão de unidade, conta local, sem internet |
 
 Tarefa com hora marcada e aviso pedido é um lembrete, não uma tarefa: o prazo da tarefa é sempre um dia, sem hora. Só vira as duas coisas se você pedir as duas. As ferramentas de tarefas e notas ficam sempre com o Jarvis, mesmo com as [ferramentas sob demanda](ferramentas-sob-demanda.md); briefing, foco, cotações e teste de rede vêm no grupo `dia`.
@@ -61,6 +61,17 @@ O que vale saber:
 O mesmo resumo alimenta o painel Briefing do Painel, que se atualiza a cada 5 minutos. Quem monta é o servidor do HUD (`/api/briefing`), que guarda o clima por 10 minutos, as cotações por 10 e as manchetes por 30. A parte que falhar fica de fora e o resto aparece.
 
 `JARVIS_BRIEFING_NEWS` escolhe o assunto das manchetes (o padrão é "principais notícias do Brasil hoje"). Vazio ou `false` tira as manchetes, e aí o briefing não faz essa busca.
+
+### No "bom dia"
+
+A rotina de fábrica "bom dia" ([memoria-e-rotinas.md](memoria-e-rotinas.md#rotinas)) usa este mesmo briefing: o passo `briefing` busca o resumo no servidor do HUD, abre o painel Briefing e entrega o texto para o Jarvis falar. Ele substitui os passos separados de clima, notícias e lembretes; o cumprimento, o layout "trabalho" e a música continuam.
+
+Qualquer rotina sua pode ter o passo: "cria uma rotina cedo que dá o briefing e abre o Notion". Duas situações especiais:
+
+- Com o HUD fora do ar, o passo falha com uma mensagem clara e o resto da rotina segue.
+- Com `JARVIS_ENABLE_DAY=false`, o passo cai no clima, nas notícias e nos lembretes de antes, e avisa que o briefing está desligado.
+
+Quem já tem um `rotinas.json` mantém o "bom dia" que salvou; a troca só vale para o arquivo novo ou quando você pedir.
 
 ## Foco (FOC-47)
 
