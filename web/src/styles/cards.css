@@ -748,6 +748,202 @@
 .card--expanded .cam__tag {
   font-size: calc(13px * var(--ts, 1));
 }
+.cam__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+/* Mirror view of the live feed; the analysed frame stays as the camera took it. */
+.cam__feed--mirror .cam__live:not(.cam__live--still) {
+  transform: scaleX(-1);
+}
+.cam__hands {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.cam__pose {
+  position: absolute;
+  left: 30px;
+  bottom: 38px;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-ok);
+  background: rgb(1 8 14 / 0.6);
+  border: 1px solid rgb(82 255 176 / 0.45);
+  pointer-events: none;
+}
+.cam__banner {
+  position: absolute;
+  top: 38px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 2px;
+  max-width: 72%;
+  padding: 5px 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-primary);
+  background: rgb(1 8 14 / 0.62);
+  border: 1px solid rgb(var(--c-primary-rgb) / 0.5);
+  text-shadow: 0 0 6px rgb(var(--c-primary-rgb) / 0.5);
+  pointer-events: none;
+}
+.cam__banner strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: normal;
+}
+.cam__banner small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-dim);
+  text-shadow: none;
+}
+.cam__banner--armed {
+  border-color: rgb(var(--c-primary-rgb) / 0.85);
+}
+.cam__banner--ok {
+  color: var(--c-ok);
+  border-color: rgb(82 255 176 / 0.5);
+}
+.cam__banner--warn {
+  color: var(--c-accent);
+  border-color: rgb(var(--c-accent-rgb) / 0.6);
+}
+.cam__banner--danger,
+.cam__banner--error {
+  color: var(--c-danger);
+  border-color: rgb(255 90 90 / 0.6);
+}
+.cam__progress {
+  display: block;
+  height: 3px;
+  margin-top: 3px;
+  background: rgb(var(--c-primary-rgb) / 0.18);
+}
+.cam__progress b {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  transition: width 0.1s linear;
+}
+.card--expanded .cam__banner,
+.card--expanded .cam__pose {
+  font-size: 13px;
+}
+
+/* Você, gestos e o que o Jarvis viu, embaixo do feed */
+.vision {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.vision__cell {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  background: rgb(var(--c-primary-rgb) / 0.04);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+.vision__cell h4 {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: normal;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+/* Docked in a side column the three readouts share one short row; expanded, they get room. */
+.vision__cell p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--text);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.vision__cell small {
+  color: var(--text-dim);
+}
+.vision__cell .chip-btn {
+  justify-self: start;
+  margin-top: 1px;
+}
+.vision__cell .vision__ok {
+  color: var(--c-ok);
+}
+.vision__cell .vision__when {
+  display: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  -webkit-line-clamp: 1;
+}
+.card--expanded .vision__cell .vision__when {
+  display: -webkit-box;
+}
+/* Docked, the footer keeps only the buttons; the privacy note shows when expanded. */
+.cam__foot .card__sub {
+  display: none;
+}
+.card--expanded .cam__foot .card__sub {
+  display: block;
+}
+.cam__foot {
+  justify-content: flex-end;
+}
+.card--expanded .cam__foot {
+  justify-content: space-between;
+}
+.vision__cell .vision__answer {
+  -webkit-line-clamp: 3;
+}
+.vision__cell .vision__hint {
+  color: var(--text-dim);
+  -webkit-line-clamp: 3;
+}
+.vision__cell .vision__notice {
+  color: var(--c-danger);
+}
+.card--expanded .vision {
+  gap: 8px;
+}
+.card--expanded .vision__cell {
+  gap: 4px;
+  padding: 8px 10px;
+}
+.card--expanded .vision__cell p {
+  font-size: 12.5px;
+  line-height: 1.35;
+  -webkit-line-clamp: 4;
+}
+.card--expanded .vision__cell .vision__answer {
+  display: block;
+  max-height: 6.4em;
+  overflow: auto;
+}
 
 /* Mouse e teclado (MOU-20) */
 .pointer {

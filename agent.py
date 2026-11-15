@@ -36,7 +36,8 @@ async def jarvis_agent(ctx: agents.JobContext):
     watch_response_time(runtime.session, lambda: runtime.model)
     watch_model_failover(runtime, pool)
     if runtime.router is not None:
-        # Integrações MCP conectadas por use_tools (FER-33) fecham com a sessão.
+        # FER-33: as integrações MCP conectam já, em segundo plano, e fecham com a sessão.
+        runtime.router.warm_up()
         ctx.add_shutdown_callback(runtime.router.aclose)
     if settings.computer_use_enabled:
         # Modo ditado (DIT-29): escuta as transcrições desde o começo da sessão.
@@ -45,8 +46,9 @@ async def jarvis_agent(ctx: agents.JobContext):
         watch_dictation(runtime.session)
 
     # As duas perguntas ao servidor do HUD saem juntas: o link abre sem esperar uma pela outra.
-    routine_check = _nothing()
-    notices_check = _nothing()
+    # Cada coroutine só é criada quando vai ser aguardada (senão: "coroutine was never awaited").
+    routine_check = None
+    notices_check = None
     if settings.routines_enabled:
         from routines import claim_scheduled
 
@@ -57,7 +59,7 @@ async def jarvis_agent(ctx: agents.JobContext):
 
         # Link aberto por um aviso (PRO-28): ele vira a primeira fala, no lugar da saudação.
         notices_check = asyncio.to_thread(fetch_notices, settings.hud_url)
-    routine, waiting = await asyncio.gather(routine_check, notices_check)
+    routine, waiting = await asyncio.gather(routine_check or _nothing(), notices_check or _nothing())
     if routine:
         runtime.agent.startup_routine = routine
     if waiting:
@@ -119,11 +121,15 @@ async def jarvis_agent(ctx: agents.JobContext):
             SERVICE,
             attach_hud,
             autostart_requested,
+            hud_camera,
             serve_gesture_panel,
             start_for_session,
             watch_voice,
         )
 
+        # A webcam é do servidor do HUD (a presença e o feed do HUD a dividem por lá): abrir de
+        # novo neste processo falha enquanto ela está em uso, então os gestos leem o feed dele.
+        SERVICE.frames_factory = hud_camera
         # Tapar a câmera muta/desmuta o que o Jarvis ouve nesta sessão.
         MIC.bind(runtime.session, asyncio.get_running_loop())
         # Apontar enquanto fala marca o "aqui" do assistente de tela, sem ligar o mouse no ar.
@@ -137,6 +143,16 @@ async def jarvis_agent(ctx: agents.JobContext):
 
         async def stop_gestures() -> None:
             await asyncio.to_thread(SERVICE.stop)
+
+        # Fechar o link encerra a conversa, mas o job pode ficar vivo mais um tempo: sem isto a
+        # webcam continuava acesa e um link novo ganhava um segundo motor de gestos agindo junto.
+        closing: set[asyncio.Task[None]] = set()
+
+        @runtime.session.on("close")
+        def _on_close(_event: object) -> None:
+            task = asyncio.ensure_future(stop_gestures())
+            closing.add(task)
+            task.add_done_callback(closing.discard)
 
         ctx.add_shutdown_callback(unbind_mic)
         ctx.add_shutdown_callback(stop_gestures)

@@ -3,34 +3,40 @@
 Com tudo ligado o Jarvis passa de 75 ferramentas (cerca de 14 mil tokens só de declarações) e,
 com as integrações MCP, de 100. Com tantas o modelo escolhe pior. Aqui elas viram:
 
-- um núcleo sempre presente: clima, pesquisa, hora, timers, HUD, memória, tarefas e notas, voz, encerrar, tudo
+- um núcleo sempre declarado: clima, pesquisa, hora, timers, HUD, memória, tarefas e notas, voz, encerrar, tudo
   o que não está em grupo nenhum (inclusive ferramentas novas) e TODAS as de confirmar e cancelar
   por código, para uma confirmação pendente nunca perder a sua ferramenta;
 - grupos (agenda, email, tela, janelas, mídia, mouse, gestos, câmera, rotinas, avisos, apps e um
-  por servidor MCP) que entram quando o modelo chama ``use_tools(["agenda"])``.
+  por servidor MCP) que o modelo usa em dois passos, na mesma resposta:
+  ``use_tools(["agenda"])`` devolve as ferramentas do grupo com os parâmetros, e
+  ``run_tool("get_agenda", '{"day": "hoje"}')`` executa uma delas.
 
-No Gemini Live, ``Agent.update_tools`` reabre a conexão (livekit-agents 1.8.11 marca a sessão para
-reiniciar, abre uma sessão nova com as ferramentas novas e reenvia a conversa em texto; antes
-disso ele retomava pelo handle, e a sessão retomada ficava com as ferramentas antigas). Reabrir no meio de uma resposta descarta o que
-estava na fila e a resposta da ferramenta em andamento, então a troca espera a frase curta do
-modelo terminar ("Um instante.") e só depois atualiza as ferramentas e pede a continuação do
-pedido com ``generate_reply``. A transcrição final da fala do usuário só chega quando a resposta
-do Gemini termina, tarde demais para escolher as ferramentas daquele pedido; por isso a escolha é
-do modelo, pelo ``use_tools``, e não pela transcrição.
+Por que não ``Agent.update_tools``: no Gemini Live (livekit-agents 1.8.8) ele fecha a conexão e
+reabre com o handle de retomada. Isso deixava ~7 s de silêncio, a resposta em andamento sem
+ferramenta (o modelo emendava "não consigo acessar sua agenda" no "um instante") e, nos logs de
+outubro de 2026, nenhuma ferramenta de grupo chegou a ser chamada depois da troca: a sessão
+retomada seguiu com as declarações do começo. Com ``run_tool`` nada reconecta, as declarações
+ficam as mesmas a conversa inteira e o pedido é feito na mesma resposta em que o modelo pediu o
+grupo. No 1.8.11 o plugin passou a abrir uma sessão nova e reenviar a conversa em texto, mas a
+troca no meio de uma resposta ainda descarta a fila e a resposta em andamento; o ``run_tool``
+continua evitando tudo isso.
 
-Os grupos ficam carregados até o fim da conversa; passando de ``MAX_LOADED_GROUPS``, o usado há
-mais tempo sai na próxima troca (nenhuma reconexão extra).
+As integrações MCP conectam em segundo plano quando o link abre (``warm_up``): o primeiro pedido
+ao Notion não espera o servidor subir, e o ``mcp_status`` não diz mais "conectando" à toa.
 """
 
 from __future__ import annotations
 
 import asyncio
 import difflib
+import inspect
+import json
 import logging
 from dataclasses import dataclass
 from typing import Any
 
-from livekit.agents import RunContext, function_tool, llm
+from livekit.agents import RunContext, ToolError, function_tool, llm
+from livekit.agents.llm.utils import build_legacy_openai_schema, prepare_function_arguments
 
 from confirmation import strip_accents
 from hud import tool_status
@@ -41,10 +47,11 @@ PROTOCOL = "FER-33"
 ROUTING_MODES = ("auto", "true", "false")
 # "auto" liga a separação quando a sessão passa disso (MCP conta as ferramentas do "permitir").
 AUTO_MIN_TOOLS = 60
-MAX_LOADED_GROUPS = 4
-CONTINUE_INSTRUCTION = (
-    "As ferramentas de {labels} já estão com você. Continue agora o último pedido do usuário usando "
-    'essas ferramentas, sem dizer "um instante" de novo e sem pedir que ele repita.'
+# Descrição de cada ferramenta na resposta do use_tools (as dos grupos cabem folgadas nisso).
+MAX_DESCRIPTION_CHARS = 700
+READY_NOTE = (
+    "Agora, nesta mesma resposta e sem dizer nada antes, chame run_tool com o name de uma delas e os "
+    "arguments em JSON. Só fale depois do resultado do run_tool, contando o que ele disse de verdade."
 )
 
 
@@ -173,10 +180,41 @@ def _key(text: str) -> str:
     return strip_accents(text).strip().lower().replace(" ", "_")
 
 
-class ToolRouter:
-    """Splits the tools in core + groups and swaps the loaded groups during the conversation."""
+def _without_titles(schema: Any) -> Any:
+    """The JSON schema without pydantic's "title" keys (noise for the model, ~15% of the text)."""
+    if isinstance(schema, dict):
+        return {key: _without_titles(value) for key, value in schema.items() if key != "title"}
+    if isinstance(schema, list):
+        return [_without_titles(item) for item in schema]
+    return schema
 
-    def __init__(self, tools: list[Any], *, max_loaded: int = MAX_LOADED_GROUPS) -> None:
+
+def describe_tool(tool: Any) -> dict[str, Any]:
+    """Name, description and parameters of a tool, as use_tools hands them to the model."""
+    if isinstance(tool, llm.RawFunctionTool):
+        raw = tool.info.raw_schema
+        name, description, parameters = raw.get("name"), raw.get("description"), raw.get("parameters")
+    else:
+        schema = build_legacy_openai_schema(tool, internally_tagged=True)
+        name, description, parameters = schema["name"], schema.get("description"), schema.get("parameters")
+    description = " ".join((description or "").split())
+    if len(description) > MAX_DESCRIPTION_CHARS:
+        description = description[: MAX_DESCRIPTION_CHARS - 1].rstrip() + "…"
+    entry: dict[str, Any] = {"name": name, "description": description}
+    parameters = _without_titles(parameters or {})
+    if parameters.get("properties"):
+        entry["parameters"] = parameters
+    return entry
+
+
+def _compact(entry: dict[str, Any]) -> str:
+    return json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
+
+
+class ToolRouter:
+    """Splits the tools in core + groups; use_tools and run_tool reach the grouped ones."""
+
+    def __init__(self, tools: list[Any]) -> None:
         by_tool = {name: group for group in GROUPS for name in group.tools}
         self.core: list[Any] = []
         self.groups: dict[str, ToolGroup] = {}
@@ -192,16 +230,13 @@ class ToolRouter:
                 continue
             self.groups.setdefault(group.name, group)
             self.members.setdefault(group.name, []).append(tool)
-        self.max_loaded = max_loaded
-        self.loaded: list[str] = []
-        self._tasks: set[asyncio.Task[None]] = set()
-        self.use_tools = self._build_use_tools()
+        # Grupos que o modelo já pediu nesta conversa (só para o log e o HUD).
+        self.used: list[str] = []
+        self._connecting: dict[str, asyncio.Task[Any]] = {}
+        self.use_tools, self.run_tool = self._build_tools()
 
     def session_tools(self) -> list[Any]:
-        return [*self.core, self.use_tools]
-
-    def agent_tools(self) -> list[Any]:
-        return [tool for name in self.loaded for tool in self.members[name]]
+        return [*self.core, self.use_tools, self.run_tool]
 
     def resolve(self, requested: list[str]) -> tuple[list[str], list[str]]:
         """Group names as the model wrote them ("Agenda", "câmera", "janela") -> known names."""
@@ -220,15 +255,6 @@ class ToolRouter:
                     found.append(name)
         return found, unknown
 
-    def select(self, names: list[str]) -> list[str]:
-        """Mark ``names`` as the most recent groups; returns the ones that were not loaded."""
-        added = [name for name in names if name not in self.loaded]
-        self.loaded = [name for name in self.loaded if name not in names] + list(names)
-        while len(self.loaded) > max(self.max_loaded, len(names)):
-            dropped = self.loaded.pop(0)
-            logger.info("Ferramentas sob demanda: o grupo %s saiu para dar lugar aos novos.", dropped)
-        return added
-
     def labels(self, names: list[str]) -> str:
         return ", ".join(self.groups[name].label for name in names)
 
@@ -238,55 +264,88 @@ class ToolRouter:
             return None
         return "\n".join(f"- {name}: {group.description}." for name, group in self.groups.items())
 
-    async def apply(self, session: Any, names: list[str]) -> None:
-        """Hand the loaded groups to the current agent and ask it to go on with the request."""
-        tools = self.agent_tools()
-        for tool in tools:
-            if isinstance(tool, llm.Toolset):
-                await tool.setup()  # MCP: conecta só quando o grupo entra pela primeira vez
-        agent = session.current_agent
-        await agent.update_tools(tools)
-        logger.info("Ferramentas sob demanda: %s carregado(s).", self.labels(names))
-        await tool_status("use_tools", "done", self.labels(names))
-        session.generate_reply(instructions=CONTINUE_INSTRUCTION.format(labels=self.labels(names)))
+    # ── integrações MCP ──
+
+    def _toolsets(self) -> list[llm.Toolset]:
+        return [tool for members in self.members.values() for tool in members if isinstance(tool, llm.Toolset)]
+
+    async def connect(self, toolset: llm.Toolset) -> None:
+        """Connect an MCP server once; concurrent callers share the same attempt."""
+        task = self._connecting.get(toolset.id)
+        if task is None:
+            task = asyncio.ensure_future(toolset.setup())
+            self._connecting[toolset.id] = task
+        await asyncio.shield(task)
+
+    def warm_up(self) -> None:
+        """Start connecting every MCP server in the background (call it with the session's loop)."""
+        for toolset in self._toolsets():
+            task = asyncio.ensure_future(self.connect(toolset))
+            task.add_done_callback(_log_failure)
+
+    async def tools_of(self, group: str) -> list[Any]:
+        """The function tools of a group; an MCP server connects first if it has not yet."""
+        tools: list[Any] = []
+        for member in self.members.get(group, []):
+            if isinstance(member, llm.Toolset):
+                await self.connect(member)
+                tools.extend(member.tools)
+            else:
+                tools.append(member)
+        return tools
+
+    async def find(self, name: str) -> tuple[str, Any] | None:
+        """(group, tool) for a grouped tool name; None when no group has it."""
+        wanted = name.strip()
+        for group, members in self.members.items():
+            for member in members:
+                config = _mcp_config(member)
+                if config is not None:
+                    if not wanted.startswith(f"{config.name}_"):
+                        continue
+                    for tool in await self.tools_of(group):
+                        if tool_name(tool) == wanted:
+                            return group, tool
+                elif tool_name(member) == wanted:
+                    return group, member
+        return None
 
     async def aclose(self) -> None:
-        """Close MCP toolsets that this router connected (loaded once, maybe dropped since)."""
-        for members in self.members.values():
-            for tool in members:
-                if isinstance(tool, llm.Toolset):
-                    try:
-                        await tool.aclose()
-                    except Exception:
-                        logger.debug("Falha ao fechar %s.", tool.id, exc_info=True)
+        """Close the MCP toolsets this router connected."""
+        for toolset in self._toolsets():
+            if toolset.id not in self._connecting:
+                continue
+            try:
+                await toolset.aclose()
+            except Exception:
+                logger.debug("Falha ao fechar %s.", toolset.id, exc_info=True)
 
-    def _spawn(self, coro: Any) -> None:
-        task = asyncio.create_task(coro)
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+    # ── as duas ferramentas do modelo ──
 
-    async def _apply_after_reply(self, session: Any, names: list[str], wait_for_reply: bool) -> None:
-        from tools import _wait_for_farewell
+    async def _catalog(self, names: list[str]) -> str:
+        blocks: list[str] = []
+        for name in names:
+            group = self.groups[name]
+            tools = await self.tools_of(name)
+            if not tools:
+                blocks.append(f"{group.label}: nenhuma ferramenta disponível agora.{_offline_reason(self.members[name])}")
+                continue
+            lines = "\n".join(_compact(describe_tool(tool)) for tool in tools)
+            blocks.append(f"Ferramentas de {group.label} (use com run_tool):\n{lines}")
+        return "\n\n".join(blocks)
 
-        if wait_for_reply:
-            await _wait_for_farewell(session)
-        try:
-            await self.apply(session, names)
-        except Exception:
-            logger.exception("Não consegui carregar as ferramentas de %s.", self.labels(names))
-            await tool_status("use_tools", "error", self.labels(names))
-
-    def _build_use_tools(self) -> Any:
+    def _build_tools(self) -> tuple[Any, Any]:
         router = self
 
         @function_tool()
         async def use_tools(context: RunContext, groups: list[str]) -> str:
-            """Load the tool groups the user's request needs (the groups are listed in the instructions).
+            """Get the tools of the groups the user's request needs (the groups are listed in the instructions).
 
-            Call it before anything else when the request is about a group whose tools you do not
-            have: "o que eu tenho hoje?" = ["agenda"], "abre o Spotify" = ["janelas"], "clica no
-            play" = ["mouse"]. Then say only "Um instante." and wait: the tools arrive in a moment
-            and you are asked to go on with the request.
+            Call it first, before saying anything, whenever the request is about a group:
+            "o que eu tenho hoje?" = ["agenda"], "abre o Spotify" = ["janelas"], "liga os gestos" =
+            ["gestos"], "me mostra a câmera" = ["camera"]. It returns each tool's name, description and
+            parameters; then, in this same reply, call run_tool with one of them. Never tell the user
+            you cannot do something of a group without calling use_tools and run_tool first.
 
             Args:
                 groups: One or more group names, e.g. ["agenda"] or ["janelas", "midia"].
@@ -297,26 +356,73 @@ class ToolRouter:
                     f"Não existe grupo {', '.join(unknown) or 'nenhum'}. Grupos que existem: "
                     f"{', '.join(router.groups)}. Chame use_tools de novo com um deles."
                 )
-            added = router.select(names)
-            if not added:
-                return f"As ferramentas de {router.labels(names)} já estão com você. Use-as agora para o pedido."
-            await tool_status("use_tools", "running", router.labels(added))
-            from tools import _tool_reply_is_new_speech
+            labels = router.labels(names)
+            await tool_status("use_tools", "running", labels)
+            catalog = await router._catalog(names)
+            for name in names:
+                if name not in router.used:
+                    router.used.append(name)
+            logger.info("Ferramentas sob demanda: %s entregue(s) ao modelo.", labels)
+            await tool_status("use_tools", "done", labels)
+            missing = f"\n\nNão existe grupo {', '.join(unknown)}." if unknown else ""
+            return f"{catalog}{missing}\n\n{READY_NOTE}"
 
-            session = context.session
-            handle = getattr(context, "speech_handle", None)
-            if handle is None:
-                router._spawn(router._apply_after_reply(session, added, wait_for_reply=True))
-            else:
-                wait = _tool_reply_is_new_speech(session)
-                handle.add_done_callback(lambda _: router._spawn(router._apply_after_reply(session, added, wait)))
-            missing = f" Não existe grupo {', '.join(unknown)}." if unknown else ""
-            return (
-                f"Carregando as ferramentas de {router.labels(added)}.{missing} Diga só \"Um instante.\" e "
-                "mais nada; em seguida as ferramentas chegam e você continua o pedido."
-            )
+        @function_tool()
+        async def run_tool(context: RunContext, name: str, arguments: str = "{}") -> Any:
+            """Run one tool of a group, by the name use_tools listed, with its parameters as a JSON object.
 
-        return use_tools
+            The tools of the groups (get_agenda, open_app, gesture_control, look_at_camera, draft_email,
+            notion_..., and the others use_tools lists) only run through here. Speak after its result,
+            and say what the result really says.
+
+            Args:
+                name: Tool name exactly as use_tools listed it, e.g. "get_agenda".
+                arguments: JSON object with that tool's parameters, e.g. '{"day": "amanhã"}'; "{}" when it takes none.
+            """
+            found = await router.find(name)
+            if found is None:
+                known = ", ".join(router.groups)
+                raise ToolError(
+                    f"Não existe a ferramenta {name!r} nos grupos. Chame use_tools com o grupo do pedido "
+                    f"({known}) para ver os nomes certos."
+                )
+            group, tool = found
+            try:
+                args, kwargs = prepare_function_arguments(fnc=tool, json_arguments=arguments or "{}", call_ctx=context)
+            except ToolError as exc:
+                raise ToolError(f"{exc}. Parâmetros de {name}: {_compact(describe_tool(tool))}") from exc
+            if group not in router.used:
+                router.used.append(group)
+            logger.info("Ferramentas sob demanda: %s (%s).", name, router.groups[group].label)
+            result = tool(*args, **kwargs)
+            if inspect.isawaitable(result):
+                result = await result
+            return result
+
+        return use_tools, run_tool
+
+
+def _offline_reason(members: list[Any]) -> str:
+    """Why an MCP server has no tools (mcp_client.STATES), for the model to repeat."""
+    try:
+        from mcp_client import STATES
+    except Exception:
+        return ""
+    reasons = []
+    for member in members:
+        config = _mcp_config(member)
+        state = STATES.get(config.name) if config is not None else None
+        if state is not None and getattr(state, "error", None):
+            reasons.append(f" A integração {config.label} está fora do ar: {state.error}.")
+    return "".join(reasons) or " Diga isso ao usuário, sem inventar resultado."
+
+
+def _log_failure(task: asyncio.Future[Any]) -> None:
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is not None:
+        logger.warning("Integração MCP não conectou em segundo plano: %s", error)
 
 
 def route_tools(tools: list[Any], mode: str) -> tuple[list[Any], ToolRouter | None]:

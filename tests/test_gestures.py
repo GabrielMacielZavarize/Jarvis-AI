@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import tempfile
 import threading
 import time
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
+import camera
 import gesture_actions
 import gestures
 import pc_control
@@ -849,6 +852,31 @@ class EngineTests(unittest.TestCase):
         actions.mouse_down.assert_called_once()
         actions.mouse_up.assert_called_once()
 
+    def test_the_hud_gets_the_hand_only_while_its_camera_panel_watches(self) -> None:
+        fist = hold("fist", 0.0, 1.0)
+        _, events = run_engine([fist], self.fake_actions(), armed=True)
+        self.assertNotIn("hands", [event["event"] for event in events])
+
+        _, events = run_engine([fist], self.fake_actions(), armed=True, stream_hands=lambda: True)
+        frames = [event for event in events if event["event"] == "hands"]
+        # ~12 por segundo, não um por quadro da webcam.
+        self.assertGreaterEqual(len(frames), 10)
+        self.assertLessEqual(len(frames), 14)
+        first = frames[0]
+        self.assertEqual(len(first["hands"]), 1)
+        self.assertEqual(len(first["hands"][0]), 42)  # 21 pontos (x, y), normalizados
+        self.assertTrue(all(0.0 <= value <= 1.0 for value in first["hands"][0]))
+        self.assertEqual(frames[-1]["pose"], "fist")
+        self.assertIn(frames[-1]["state"], {"armed", "grab"})
+        json.dumps(frames)  # vai pelo data channel
+
+    def test_a_hand_that_leaves_is_cleared_once(self) -> None:
+        open_hand = hold("open", 0.0, 0.5)
+        _, events = run_engine([open_hand, absent(end_of(open_hand), 0.5)], self.fake_actions(), stream_hands=lambda: True)
+        frames = [event for event in events if event["event"] == "hands"]
+        self.assertEqual(frames[-1]["hands"], [])
+        self.assertEqual(sum(1 for frame in frames if not frame["hands"]), 1)
+
 
 class OverlayRenderTests(unittest.TestCase):
     def test_render_and_premultiply(self) -> None:
@@ -910,6 +938,22 @@ class ServiceTests(unittest.TestCase):
         self.assertIn("desligados", voice_action("status", service))
         self.assertIn("já estavam desligados", voice_action("off", service))
 
+    def test_hud_camera_panel_turns_the_hand_stream_on_and_off(self) -> None:
+        stop = threading.Event()
+        service = self.service(lambda: (endless_frames(stop), "teste"))
+        reply = gestures.handle_panel_request('{"action": "stream_on"}', service)
+        self.assertTrue(reply["ok"])
+        self.assertIn("ligue", reply["message"])  # gestos desligados: o painel avisa
+        self.assertTrue(service.streaming)
+        try:
+            voice_action("on", service)
+            self.assertTrue(service._engine.stream_hands())  # o motor novo herda o pedido do HUD
+            self.assertTrue(gestures.handle_panel_request('{"action": "stream_off"}', service)["running"])  # os gestos seguem
+            self.assertFalse(service._engine.stream_hands())
+        finally:
+            voice_action("off", service)
+            stop.set()
+
     def test_busy_webcam_is_reported(self) -> None:
         def busy() -> Any:
             raise gestures.CameraError("Não consegui abrir a webcam: ela pode estar em uso por outro app.")
@@ -919,6 +963,112 @@ class ServiceTests(unittest.TestCase):
         self.assertIn("Não consegui ligar os gestos", result)
         self.assertIn("em uso", result)
         self.assertIn("Último erro", voice_action("status", service))
+
+    def test_camera_hub_error_is_reported(self) -> None:
+        def busy() -> Any:
+            def frames() -> Any:
+                raise camera.CameraError("Não consegui abrir a webcam 'ASUS FHD webcam'.")
+                yield
+
+            return frames(), "hub da câmera"
+
+        result = voice_action("on", self.service(busy))
+        self.assertIn("Não consegui ligar os gestos: Não consegui abrir a webcam", result)
+
+
+def _mjpeg(jpegs: list[bytes]) -> bytes:
+    return b"".join(
+        f"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {len(jpeg)}\r\n\r\n".encode() + jpeg + b"\r\n"
+        for jpeg in jpegs
+    )
+
+
+class FakeHudServer:
+    """/api/camera/stream and /api/camera/state of the HUD server, on a free local port."""
+
+    def __init__(self, jpegs: list[bytes], *, status: int = 200, detail: str = "", state_error: str | None = None) -> None:
+        jpegs_, status_, detail_, state_error_ = jpegs, status, detail, state_error
+        self.requests: list[str] = []
+        requests_log = self.requests
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args: Any) -> None:
+                pass
+
+            def do_GET(self) -> None:
+                requests_log.append(self.path)
+                if self.path.startswith("/api/camera/state"):
+                    body = json.dumps({"error": state_error_}).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                elif status_ >= 400:
+                    body = json.dumps({"detail": detail_}).encode()
+                    self.send_response(status_)
+                    self.send_header("Content-Type", "application/json")
+                else:
+                    body = _mjpeg(jpegs_)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def _jpeg(value: int) -> bytes:
+    import cv2
+
+    ok, data = cv2.imencode(".jpg", np.full((72, 128, 3), value, np.uint8))
+    assert ok
+    return data.tobytes()
+
+
+class HudCameraTests(unittest.TestCase):
+    """The voice agent reads the HUD server's webcam feed instead of opening the webcam again."""
+
+    def serve(self, jpegs: list[bytes], **kwargs: Any) -> FakeHudServer:
+        server = FakeHudServer(jpegs, **kwargs)
+        self.addCleanup(server.close)
+        return server
+
+    def test_mjpeg_parts_whatever_the_chunks(self) -> None:
+        jpegs = [b"\xff\xd8um\xff\xd9", b"\xff\xd8\r\n\r\ndois\xff\xd9", b"\xff\xd8tr\xc3\xaas\xff\xd9"]
+        body = _mjpeg(jpegs)
+        for size in (1, 2, 7, 64, len(body)):
+            chunks = [body[i : i + size] for i in range(0, len(body), size)]
+            self.assertEqual(list(gestures.mjpeg_parts(chunks)), jpegs, size)
+
+    def test_frames_until_the_camera_is_turned_off(self) -> None:
+        server = self.serve([_jpeg(value) for value in (10, 120, 240)])
+        frames = list(gestures.hud_frames(server.base))
+        self.assertTrue(frames)
+        self.assertEqual(frames[-1].shape, (72, 128, 3))
+        self.assertAlmostEqual(float(frames[-1].mean()), 240, delta=3)
+        self.assertTrue(server.requests[0].startswith("/api/camera/stream?quality="))
+
+    def test_camera_failure_after_the_feed_is_reported(self) -> None:
+        server = self.serve([_jpeg(50)], state_error="A webcam parou de enviar imagens.")
+        with self.assertRaisesRegex(gestures.CameraError, "parou de enviar"):
+            list(gestures.hud_frames(server.base))
+
+    def test_server_refusal_is_reported(self) -> None:
+        server = self.serve([], status=503, detail="Não consegui abrir a webcam 'ASUS FHD webcam'.")
+        with self.assertRaisesRegex(gestures.CameraError, "ASUS FHD webcam"):
+            next(gestures.hud_frames(server.base))
+
+    def test_server_down_is_reported(self) -> None:
+        server = self.serve([])
+        base = server.base
+        server.close()
+        with self.assertRaisesRegex(gestures.CameraError, "servidor do HUD"):
+            next(gestures.hud_frames(base))
 
 
 class ToolAndSettingsTests(unittest.TestCase):

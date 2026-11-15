@@ -90,7 +90,9 @@ Detalhes em [mouse-e-ditado.md](mouse-e-ditado.md).
 
 Detalhes em [camera-e-presenca.md](camera-e-presenca.md#presença).
 
-Os gestos ainda abrem a webcam por conta própria. Com presença e gestos ligados ao mesmo tempo, o Windows pode recusar a segunda abertura ("câmera em uso"). Teste a presença com os gestos desligados e depois os dois juntos, para ver se a sua webcam aguenta. Com `JARVIS_WAKE_SILENCE_SECONDS=0`, o link que a presença abre também só fecha com "tchau, Jarvis" ou o botão.
+Presença, feed do HUD, fotos e gestos dividem a mesma webcam pelo servidor do HUD (os gestos leem o feed dele), então podem ficar ligados juntos. Com `JARVIS_WAKE_SILENCE_SECONDS=0`, o link que a presença abre também só fecha com "tchau, Jarvis" ou o botão.
+
+- [ ] Presença e gestos ligados juntos: nenhum dos dois reclama de "câmera em uso".
 
 - [ ] (Opcional) com o Jarvis fechado: `python presence.py --enroll` e `python presence.py --test`.
 - [ ] Saia da frente do PC por mais de 5 min: a mídia pausa (e o PC bloqueia, se `JARVIS_PRESENCE_LOCK=true`).
@@ -190,6 +192,9 @@ Detalhes em [gestos.md](gestos.md#gestos-no-hud).
 - [ ] Com `JARVIS_ENABLE_GESTURES=true`, o painel Gestos aparece na coluna da direita. Sem link, os botões ficam apagados e o editor funciona.
 - [ ] Abra o link e clique em Ligar: aparece "Abrindo a câmera…" e depois "Armados". Mão aberta, punho, mova e abra: o painel mostra a janela segura e o monitor de destino, e depois o resultado.
 - [ ] Mouse no ar e Painel da câmera pelos botões ligam e desligam. O estado acompanha também quando você usa os próprios gestos (dois dedos parados abrem o painel da câmera).
+- [ ] Ao ligar os gestos, o painel Câmera do HUD abre sozinho: você aparece como num espelho, a mão ganha o desenho dos pontos e o nome da pose ("Punho", "Pinça") muda junto com a sua mão. Pegue uma janela: o desenho muda de cor e o aviso mostra "→ MONITOR DE CIMA".
+- [ ] No painel Câmera, "Você" mostra a presença e "Gestos" diz "vendo sua mão". Peça "Jarvis, o que eu tenho na mão?": "Jarvis viu" mostra a hora, e a resposta dele aparece ali quando ele termina de falar.
+- [ ] Botão Espelho desligado: o vídeo e o desenho da mão viram juntos. Feche o link: os gestos desligam e a luz da webcam apaga se o painel Câmera também estiver fechado.
 - [ ] Editar, rock, Abrir app, `spotify`, Salvar. Faça o rock: o Spotify abre sem reiniciar nada.
 - [ ] Editar, OK, Atalho, `alt+f4`, Salvar: é recusado com a explicação e nada muda no `gestos.json`.
 - [ ] Ligue o joinha a "tocar/pausar": o painel avisa que ele faz o mesmo que o OK. "Restaurar todos" volta tudo ao padrão.
@@ -239,14 +244,15 @@ Detalhes em [integracoes.md](integracoes.md). Precisa de `JARVIS_ENABLE_MCP=true
 
 Detalhes em [ferramentas-sob-demanda.md](ferramentas-sob-demanda.md). Ligue tudo no `.env` (PC, mouse, agenda, email, câmera, gestos, avisos e MCP) e deixe `JARVIS_TOOL_ROUTING=auto`.
 
-- [ ] O terminal do agente não mostra nenhum grupo carregado ao abrir o link. "Que horas são?" responde direto, sem "Um instante.".
-- [ ] "O que eu tenho hoje?": ele diz "Um instante.", a placa mostra "FER-33 · Carregando ferramentas · Agenda" e logo depois vem a agenda sem você repetir. Anote quanto tempo passa entre o "Um instante." e a resposta.
-- [ ] Na mesma conversa, "e amanhã?": responde direto, sem "Um instante." de novo.
-- [ ] "Abre o Spotify e põe o volume em 30": um "Um instante." só, para janelas e mídia juntas.
+- [ ] Ao abrir o link, o terminal do agente mostra as integrações MCP conectando em segundo plano. "Que horas são?" responde direto.
+- [ ] "O que eu tenho hoje?": a placa mostra "FER-33 · Buscando ferramentas · Agenda", o terminal mostra `get_agenda (Agenda)` e a agenda vem na mesma resposta, sem "Um instante." e sem "não consegui acessar".
+- [ ] Na mesma conversa, "e amanhã?": responde direto (pode chamar `run_tool` sem `use_tools`).
+- [ ] "Liga os gestos": os gestos ligam (o painel Gestos do HUD muda para Armados). "Me mostra a câmera": o painel Câmera abre com a imagem.
+- [ ] "Abre o Spotify e põe o volume em 30": um `use_tools` só, para janelas e mídia juntas.
 - [ ] "Marca dentista sexta às 15h", depois peça janelas, mídia, mouse e tela antes de confirmar. Diga "confirmar agenda" e o código: o evento é criado.
-- [ ] "Quais issues abertas eu tenho no Jarvis-AI?": o GitHub conecta só agora (veja o terminal) e a lista aparece.
-- [ ] Peça a agenda e faça o Gemini cair (cota ou um modelo inválido no `GOOGLE_MODEL`): no modelo de reserva, "e amanhã?" responde sem pedir o grupo de novo.
-- [ ] Repita os pedidos com `JARVIS_TOOL_ROUTING=false`: nenhum "Um instante." e tudo funciona como antes. Compare quantas vezes ele escolheu a ferramenta errada nos dois modos.
+- [ ] "Quais issues abertas eu tenho no Jarvis-AI?" e "procura X no Notion": a lista vem na mesma resposta. Com o servidor fora do ar, ele diz o motivo em vez de inventar.
+- [ ] Peça a agenda e faça o Gemini cair (cota ou um modelo inválido no `GOOGLE_MODEL`): no modelo de reserva, "e amanhã?" ainda funciona.
+- [ ] Repita os pedidos com `JARVIS_TOOL_ROUTING=false`: tudo funciona como antes. Compare quantas vezes ele escolheu a ferramenta errada nos dois modos.
 - [ ] Com o `.env` padrão (memória, diário e rotinas) e `auto`: nada muda em relação a antes.
 
 ## 21. Casa inteligente

@@ -28,8 +28,10 @@ const fragment = /* glsl */ `
   varying vec3 vNormalV;
   varying vec3 vViewDir;
   void main() {
-    float h = vUv.y;
-    float rim = pow(1.0 - abs(dot(normalize(vNormalV), normalize(vViewDir))), 1.6);
+    // pow() of a negative base is NaN, and the bloom smears one NaN pixel into a black frame: the
+    // dot of two unit vectors can round past 1 when the camera (mouse parallax) faces the beam.
+    float h = clamp(vUv.y, 0.0, 1.0);
+    float rim = pow(clamp(1.0 - abs(dot(normalize(vNormalV), normalize(vViewDir))), 0.0, 1.0), 1.6);
     float fall = pow(1.0 - h, 2.4);
     float bands = 0.65 + 0.35 * smoothstep(0.55, 1.0, sin(h * 42.0 - uTime * 3.2));
     float streaks = 0.7 + 0.3 * sin(vUv.x * 6.2831853 * 56.0);

@@ -14,12 +14,14 @@ JARVIS_TOOL_ROUTING=auto   # auto, true ou false
 
 ## Como funciona
 
-1. O link abre com o núcleo e a ferramenta `use_tools`. O prompt lista os grupos que existem nesta sessão.
-2. Você pede "o que eu tenho hoje?". O modelo não tem a agenda, então chama `use_tools(["agenda"])` e diz só "Um instante.".
-3. Quando essa frase termina, o agente entrega as ferramentas do grupo ao modelo (`Agent.update_tools`) e pede que ele continue o seu pedido. Você não precisa repetir nada.
-4. O grupo fica até o fim da conversa. Passando de 4 grupos, o usado há mais tempo sai na próxima troca.
+1. O link abre com o núcleo e duas ferramentas: `use_tools` e `run_tool`. O prompt lista os grupos que existem nesta sessão. As integrações MCP começam a conectar em segundo plano.
+2. Você pede "o que eu tenho hoje?". O modelo chama `use_tools(["agenda"])` e recebe as ferramentas do grupo, com a descrição e os parâmetros de cada uma.
+3. Na mesma resposta, sem falar nada antes, ele chama `run_tool(name="get_agenda", arguments='{"day": "hoje"}')`, que roda a ferramenta de verdade. Só depois do resultado ele fala.
+4. Na mesma conversa ele já conhece as ferramentas do grupo e pode chamar `run_tool` direto.
 
-A placa do núcleo mostra "FER-33 · Carregando ferramentas" com o nome do grupo.
+A placa do núcleo mostra "FER-33 · Buscando ferramentas" com o nome do grupo.
+
+Nada reconecta: as ferramentas declaradas ao Gemini são as mesmas a conversa inteira. Uma ferramenta de grupo chamada com o argumento errado devolve o erro com os parâmetros certos, e o modelo tenta de novo.
 
 ## O núcleo
 
@@ -47,7 +49,7 @@ As tarefas e notas estão no núcleo de propósito: são pedidos de todo dia e, 
 | `olho` | `osint_lookup` |
 | um por servidor MCP | as ferramentas liberadas dele (`github`, `notion`...) |
 
-Só entram os grupos das partes ligadas no `.env`. O servidor MCP conecta quando o grupo dele entra pela primeira vez, e não quando o link abre. Até lá o `mcp_status` diz "ainda conectando".
+Só entram os grupos das partes ligadas no `.env`. Os servidores MCP conectam em segundo plano quando o link abre; se o Jarvis pedir um deles antes de terminar, o `use_tools` espera a conexão. Servidor fora do ar devolve o motivo, para o Jarvis dizer isso em vez de inventar resultado.
 
 ## Medidas
 
@@ -61,23 +63,16 @@ Feitas no container com tudo ligado, contando o JSON das declarações que vão 
 | Grupo médio | 2 a 5 | 300 a 1.100 |
 | `.env` padrão (memória, diário e rotinas) | 25 | fica tudo junto no `auto` |
 
-O que o `update_tools` faz no Gemini Live, conferido no livekit-agents 1.8.11 com um cliente falso (`tests/test_tool_routing.py`):
+Por que não `Agent.update_tools`: era assim até outubro de 2026. No Gemini Live (livekit-agents 1.8.8) ele fecha o websocket e abre outro com o handle de retomada. Na prática isso deixava uns 7 segundos de silêncio depois do "Um instante.", o modelo emendava "não consigo acessar sua agenda" na mesma fala, e nos logs nenhuma ferramenta de grupo chegou a ser chamada depois da troca: a sessão retomada seguia com as ferramentas do começo. O Jarvis respondia "não encontrei nada", "a câmera está em uso" ou "não tenho acesso" sem ter tentado. Com `run_tool` o pedido roda na mesma resposta. No livekit-agents 1.8.11 o plugin passou a abrir uma sessão nova e reenviar a conversa em texto, mas trocar as ferramentas no meio de uma resposta ainda descarta a fila e a resposta em andamento, então o `run_tool` continua sendo o caminho.
 
-| Pergunta | Resposta |
-| --- | --- |
-| Reabre a sessão? | Sim. O plugin não troca ferramentas numa sessão aberta (`mutable_tools=False`): fecha o websocket e abre outro com as ferramentas novas |
-| Perde contexto? | Não. O plugin abre uma sessão nova e reenvia a conversa inteira em texto. Até o 1.8.10 ele retomava pelo handle, e a sessão retomada continuava com as ferramentas antigas; por isso o `requirements.in` pede o 1.8.11 ou mais novo (e o lock trava a versão exata) |
-| Quanto atrasa? | No agente, uns milissegundos. O resto é abrir a conexão com o Google, que não deu para medir aqui (sem chave) |
-| O que dá errado no meio de uma resposta? | A fila de mensagens é descartada e a resposta em andamento se perde, inclusive a da própria ferramenta. Por isso a troca espera o "Um instante." terminar |
+Por que não pela transcrição: no Gemini Live a transcrição final da sua fala só chega quando a resposta dele termina, tarde demais para escolher as ferramentas daquele pedido. A escolha fica com o modelo, pelo `use_tools`.
 
-Por que não pela transcrição: no Gemini Live a transcrição final da sua fala só chega quando a resposta dele termina. Trocar as ferramentas ali serviria só para o pedido seguinte, e trocar durante a sua fala perderia o áudio já enviado. A escolha fica com o modelo, pelo `use_tools`, que custa uma chamada curta e a frase "Um instante." antes da reconexão.
-
-Por que `auto` e não `true`: cada grupo novo custa essa frase e uma reconexão, perto de 1 a 2 segundos na primeira vez do assunto. Com o `.env` padrão são 25 ferramentas e o ganho não paga a espera. Com tudo ligado, o modelo deixa de ver 11.000 tokens de ferramentas que não têm nada a ver com o pedido.
+Por que `auto` e não `true`: cada assunto novo custa uma chamada a mais (`use_tools`) e a lista do grupo no contexto. Com o `.env` padrão são 25 ferramentas e o ganho não paga isso. Com tudo ligado, o modelo deixa de ver 11.000 tokens de ferramentas que não têm nada a ver com o pedido.
 
 ## Confirmações
 
-As ferramentas de confirmar e cancelar nunca estão em grupo. Um email, uma instalação, um clique ou um evento da agenda esperando o código continuam confirmáveis mesmo que o grupo que preparou a ação tenha saído. A frase e o código são os mesmos de sempre ([seguranca.md](seguranca.md#confirmação-por-voz)).
+As ferramentas de confirmar e cancelar nunca estão em grupo. Um email, uma instalação, um clique ou um evento da agenda esperando o código continuam confirmáveis direto pela ferramenta de confirmar, sem `use_tools`. A frase e o código são os mesmos de sempre ([seguranca.md](seguranca.md#confirmação-por-voz)).
 
 ## Troca de modelo
 
-Se o Gemini cair e a conversa passar para um modelo de reserva ([modelos.md](modelos.md)), os grupos carregados vão junto.
+Se o Gemini cair e a conversa passar para um modelo de reserva ([modelos.md](modelos.md)), `use_tools` e `run_tool` vão junto, com o resto do núcleo.

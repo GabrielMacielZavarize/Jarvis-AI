@@ -12,7 +12,18 @@ JARVIS_CAMERA=
 
 A webcam pertence ao servidor do HUD (`camera.py`, iniciado pelo `python jarvis.py`). Ele é o único que a abre e reparte os quadros entre o feed do HUD, as fotos que o Jarvis analisa e os outros recursos. No Windows ela abre pelo Media Foundation (MSMF) em 1280x720 a 30 fps. Câmeras infravermelhas (Windows Hello) nunca são usadas.
 
-O worker do agente é outro processo e pede a foto ao servidor por HTTP, no endereço que o `jarvis.py` passa em `JARVIS_HUD_URL` (padrão `http://127.0.0.1:8000`). Se o servidor não estiver de pé, o Jarvis diz isso em vez de inventar uma resposta.
+O worker do agente é outro processo e pede a foto ao servidor por HTTP, no endereço que o `jarvis.py` passa em `JARVIS_HUD_URL` (padrão `http://127.0.0.1:8000`). Se o servidor não estiver de pé, o Jarvis diz isso em vez de inventar uma resposta. Os gestos também rodam no agente e leem o feed MJPEG desse mesmo servidor, em vez de abrir a webcam de novo: por isso feed, foto, presença e gestos funcionam juntos, sem "câmera em uso".
+
+### O painel Câmera
+
+O painel Câmera do HUD é o lugar para ver tudo junto:
+
+- Você ao vivo, como num espelho (o botão Espelho desliga; a foto que o Jarvis analisa nunca é espelhada).
+- Com os gestos ligados, a mão que eles estão vendo desenhada por cima do vídeo, na cor do estado (armados, segurando janela, contando para fechar, mouse no ar), o nome da pose ("Punho", "Pinça") e o mesmo aviso do topo da tela ("→ MONITOR DE CIMA", com a barra de progresso quando há contagem).
+- Embaixo: Você (presença: presente, ausente, reconhecido), Gestos (estado e se está vendo sua mão) e Jarvis viu (a última foto que ele analisou, a sua pergunta e o que ele respondeu).
+- Os botões Ligar/Desligar gestos, Espelho e Desligar câmera.
+
+Ele abre quando você pede "mostra a câmera", quando os gestos ligam (por voz ou pelo painel Gestos), pelo botão "Ver no HUD" do painel Gestos ou clicando no aviso CÂMERA ATIVA. Ampliado ("amplia a câmera"), as três informações ficam lado a lado e com mais texto. Os pontos da mão só vão para o HUD enquanto o painel está aberto, uns 12 por segundo, pelo data channel do LiveKit; nenhuma imagem sai do computador por isso.
 
 Endpoints locais:
 

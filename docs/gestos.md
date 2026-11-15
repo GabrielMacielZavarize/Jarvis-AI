@@ -69,7 +69,10 @@ Com `JARVIS_ENABLE_GESTURES=true`, o HUD ganha o painel Gestos (GST-18), na colu
 
 - O estado ao vivo: desligados, desarmados, armados, segurando uma janela (e o monitor para onde ela vai), contando para fechar ou no mouse no ar, e se o painel de gestos do canto está aberto.
 - O último comando feito com a mão e se deu certo ("Tocar/pausar a mídia, há 4 s"). Cada comando também aparece na placa sobre o núcleo e no registro.
-- Os botões Ligar e Desligar, Armar, Mouse no ar e Painel da câmera. Eles rodam no agente, que é quem tem a webcam, então precisam do link aberto. Quando o link abre, o painel pergunta o estado atual.
+- Os botões Ligar e Desligar, Armar, Mouse no ar e Painel da câmera. Eles rodam no agente, onde está o motor dos gestos, então precisam do link aberto. Quando o link abre, o painel pergunta o estado atual.
+- O botão Ver no HUD, que abre o painel Câmera: você ao vivo, a mão que os gestos estão vendo desenhada por cima, a pose e o aviso do momento ([camera-e-presenca.md](camera-e-presenca.md#o-painel-câmera)). Ele também abre sozinho quando os gestos ligam.
+
+A webcam é do servidor do HUD; os gestos leem o feed dele. Fechar o link desliga os gestos na hora (a luz da webcam apaga se nada mais a usa), sem esperar o fim do processo do agente.
 - O botão Editar, com os oito gestos personalizáveis e o que cada um faz agora (os que você mudou ficam destacados). Trocar abre o editor: ação, layout salvo, app, site, atalho ou nada. "Voltar ao padrão" e "Restaurar todos" desfazem. O painel avisa quando dois gestos fazem a mesma coisa e lista os gestos fixos.
 
 O editor grava o mesmo `gestos.json` da voz, pela API `/api/gestures`, com as mesmas travas: Alt+F4, Ctrl+W, Shift+Delete e teclas soltas são recusados com a explicação. O motor relê o arquivo pela data de modificação, então a troca já vale no próximo gesto, sem reiniciar nada.

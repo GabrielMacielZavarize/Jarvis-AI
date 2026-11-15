@@ -41,7 +41,7 @@ def encode_event(event_type: str, payload: dict[str, Any]) -> str:
     )
 
 
-async def publish_hud_event(event_type: str, **payload: Any) -> bool:
+async def _publish(event_type: str, payload: dict[str, Any], *, reliable: bool) -> bool:
     participant = _local_participant()
     if participant is None:
         return False
@@ -49,13 +49,22 @@ async def publish_hud_event(event_type: str, **payload: Any) -> bool:
     try:
         await participant.publish_data(
             encode_event(event_type, payload),
-            reliable=True,
+            reliable=reliable,
             topic=HUD_TOPIC,
         )
         return True
     except Exception:
         logger.debug("Falha ao publicar evento '%s' no HUD.", event_type, exc_info=True)
         return False
+
+
+async def publish_hud_event(event_type: str, **payload: Any) -> bool:
+    return await _publish(event_type, payload, reliable=True)
+
+
+async def publish_hud_frame(event_type: str, **payload: Any) -> bool:
+    """Like publish_hud_event, for many-per-second updates: a lost one is replaced by the next."""
+    return await _publish(event_type, payload, reliable=False)
 
 
 async def show_card(kind: str, data: dict[str, Any]) -> bool:
