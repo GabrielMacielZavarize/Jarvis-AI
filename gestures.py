@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -42,6 +43,7 @@ from livekit.agents import RunContext, function_tool, get_job_context
 import gesture_actions
 import gesture_mapping
 import win_desktop
+from camera import CameraError as HubCameraError
 from gesture_actions import DesktopActions, DryRunActions, GestureActionError, Target, describe_direction, monitor_label
 from gesture_engine import Command, Filter2D, GestureMachine, Hand, Pose, State, Status, Tuning, classify, hand_row
 from gesture_map import MapDrag, MapWindow, PanelFrame, uv_to_real, virtual_bounds, window_at
@@ -86,6 +88,13 @@ HINT_POINT = "diga o que quer saber desse ponto · ex.: explica isso aqui"
 # A mira some esse tempo depois de o indicador sair da tela (mão baixada ou outra pose).
 AIM_LINGER_S = 1.0
 PANEL_CAMERA_WIDTH = 220  # a câmera do painel é pequena: o motor entrega uma cópia reduzida
+# Feed da webcam do servidor do HUD (processo do agente): a mesma qualidade do feed do HUD
+# reaproveita o JPEG que o hub já codificou; o primeiro quadro inclui abrir a câmera (8 s).
+HUD_STREAM_QUALITY = 70
+HUD_FRAME_TIMEOUT_S = 10.0
+# A mão vista pelo motor vai ao painel Câmera do HUD só com ele aberto (data channel sem garantia
+# de entrega: um quadro perdido é substituído pelo próximo).
+HANDS_STREAM_HZ = 12.0
 
 
 class CameraError(RuntimeError):
@@ -281,18 +290,130 @@ def webcam_frames(index: int | None = None) -> Iterator[np.ndarray]:
 
 
 def default_frames() -> tuple[Iterator[np.ndarray], str]:
-    """Where the gesture engine gets its frames.
+    """Where the gesture engine gets its frames in the HUD server's process (jarvis.py).
 
-    TODO(camera-hub): ponto de integração com o camera.py da sessão de câmera. Quando o hub
-    existir neste processo, os gestos consomem get_hub().frames() (o quadro mais novo, com vários
-    consumidores) e dividem a webcam com a visão do Jarvis em vez de abri-la de novo. Confirme na
-    junção que frames() entrega quadros BGR sem espelhar; o motor espelha sozinho.
+    get_hub().frames() is the newest BGR frame, unmirrored (the engine mirrors it), shared with
+    presence and the HUD feed. The voice agent is another process and uses ``hud_camera``.
     """
     try:
         from camera import get_hub  # type: ignore[import-not-found]
     except ImportError:
         return webcam_frames(), "webcam"
     return iter(get_hub().frames()), "hub da câmera"
+
+
+def hud_camera() -> tuple[Iterator[np.ndarray], str]:
+    """frames_factory of the voice agent's process (agent.py): the webcam belongs to the HUD server."""
+    return hud_frames(), "webcam do HUD"
+
+
+_CONTENT_LENGTH = re.compile(rb"content-length:\s*(\d+)", re.IGNORECASE)
+
+
+def mjpeg_parts(chunks: Iterable[bytes]) -> Iterator[bytes]:
+    """The JPEGs of a multipart/x-mixed-replace feed (server.py's /api/camera/stream), in order,
+    however the bytes were split into chunks."""
+    buffer = bytearray()
+    for chunk in chunks:
+        buffer += chunk
+        while True:
+            head_end = buffer.find(b"\r\n\r\n")
+            if head_end < 0:
+                break
+            start = head_end + 4
+            match = _CONTENT_LENGTH.search(buffer, 0, head_end)
+            if match is None:  # cabeçalho sem tamanho: não dá para achar o fim do JPEG
+                del buffer[:start]
+                continue
+            end = start + int(match.group(1))
+            if len(buffer) < end:
+                break
+            yield bytes(buffer[start:end])
+            del buffer[:end]
+
+
+def _hud_camera_error(base: str) -> str | None:
+    """Why the HUD server's camera stopped (None when the user turned it off)."""
+    import requests
+
+    try:
+        return requests.get(f"{base}/api/camera/state", timeout=2.0).json().get("error") or None
+    except (requests.RequestException, ValueError):
+        return None
+
+
+def hud_frames(base: str | None = None, quality: int = HUD_STREAM_QUALITY) -> Iterator[np.ndarray]:
+    """Newest webcam frame from the HUD server's camera hub, for the voice agent's process.
+
+    The hub (camera.py) is the webcam's only owner, shared with presence, the HUD feed and the
+    Jarvis' vision: opening the webcam again from another process fails while the server holds it.
+    A reader thread keeps only the latest JPEG, so a slow detector skips frames instead of lagging.
+    Ends normally when the user turns the camera off, like the hub's own frames().
+    """
+    import cv2
+    import requests
+
+    if base is None:
+        from settings import load_settings
+
+        base = load_settings().hud_url
+    try:
+        response = requests.get(
+            f"{base}/api/camera/stream", params={"quality": quality}, stream=True, timeout=(3.0, HUD_FRAME_TIMEOUT_S)
+        )
+    except requests.RequestException as exc:
+        raise CameraError(f"O servidor do HUD não respondeu em {base}, e é ele que cuida da webcam.") from exc
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("detail")
+        except ValueError:
+            detail = None
+        response.close()
+        raise CameraError(str(detail or f"O servidor do HUD respondeu {response.status_code} ao pedir a webcam."))
+
+    latest: dict[str, Any] = {"jpeg": None, "seq": 0, "done": False, "lost": False}
+    changed = threading.Condition()
+    closing = threading.Event()
+
+    def reader() -> None:
+        try:
+            for jpeg in mjpeg_parts(response.iter_content(chunk_size=65536)):
+                with changed:
+                    latest["jpeg"] = jpeg
+                    latest["seq"] += 1
+                    changed.notify_all()
+        except Exception:
+            if not closing.is_set():
+                logger.debug("O feed da webcam do HUD caiu.", exc_info=True)
+                latest["lost"] = True
+        finally:
+            with changed:
+                latest["done"] = True
+                changed.notify_all()
+
+    thread = threading.Thread(target=reader, name="gesture-hud-camera", daemon=True)
+    thread.start()
+    seen = 0
+    try:
+        while True:
+            with changed:
+                if not changed.wait_for(lambda: latest["seq"] != seen or latest["done"], timeout=HUD_FRAME_TIMEOUT_S):
+                    raise CameraError("A webcam parou de enviar imagens.")
+                if latest["seq"] == seen:
+                    break
+                seen, jpeg = latest["seq"], latest["jpeg"]
+            frame = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+            if frame is not None:
+                yield frame
+        if latest["lost"]:
+            raise CameraError("Perdi a conexão com a webcam do servidor do HUD.")
+        reason = _hud_camera_error(base)
+        if reason:
+            raise CameraError(reason)
+    finally:
+        closing.set()
+        response.close()
+        thread.join(timeout=2)
 
 
 # ───────────────────────── motor ─────────────────────────
@@ -371,6 +492,7 @@ class GestureEngine:
         mic: Callable[[], str] | None = None,
         panel: Any | None = None,
         show_panel: bool = False,
+        stream_hands: Callable[[], bool] | None = None,
     ) -> None:
         self.frames = frames
         self.actions = actions
@@ -404,6 +526,10 @@ class GestureEngine:
         self._mouse_uv: tuple[float, float] | None = None
         self._hand_release = False  # o quadro atual soltou a janela com a mão à vista (não perdeu a mão)
         self._marked: tuple[tuple[int, int], float] | None = None  # (ponto físico, até quando)
+        # Painel Câmera do HUD aberto: a mão e o que o motor diz dela vão para lá.
+        self.stream_hands = stream_hands or (lambda: False)
+        self._hands_at: float | None = None
+        self._hands_shown = False
         if armed:
             self.request("arm")
         if mouse:
@@ -492,6 +618,7 @@ class GestureEngine:
         self._hand_release = False
         self._refresh_overlay(t)
         self._refresh_panel(image)
+        self._stream_hands(t, others)
         if self.trace is not None:
             self._write_trace(t, commands)
         return image
@@ -769,6 +896,37 @@ class GestureEngine:
             )
         )
 
+    def _stream_hands(self, t: float, others: list[Hand]) -> None:
+        """The hands in the frame and what the engine makes of them, for the HUD's Câmera panel.
+
+        Points are normalized to the mirrored frame (selfie view), flattened as x0, y0, x1, y1...
+        A frame without hands goes once, so the HUD clears the drawing, and then nothing until a
+        hand comes back.
+        """
+        if not self.stream_hands():
+            self._hands_shown = False
+            return
+        visible = self.hand is not None
+        if not visible and not self._hands_shown:
+            return
+        if self._hands_at is not None and visible and t - self._hands_at < 1.0 / HANDS_STREAM_HZ:
+            return
+        self._hands_at, self._hands_shown = t, visible
+        status = self.machine.status(t)
+        hands = [self.hand, *others] if self.hand is not None else []
+        view = self.view(t)
+        self._emit(
+            "hands",
+            hands=[[round(float(value), 3) for value in hand.points[:, :2].ravel()] for hand in hands],
+            pose=status.pose.value,
+            state=status.state.value,
+            title=view.title if view else None,
+            detail=view.detail if view else None,
+            progress=round(view.progress, 2) if view and view.progress is not None else None,
+            tone=view.tone if view else None,
+            fps=round(self.fps),
+        )
+
     def _submit(
         self, name: str, func: Callable[..., str], *args: Any, title: str | None = None, label: str | None = None
     ) -> None:
@@ -993,6 +1151,8 @@ class GestureService:
         self._error: str | None = None
         self._source = ""
         self._listeners: dict[str, Callable[[dict[str, Any]], None]] = {}
+        # O painel Câmera do HUD está aberto: o motor manda a mão para ele (vale para o próximo motor também).
+        self.streaming = False
 
     @property
     def running(self) -> bool:
@@ -1062,6 +1222,7 @@ class GestureService:
                 on_ready=self._ready.set,
                 panel=self.panel_factory(),
                 show_panel=panel,
+                stream_hands=lambda: self.streaming,
             )
             self._engine = engine
             try:
@@ -1070,7 +1231,7 @@ class GestureService:
                 close = getattr(tracker, "close", None)
                 if callable(close):
                     close()
-        except CameraError as exc:
+        except (CameraError, HubCameraError) as exc:
             self._error = str(exc)
         except Exception as exc:
             logger.exception("O controle por gestos parou com erro.")
@@ -1105,6 +1266,13 @@ class GestureService:
         if on:
             return "Painel de gestos aberto no canto, com a câmera e o mapa das telas."
         return "Painel de gestos fechado; os gestos continuam ligados."
+
+    def set_stream(self, on: bool) -> str:
+        """The HUD's Câmera panel opened or closed: send it the hands the engine sees, or stop."""
+        self.streaming = on
+        if not on:
+            return "O HUD não recebe mais a mão."
+        return "O HUD recebe a mão que os gestos veem." if self.running else "Os gestos estão desligados: ligue para ver a mão no HUD."
 
     def snapshot(self) -> dict[str, Any]:
         """What the HUD's Gestos panel shows: on/off, the state of the hand machine and the panel."""
@@ -1195,13 +1363,18 @@ _HUD_TASKS: set[Any] = set()
 
 def attach_hud(loop: asyncio.AbstractEventLoop, service: GestureService | None = None) -> None:
     """Forward gesture events to the HUD (data channel) from the engine thread."""
-    from hud import publish_hud_event
+    from hud import publish_hud_event, publish_hud_frame
 
     service = service or SERVICE
     context = contextvars.copy_context()  # get_job_context() precisa do contexto do job
 
     def publish(event: dict[str, Any]) -> None:
         def schedule() -> None:
+            if event.get("event") == "hands":  # ~12 por segundo: sem fila nem reenvio
+                frame = asyncio.ensure_future(publish_hud_frame("gesture", **event))
+                _HUD_TASKS.add(frame)
+                frame.add_done_callback(_HUD_TASKS.discard)
+                return
             task = asyncio.ensure_future(publish_hud_event("gesture", **event))
             _HUD_TASKS.add(task)
             task.add_done_callback(_HUD_TASKS.discard)
@@ -1218,7 +1391,7 @@ def attach_hud(loop: asyncio.AbstractEventLoop, service: GestureService | None =
 
 
 GESTURE_RPC_METHOD = "jarvis.gestures"
-PANEL_ACTIONS = ("status", "on", "off", "arm", "mouse_on", "mouse_off", "panel_on", "panel_off")
+PANEL_ACTIONS = ("status", "on", "off", "arm", "mouse_on", "mouse_off", "panel_on", "panel_off", "stream_on", "stream_off")
 
 
 def handle_panel_request(payload: str, service: GestureService | None = None) -> dict[str, Any]:
@@ -1231,6 +1404,8 @@ def handle_panel_request(payload: str, service: GestureService | None = None) ->
     action = request.get("action") if isinstance(request, dict) else None
     if action not in PANEL_ACTIONS:
         return {"ok": False, "message": "Ação desconhecida para os gestos.", **service.snapshot()}
+    if action in ("stream_on", "stream_off"):  # o painel Câmera abriu ou fechou: nada no log
+        return {"ok": True, "message": service.set_stream(action == "stream_on"), **service.snapshot()}
     message = service.describe() if action == "status" else voice_action(action, service)
     if action != "status":
         logger.info("Gestos pelo HUD: %s → %s", action, message)

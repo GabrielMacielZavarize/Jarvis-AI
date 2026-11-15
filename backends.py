@@ -64,6 +64,9 @@ CONTEXT_TRIGGER_TOKENS = 48_000
 CONTEXT_TARGET_TOKENS = 24_000
 # Trocas de modelo numa mesma conversa antes de desistir (a sessão fecha no erro seguinte).
 MAX_MODEL_SWITCHES = 4
+# Versão da API do Gemini Live. O google-genai 3.x passou a usar a "v1" por padrão, que não tem o
+# endpoint Live: o websocket volta HTTP 404 em todo modelo. A "v1beta" era o padrão de antes.
+GEMINI_LIVE_API_VERSION = "v1beta"
 
 
 def _monitor_layout() -> str | None:
@@ -144,6 +147,7 @@ def build_gemini_model(settings: Settings, model: str | None = None) -> Any:
     return google.realtime.RealtimeModel(
         **_compact_kwargs(
             api_key=settings.google_api_key,
+            api_version=GEMINI_LIVE_API_VERSION,
             model=model or settings.google_model,
             voice=effective_voice(settings.google_voice, persona=load_persona().id),
             temperature=0.8,
@@ -321,6 +325,10 @@ def watch_model_failover(runtime: JarvisRuntime, pool: ModelPool) -> None:
         if target is None or state["switches"] >= MAX_MODEL_SWITCHES:
             logger.error("Gemini Live caiu (%s) e não há outro modelo livre para continuar.", REASON_LABELS[reason])
             return
+        # O AgentSession fecha o link logo depois deste evento quando o erro é irrecuperável
+        # (livekit-agents 1.8.11: "session is closing, skipping start activity"). A troca de modelo
+        # trata o erro, então ele deixa de ser fatal para a sessão.
+        error.recoverable = True
         state["switching"] = True
         state["switches"] += 1
         task = asyncio.create_task(_switch(target, reason))
@@ -336,7 +344,7 @@ def watch_model_failover(runtime: JarvisRuntime, pool: ModelPool) -> None:
             agent = JarvisAgent(
                 current.instructions,
                 chat_ctx=current.chat_ctx.copy(),
-                # Grupos carregados por use_tools (FER-33) seguem no modelo de reserva.
+                # As ferramentas do próprio agente seguem no modelo de reserva (use_tools está na sessão).
                 tools=list(current.tools),
                 llm=build_gemini_model(runtime.settings, target),
             )

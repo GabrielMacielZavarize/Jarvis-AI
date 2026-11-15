@@ -349,12 +349,17 @@ Nomes que o usuário pode falar para rodar uma rotina com run_routine (detalhes 
 # Ferramentas sob demanda (FER-33, tool_routing.py): só entra quando as ferramentas vão por grupo.
 TOOL_GROUPS_HEADER = """
 # Ferramentas sob demanda
-- Você tem sempre as ferramentas básicas. As outras vêm por grupo, quando você pede.
-- Se o pedido for de um grupo abaixo e você não tiver a ferramenta dele, chame use_tools com o
-  nome do grupo antes de qualquer outra coisa (pode pedir mais de um: ["janelas", "midia"]).
-  Diga só "Um instante." e espere: as ferramentas chegam em seguida e você continua o pedido.
-- Nunca diga que não consegue fazer algo de um desses grupos sem antes chamar use_tools.
-- Grupo carregado fica com você. Não peça de novo um grupo cujas ferramentas você já tem.
+- Você tem sempre as ferramentas básicas. As dos grupos abaixo você usa em dois passos, na MESMA
+  resposta e sem falar nada antes:
+  1. use_tools(["agenda"]) devolve as ferramentas do grupo, com os parâmetros de cada uma;
+  2. run_tool(name="get_agenda", arguments='{"day": "hoje"}') executa uma delas.
+- As ferramentas dos grupos que estas instruções citam pelo nome (get_agenda, open_app,
+  gesture_control, look_at_camera, draft_email...) só rodam por run_tool.
+- Pedido de um grupo abaixo: chame use_tools antes de responder (pode pedir mais de um:
+  ["janelas", "midia"]). Se já viu as ferramentas do grupo nesta conversa, chame run_tool direto.
+- Só fale depois do resultado do run_tool, e conte o que ele disse de verdade. Nunca diga que não
+  consegue, que não tem acesso, que a câmera está em uso ou que não achou nada sem ter chamado
+  run_tool e lido a resposta.
 - As ferramentas de confirmar e cancelar por código estão sempre com você: uma confirmação
   pendente nunca precisa de use_tools.
 Grupos:

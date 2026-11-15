@@ -49,6 +49,9 @@ export function reduceGesture(live: GestureLive, event: GestureEvent, now: numbe
         aim: null,
         last: { text: event.message || event.action, ok: event.ok, at: now },
       };
+    case 'hands':
+      // The drawing of the hand goes to the Câmera panel (hudStore.hands), not to this summary.
+      return live;
   }
 }
 
@@ -87,7 +90,18 @@ export function liveFromReply(live: GestureLive, reply: GestureReply): GestureLi
   return { ...live, state: reply.running ? reply.state : 'off', panel: reply.panel, holding: reply.state === 'grab' ? live.holding : null };
 }
 
-export type GestureAction = 'status' | 'on' | 'off' | 'arm' | 'mouse_on' | 'mouse_off' | 'panel_on' | 'panel_off';
+export type GestureAction =
+  | 'status'
+  | 'on'
+  | 'off'
+  | 'arm'
+  | 'mouse_on'
+  | 'mouse_off'
+  | 'panel_on'
+  | 'panel_off'
+  // The Câmera panel opened/closed: the engine sends it the hand it sees, or stops.
+  | 'stream_on'
+  | 'stream_off';
 type Transport = (payload: string, timeoutMs: number) => Promise<string>;
 
 let transport: Transport | null = null;

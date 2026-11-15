@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
@@ -195,6 +196,51 @@ class FailoverTests(unittest.TestCase):
         )
         self.assertEqual(session.updated, [])
         self.assertTrue(self.pool.available(MODELS[0]))
+
+    def fire_unrecoverable(self, pool: ModelPool, text: str) -> tuple[Any, FakeSession]:
+        from livekit.agents import llm
+
+        from backends import JarvisAgent, watch_model_failover
+        from settings import load_settings
+
+        async def scenario() -> tuple[Any, FakeSession]:
+            session = FakeSession(JarvisAgent("Você é o Jarvis."))
+            runtime = SimpleNamespace(
+                settings=load_settings({"GOOGLE_API_KEY": "test-key"}), session=session, agent=None, model=MODELS[0]
+            )
+            watch_model_failover(runtime, pool)
+            error = llm.RealtimeModelError(timestamp=0, label="g", error=RuntimeError(text), recoverable=False)
+            session.handlers["error"](SimpleNamespace(error=error))
+            await asyncio.sleep(0)
+            return error, session
+
+        return asyncio.run(scenario())
+
+    def test_a_handled_failure_no_longer_closes_the_session(self) -> None:
+        # O AgentSession lê o mesmo objeto logo depois do evento: recoverable=False fecharia o link
+        # antes de o modelo de reserva entrar (livekit-agents 1.8.11).
+        error, session = self.fire_unrecoverable(self.pool, "HTTP 404 model not found")
+
+        self.assertTrue(error.recoverable)
+        self.assertEqual(len(session.updated), 1)
+
+    def test_without_a_free_model_the_session_still_closes(self) -> None:
+        alone = ModelPool((MODELS[0],), path=Path(self.dir.name) / "sozinho.json", clock=Clock())
+        error, session = self.fire_unrecoverable(alone, "429 RESOURCE_EXHAUSTED quota")
+
+        self.assertFalse(error.recoverable)
+        self.assertEqual(session.updated, [])
+
+
+class GeminiModelTests(unittest.TestCase):
+    def test_live_uses_the_v1beta_api(self) -> None:
+        # O google-genai 3.x usa a "v1" por padrão, sem o endpoint Live (HTTP 404 no websocket).
+        from backends import build_gemini_model
+        from settings import load_settings
+
+        model = build_gemini_model(load_settings({"GOOGLE_API_KEY": "test-key"}))
+
+        self.assertEqual(model._opts.api_version, "v1beta")
 
 
 if __name__ == "__main__":

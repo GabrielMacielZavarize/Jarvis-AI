@@ -16,6 +16,7 @@ import { TOOL_LABELS } from '../lib/catalog';
 import { playDictationBeep } from '../lib/chime';
 import { dictationLog, reduceDictation } from '../lib/dictation';
 import { GESTURE_RPC_METHOD, INITIAL_GESTURES, reduceGesture, setGestureTransport } from '../lib/gestures';
+import { gesturesTurnedOn, handFrameFrom } from '../lib/vision';
 import { markToolResult } from '../lib/coreActivity';
 import { useHud } from '../lib/hudStore';
 import { MEMORY_RPC_METHOD, setMemoryTransport } from '../lib/memoryLink';
@@ -145,7 +146,14 @@ function handleHudEvent(event: HudEvent) {
     return;
   }
   if (event.type === 'gesture') {
+    if (event.event === 'hands') {
+      hud.setHands(handFrameFrom(event, Date.now()));
+      return;
+    }
+    const before = hud.gestures.state;
     hud.setGestures(reduceGesture(hud.gestures, event, Date.now()));
+    // The gestures just turned on (voice or panel): the Câmera panel shows the hand they see.
+    if (gesturesTurnedOn(before, event)) hud.openCamera();
     if (event.event === 'panel') hud.addLog('info', `Painel de gestos ${event.visible ? 'aberto' : 'fechado'}`);
     return;
   }
@@ -349,6 +357,7 @@ export function useLiveJarvis(): LiveJarvis {
       setGestureTransport(null);
       // Without the agent nobody reports the gestures: the panel goes back to "no reading".
       useHud.getState().setGestures(INITIAL_GESTURES);
+      useHud.getState().setHands(null);
     };
   }, [room]);
 

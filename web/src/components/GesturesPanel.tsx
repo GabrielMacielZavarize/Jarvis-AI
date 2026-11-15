@@ -161,6 +161,14 @@ export function GesturesPanel({ connected }: { connected: boolean }) {
         >
           Painel da câmera
         </button>
+        <button
+          type="button"
+          className="chip-btn"
+          onClick={() => useHud.getState().openCamera()}
+          title="Você, a mão que os gestos veem e o que o Jarvis viu, no painel Câmera do HUD"
+        >
+          Ver no HUD
+        </button>
       </div>
 
       {offline && (

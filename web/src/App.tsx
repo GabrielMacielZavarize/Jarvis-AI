@@ -210,6 +210,9 @@ function Hud({ status, booted, live, local }: { status: StatusResult; booted: bo
   useReactorHum(booted && connected);
   // PRS-25: "Presente" / "Ausente há 5 min" in the Sistema panel.
   const presence = usePresence(server?.presence ?? false);
+  // The Câmera panel shows the presence and what Jarvis said about the photo it took.
+  useEffect(() => useHud.getState().setPresence(presence), [presence]);
+  useEffect(() => useHud.getState().setTranscript(lines), [lines]);
 
   // FOC-47: o servidor conta a sessão de foco; o HUD só a lê (a cada poucos segundos, e já quando o
   // bloco passa do fim) e mostra. Com o Dia a dia desligado não há sessão para ler.

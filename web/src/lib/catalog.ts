@@ -134,8 +134,8 @@ export const TOOL_LABELS: Record<string, string> = {
   mcp_status: 'Integrações MCP',
   confirm_mcp_action: 'Ação confirmada',
   cancel_mcp_action: 'Ação cancelada',
-  // Ferramentas sob demanda: the detail names the groups being loaded ("Agenda").
-  use_tools: 'Carregando ferramentas',
+  // Ferramentas sob demanda: the detail names the groups the model asked for ("Agenda").
+  use_tools: 'Buscando ferramentas',
   watch_screen: 'Vigia de janela',
 };
 

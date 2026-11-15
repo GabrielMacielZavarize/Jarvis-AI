@@ -271,7 +271,9 @@ def _short_error(exc: BaseException) -> str:
     if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
         return "não respondeu a tempo"
     if isinstance(exc, FileNotFoundError):
-        return "o comando do servidor não foi encontrado"
+        # O caminho que faltou (o comando, ou a pasta de trabalho) diz o que conferir.
+        missing = f": {exc.filename}" if getattr(exc, "filename", None) else ""
+        return f"o comando do servidor não foi encontrado{missing}"
     text = str(exc).strip().splitlines()[0][:120] if str(exc).strip() else ""
     return f"{type(exc).__name__}: {text}" if text else type(exc).__name__
 
@@ -571,9 +573,9 @@ def integrations_summary() -> str | None:
 async def mcp_status(context: RunContext) -> str:
     """Which MCP integrations (GitHub, Notion, Home Assistant...) are connected and which tools each one offers.
 
-    Call it when the user asks for something from one of these services and its tool is not
-    available, or asks which integrations exist. Then say plainly that the integration is
-    unavailable and why, without inventing results.
+    Call it when the user asks which integrations exist, or when a service's tools failed (with
+    the tools on demand, try use_tools with the service's group and run_tool first). Then say
+    plainly that the integration is unavailable and why, without inventing results.
     """
     await tool_status("mcp_status", "running")
     lines = [state.describe() for state in STATES.values()]

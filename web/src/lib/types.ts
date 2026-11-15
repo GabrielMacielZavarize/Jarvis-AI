@@ -606,7 +606,23 @@ export type GestureEvent =
   | { type: 'gesture'; event: 'aim'; direction?: string | null; target?: string | null; ts: number }
   | { type: 'gesture'; event: 'cancel'; ts: number }
   | { type: 'gesture'; event: 'panel'; visible: boolean; ts: number }
-  | { type: 'gesture'; event: 'action'; action: string; ok: boolean; message?: string | null; title?: string | null; ts: number };
+  | { type: 'gesture'; event: 'action'; action: string; ok: boolean; message?: string | null; title?: string | null; ts: number }
+  | HandsEvent;
+
+/** The hands the engine sees, ~12 per second while the Câmera panel is open (lib/vision.ts). */
+export interface HandsEvent {
+  type: 'gesture';
+  event: 'hands';
+  hands: number[][];
+  pose: string;
+  state: string;
+  title?: string | null;
+  detail?: string | null;
+  progress?: number | null;
+  tone?: string | null;
+  fps?: number;
+  ts: number;
+}
 
 export type GestureState = 'unknown' | 'off' | 'idle' | 'armed' | 'grab' | 'close' | 'mouse';
 
